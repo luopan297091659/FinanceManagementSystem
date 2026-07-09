@@ -1,0 +1,395 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+enum RoomStatus {
+  VACANT
+  OCCUPIED
+  OVERDUE
+  INACTIVE
+}
+
+enum LinkStatus {
+  ACTIVE
+  ENDED
+  PENDING
+}
+
+enum OwnerType {
+  PERSON
+  COMPANY
+}
+
+enum FeeCategory {
+  INCOME
+  EXPENSE
+  BOTH
+}
+
+enum FeeValueType {
+  MONEY
+  NUMBER
+  TEXT
+  DATE
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum BankTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+enum ReconciliationStatus {
+  UNMATCHED
+  MATCHED
+  MANUAL_REVIEW
+}
+
+enum AnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model ManagementCompany {
+  id          String     @id @default(uuid())
+  name        String
+  phone       String?
+  email       String?
+  address     String?
+  properties  Property[]
+  rooms       Room[]
+  users       User[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model User {
+  id          String             @id @default(uuid())
+  companyId   String?
+  company     ManagementCompany? @relation(fields: [companyId], references: [id])
+  email       String             @unique
+  name        String
+  passwordHash String
+  role        String             @default("operator")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model Project {
+  id         String     @id @default(uuid())
+  name       String     @unique
+  address    String?
+  note       String?
+  properties Property[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Property {
+  id          String             @id @default(uuid())
+  projectId   String?
+  project     Project?           @relation(fields: [projectId], references: [id])
+  companyId   String?
+  company     ManagementCompany? @relation(fields: [companyId], references: [id])
+  name        String
+  address     String?
+  ward        String?
+  city        String?            @default("Osaka")
+  prefecture  String?            @default("Osaka")
+  latitude    Decimal?           @db.Decimal(10, 7)
+  longitude   Decimal?           @db.Decimal(10, 7)
+  location    Unsupported("geography(Point, 4326)")?
+  note        String?
+  rooms       Room[]
+  documents   Document[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([projectId, name])
+  @@index([city, ward])
+}
+
+model Room {
+  id                String             @id @default(uuid())
+  propertyId        String
+  property          Property           @relation(fields: [propertyId], references: [id])
+  companyId         String?
+  company           ManagementCompany? @relation(fields: [companyId], references: [id])
+  roomNumber        String
+  area              Decimal?           @db.Decimal(10, 2)
+  floor             Int?
+  latitude          Decimal?           @db.Decimal(10, 7)
+  longitude         Decimal?           @db.Decimal(10, 7)
+  location          Unsupported("geography(Point, 4326)")?
+  status            RoomStatus         @default(VACANT)
+  note              String?
+  legacyTenantId    String?
+  legacyMonthlyRent Decimal?           @db.Decimal(18, 2)
+  legacyContractStartDate DateTime?
+  legacyContractEndDate   DateTime?
+  tenantLinks       RoomTenant[]
+  ownerLinks        RoomOwner[]
+  contracts         Contract[]
+  transactions      Transaction[]
+  documents         Document[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([propertyId, roomNumber])
+  @@index([propertyId])
+  @@index([status])
+}
+
+model Tenant {
+  id           String       @id @default(uuid())
+  name         String
+  nameKana     String?
+  nationality  String?
+  phone        String?
+  email        String?
+  birthDate    DateTime?
+  occupation   String?
+  annualIncome Decimal?     @db.Decimal(18, 2)
+  address1     String?
+  address2     String?
+  address3     String?
+  note         String?
+  rooms        RoomTenant[]
+  contracts    Contract[]
+  documents    Document[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Owner {
+  id                 String      @id @default(uuid())
+  ownerType          OwnerType    @default(PERSON)
+  name               String
+  nameKana           String?
+  representativeName String?
+  companyPhone       String?
+  phone              String?
+  email              String?
+  address1           String?
+  address2           String?
+  address3           String?
+  note               String?
+  rooms              RoomOwner[]
+  documents          Document[]
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model RoomTenant {
+  id        String     @id @default(uuid())
+  roomId    String
+  tenantId  String
+  room      Room       @relation(fields: [roomId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  startDate DateTime?
+  endDate   DateTime?
+  status    LinkStatus  @default(ACTIVE)
+  createdAt DateTime    @default(now())
+
+  @@index([roomId, status])
+  @@index([tenantId])
+}
+
+model RoomOwner {
+  id             String     @id @default(uuid())
+  roomId         String
+  ownerId        String
+  room           Room       @relation(fields: [roomId], references: [id])
+  owner          Owner      @relation(fields: [ownerId], references: [id])
+  startDate      DateTime?
+  endDate        DateTime?
+  ownershipRatio Decimal?   @db.Decimal(8, 4)
+  status         LinkStatus @default(ACTIVE)
+  createdAt      DateTime   @default(now())
+
+  @@index([roomId, status])
+  @@index([ownerId])
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  roomId          String
+  tenantId        String
+  room            Room           @relation(fields: [roomId], references: [id])
+  tenant          Tenant         @relation(fields: [tenantId], references: [id])
+  contractNumber  String?
+  startDate       DateTime
+  endDate         DateTime?
+  monthlyRent     Decimal        @db.Decimal(18, 2)
+  managementFee   Decimal?       @db.Decimal(18, 2)
+  deposit         Decimal?       @db.Decimal(18, 2)
+  keyMoney        Decimal?       @db.Decimal(18, 2)
+  guaranteeFee    Decimal?       @db.Decimal(18, 2)
+  status          ContractStatus @default(ACTIVE)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([roomId, status])
+  @@index([tenantId])
+}
+
+model FeeItem {
+  id          String       @id @default(uuid())
+  name        String
+  category    FeeCategory
+  valueType   FeeValueType
+  sortOrder   Int          @default(0)
+  enabled     Boolean      @default(true)
+  details     TransactionDetail[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Transaction {
+  id           String          @id @default(uuid())
+  type         TransactionType
+  roomId       String?
+  room         Room?           @relation(fields: [roomId], references: [id])
+  date         DateTime
+  counterparty String?
+  totalAmount  Decimal         @default(0) @db.Decimal(18, 2)
+  note         String?
+  details      TransactionDetail[]
+  bankMatches  ReconciliationMatch[]
+  anomalies    Anomaly[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([roomId, date])
+  @@index([type, date])
+}
+
+model TransactionDetail {
+  id            String       @id @default(uuid())
+  transactionId String
+  feeItemId     String
+  transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  feeItem       FeeItem      @relation(fields: [feeItemId], references: [id])
+  valueMoney    Decimal?     @db.Decimal(18, 2)
+  valueNumber   Decimal?     @db.Decimal(18, 4)
+  valueText     String?
+  valueDate     DateTime?
+
+  @@index([transactionId])
+}
+
+model BankTransaction {
+  id              String                   @id @default(uuid())
+  accountName     String?
+  accountNumber   String?
+  bookedAt        DateTime
+  direction       BankTransactionDirection
+  amount          Decimal                  @db.Decimal(18, 2)
+  description     String?
+  rawPayload       Json?
+  reconciliationStatus ReconciliationStatus @default(UNMATCHED)
+  matches         ReconciliationMatch[]
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([bookedAt])
+  @@index([direction, amount])
+  @@index([reconciliationStatus])
+}
+
+model ReconciliationMatch {
+  id                String          @id @default(uuid())
+  transactionId     String
+  bankTransactionId String
+  transaction       Transaction     @relation(fields: [transactionId], references: [id])
+  bankTransaction   BankTransaction @relation(fields: [bankTransactionId], references: [id])
+  confidence        Decimal         @db.Decimal(5, 4)
+  reason            String?
+  confirmedBy       String?
+  confirmedAt       DateTime?
+  createdAt         DateTime        @default(now())
+
+  @@unique([transactionId, bankTransactionId])
+}
+
+model Anomaly {
+  id            String          @id @default(uuid())
+  transactionId String?
+  transaction   Transaction?    @relation(fields: [transactionId], references: [id])
+  severity      AnomalySeverity
+  code          String
+  message       String
+  metadata      Json?
+  resolvedAt    DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([severity, createdAt])
+}
+
+model Document {
+  id            String     @id @default(uuid())
+  roomId        String?
+  tenantId      String?
+  ownerId       String?
+  propertyId    String?
+  room          Room?      @relation(fields: [roomId], references: [id])
+  tenant        Tenant?    @relation(fields: [tenantId], references: [id])
+  owner         Owner?     @relation(fields: [ownerId], references: [id])
+  property      Property?  @relation(fields: [propertyId], references: [id])
+  documentType  String
+  fileName      String
+  storageKey    String?
+  ocrText       String?
+  extractedJson Json?
+  status        String     @default("PENDING_CONFIRM")
+  knowledge     KnowledgeDocument[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model KnowledgeDocument {
+  id          String    @id @default(uuid())
+  roomId      String?
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id])
+  title       String
+  content     String?
+  sourceType  String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+}

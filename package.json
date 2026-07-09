@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "start": "python server.py",
+    "dev": "python server.py",
+    "backend:dev": "npm --prefix backend run start:dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:start": "npm --prefix backend run start",
+    "backend:prisma:generate": "npm --prefix backend run prisma:generate",
+    "backend:prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:restart": "pm2 restart finance-management",
+    "pm2:logs": "pm2 logs finance-management"
+  }
+}

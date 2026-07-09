@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>房产管理公司财务数据管理平台</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">F</span>
+          <div>
+            <strong>房产管理平台</strong>
+            <small>Room Core MVP</small>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-item active" data-view="dashboard">概览</button>
+          <button class="nav-item" data-view="resources">房源管理</button>
+          <button class="nav-item" data-view="customers">客户管理</button>
+          <button class="nav-item" data-view="finance">财务管理</button>
+          <button class="nav-item" data-view="ocr">OCR中心</button>
+          <button class="nav-item" data-view="knowledge">AI知识库</button>
+          <button class="nav-item" data-view="settings">系统设置</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">日本房产管理公司</p>
+            <h1 id="page-title">概览</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-button" id="reset-demo">重置演示数据</button>
+            <button class="primary-button" data-view-jump="resources">新增房间</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard">
+          <div class="metrics-grid">
+            <article class="metric">
+              <span>房间数</span>
+              <strong id="metric-rooms">0</strong>
+            </article>
+            <article class="metric">
+              <span>入居中</span>
+              <strong id="metric-occupied">0</strong>
+            </article>
+            <article class="metric">
+              <span>本月入金</span>
+              <strong id="metric-income">¥0</strong>
+            </article>
+            <article class="metric">
+              <span>本月出金</span>
+              <strong id="metric-expense">¥0</strong>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <section class="panel">
+              <div class="section-heading">
+                <h2>Room 核心视图</h2>
+                <span>房间 → 租客 / 业主 / 财务</span>
+              </div>
+              <div id="room-core-list" class="room-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading">
+                <h2>最近财务</h2>
+                <span>入金与出金合并展示</span>
+              </div>
+              <div id="recent-transactions" class="timeline"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="resources">
+          <div class="content-grid">
+            <section class="panel">
+              <div class="section-heading">
+                <h2>房源结构</h2>
+                <span>Project / Building / Room</span>
+              </div>
+              <form id="room-form" class="form-grid">
+                <label>
+                  项目
+                  <input name="projectName" required placeholder="住之江区西住之江" />
+                </label>
+                <label>
+                  楼栋
+                  <input name="buildingName" required placeholder="T1" />
+                </label>
+                <label>
+                  Building 纬度
+                  <input name="buildingLatitude" type="number" step="0.0000001" placeholder="34.6937378" />
+                </label>
+                <label>
+                  Building 经度
+                  <input name="buildingLongitude" type="number" step="0.0000001" placeholder="135.5021651" />
+                </label>
+                <label>
+                  房号
+                  <input name="roomNumber" required placeholder="101" />
+                </label>
+                <label>
+                  面积
+                  <input name="area" type="number" min="0" step="0.01" placeholder="25.5" />
+                </label>
+                <label>
+                  楼层
+                  <input name="floor" type="number" placeholder="1" />
+                </label>
+                <label>
+                  Room 自定义纬度
+                  <input name="roomLatitude" type="number" step="0.0000001" placeholder="默认使用 Building" />
+                </label>
+                <label>
+                  Room 自定义经度
+                  <input name="roomLongitude" type="number" step="0.0000001" placeholder="默认使用 Building" />
+                </label>
+                <label>
+                  状态
+                  <select name="status">
+                    <option value="VACANT">空室</option>
+                    <option value="OCCUPIED">入居中</option>
+                    <option value="MAINTENANCE">维修中</option>
+                  </select>
+                </label>
+                <label class="span-2">
+                  备注
+                  <textarea name="note" rows="3" placeholder="房间朝向、钥匙、特殊事项"></textarea>
+                </label>
+                <button class="primary-button span-2" type="submit">保存房间</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading">
+                <h2>房间列表</h2>
+                <span>所有业务围绕 Room</span>
+              </div>
+              <div id="rooms-table" class="table"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="customers">
+          <div class="content-grid">
+            <section class="panel">
+              <div class="section-heading">
+                <h2>客户资料</h2>
+                <span>租客与业主统一维护</span>
+              </div>
+              <form id="customer-form" class="form-grid">
+                <label>
+                  类型
+                  <select name="kind" id="customer-kind">
+                    <option value="tenant">租客 Tenant</option>
+                    <option value="owner">业主 Owner</option>
+                  </select>
+                </label>
+                <label id="owner-type-field" class="hidden">
+                  业主类型
+                  <select name="ownerType">
+                    <option value="PERSON">个人</option>
+                    <option value="COMPANY">法人</option>
+                  </select>
+                </label>
+                <label>
+                  姓名 / 法人名
+                  <input name="name" required placeholder="山田 太郎 / ABC株式会社" />
+                </label>
+                <label>
+                  假名 / 负责人
+                  <input name="kana" placeholder="ヤマダ タロウ" />
+                </label>
+                <label>
+                  国籍
+                  <input name="nationality" placeholder="日本 / 中国" />
+                </label>
+                <label>
+                  电话
+                  <input name="phone" placeholder="090-0000-0000" />
+                </label>
+                <label>
+                  邮箱
+                  <input name="email" type="email" placeholder="name@example.com" />
+                </label>
+                <label>
+                  出生日期
+                  <input name="birthDate" type="date" />
+                </label>
+                <label>
+                  职业 / 公司电话
+                  <input name="occupation" placeholder="会社員" />
+                </label>
+                <label>
+                  年收入
+                  <input name="annualIncome" type="number" min="0" placeholder="4000000" />
+                </label>
+                <label class="span-2">
+                  地址
+                  <input name="address" placeholder="大阪府大阪市..." />
+                </label>
+                <label class="span-2">
+                  附件备注
+                  <textarea name="attachments" rows="2" placeholder="身份证、护照、在留卡、合同、营业执照"></textarea>
+                </label>
+                <button class="primary-button span-2" type="submit">保存客户</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading">
+                <h2>房间绑定</h2>
+                <span>保留历史起止日期</span>
+              </div>
+              <form id="binding-form" class="form-grid compact">
+                <label>
+                  房间
+                  <select name="roomId" id="binding-room"></select>
+                </label>
+                <label>
+                  客户类型
+                  <select name="kind" id="binding-kind">
+                    <option value="tenant">租客</option>
+                    <option value="owner">业主</option>
+                  </select>
+                </label>
+                <label>
+                  客户
+                  <select name="customerId" id="binding-customer"></select>
+                </label>
+                <label>
+                  开始日期
+                  <input name="startDate" type="date" />
+                </label>
+                <label>
+                  结束日期
+                  <input name="endDate" type="date" />
+                </label>
+                <label>
+                  状态
+                  <select name="status">
+                    <option value="ACTIVE">有效</option>
+                    <option value="ENDED">已结束</option>
+                  </select>
+                </label>
+                <button class="primary-button span-2" type="submit">保存绑定</button>
+              </form>
+              <div id="bindings-table" class="table spaced"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="finance">
+          <div class="content-grid">
+            <section class="panel">
+              <div class="section-heading">
+                <h2>入金 / 出金登记</h2>
+                <span>费用明细来自 FeeItem</span>
+              </div>
+              <form id="transaction-form" class="form-grid">
+                <label>
+                  类型
+                  <select name="type" id="transaction-type">
+                    <option value="income">入金</option>
+                    <option value="expense">出金</option>
+                  </select>
+                </label>
+                <label>
+                  日期
+                  <input name="date" type="date" required />
+                </label>
+                <label>
+                  房间
+                  <select name="roomId" id="transaction-room"></select>
+                </label>
+                <label>
+                  付款人 / 收款人
+                  <input name="counterparty" placeholder="张三 / 维修公司" />
+                </label>
+                <label class="span-2">
+                  备注
+                  <input name="note" placeholder="7月家租、维修支付等" />
+                </label>
+                <div class="span-2 detail-box">
+                  <div class="section-heading tight">
+                    <h3>费用明细</h3>
+                    <button type="button" class="ghost-button" id="add-detail">添加一行</button>
+                  </div>
+                  <div id="transaction-details"></div>
+                </div>
+                <button class="primary-button span-2" type="submit">保存财务记录</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading">
+                <h2>财务记录</h2>
+                <span>主表 + 动态费用明细</span>
+              </div>
+              <div id="transactions-table" class="table"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="ocr">
+          <section class="panel full-panel">
+            <div class="section-heading">
+              <h2>OCR中心</h2>
+              <span>一期先完成统一入口与人工确认流程</span>
+            </div>
+            <form id="ocr-form" class="ocr-layout">
+              <label class="upload-box">
+                <input name="fileName" placeholder="合同_101_张三.pdf" />
+                <span>录入文件名或拖拽上传接口预留</span>
+              </label>
+              <label>
+                关联房间
+                <select name="roomId" id="ocr-room"></select>
+              </label>
+              <label>
+                文件类型
+                <select name="documentType">
+                  <option value="CONTRACT">合同</option>
+                  <option value="RECEIPT">银行回单</option>
+                  <option value="ID">身份证明</option>
+                  <option value="REPAIR">维修记录</option>
+                </select>
+              </label>
+              <label class="span-2">
+                AI识别字段
+                <textarea name="extractedText" rows="5" placeholder="姓名：张三&#10;房间：101&#10;金额：70000&#10;日期：2026-07-01"></textarea>
+              </label>
+              <button class="primary-button" type="submit">保存到附件与知识库</button>
+            </form>
+            <div id="documents-table" class="table spaced"></div>
+          </section>
+        </section>
+
+        <section class="view" id="knowledge">
+          <section class="panel full-panel">
+            <div class="section-heading">
+              <h2>AI知识库</h2>
+              <span>基于房间、合同、财务和维修记录查询</span>
+            </div>
+            <div class="ask-box">
+              <input id="knowledge-query" placeholder="例如：101室什么时候到期？张三押金多少？" />
+              <button class="primary-button" id="ask-ai" type="button">查询</button>
+            </div>
+            <div id="knowledge-answer" class="answer-box">当前最小集使用本地数据做规则查询，后续可接入向量库与大模型。</div>
+            <div id="knowledge-table" class="table spaced"></div>
+          </section>
+        </section>
+
+        <section class="view" id="settings">
+          <div class="content-grid">
+            <section class="panel">
+              <div class="section-heading">
+                <h2>费用项 FeeItem</h2>
+                <span>管理员可新增费用或文本字段</span>
+              </div>
+              <form id="fee-item-form" class="form-grid">
+                <label>
+                  名称
+                  <input name="name" required placeholder="垃圾处理费" />
+                </label>
+                <label>
+                  类别
+                  <select name="category">
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                    <option value="both">Income + Expense</option>
+                  </select>
+                </label>
+                <label>
+                  字段类型
+                  <select name="valueType">
+                    <option value="Money">Money</option>
+                    <option value="Number">Number</option>
+                    <option value="Text">Text</option>
+                    <option value="Date">Date</option>
+                  </select>
+                </label>
+                <label>
+                  排序
+                  <input name="sortOrder" type="number" value="10" />
+                </label>
+                <label>
+                  启用
+                  <select name="enabled">
+                    <option value="true">启用</option>
+                    <option value="false">停用</option>
+                  </select>
+                </label>
+                <button class="primary-button" type="submit">保存费用项</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading">
+                <h2>费用项列表</h2>
+                <span>动态字段配置</span>
+              </div>
+              <div id="fee-items-table" class="table"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      window.API_BASE = window.API_BASE || (window.location.port === "8000" ? "/api" : "/api/v1");
+    </script>
+    <script src="src/app.js"></script>
+  </body>
+</html>
