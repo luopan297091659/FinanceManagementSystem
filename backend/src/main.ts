@@ -31,7 +31,7 @@ async function bootstrap() {
     response.sendFile(join(projectRoot, 'index.html'));
   });
 
-  await app.listen(config.get<number>('PORT') ?? 3000);
+  await app.listen(config.get<number>('PORT') ?? 8006);
 }
 
 void bootstrap();
