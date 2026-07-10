@@ -481,7 +481,7 @@ export class FrontendApiService {
   }
 
   async createFeeItem(dto: CreateFeeItemDto) {
-    await this.prisma.feeItem.create({
+    const created = await this.prisma.feeItem.create({
       data: {
         name: dto.name,
         category: toPrismaCategory(dto.category),
@@ -490,7 +490,7 @@ export class FrontendApiService {
         enabled: dto.enabled ?? true,
       },
     });
-    return { ok: true };
+    return { ok: true, id: created.id };
   }
 
   async reset() {
