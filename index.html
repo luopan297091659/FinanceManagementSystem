@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>房产管理公司财务数据管理平台</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
@@ -22,6 +23,7 @@
           <button class="nav-item" data-view="resources">房源管理</button>
           <button class="nav-item" data-view="customers">客户管理</button>
           <button class="nav-item" data-view="finance">财务管理</button>
+          <button class="nav-item" data-view="gis">GIS地图</button>
           <button class="nav-item" data-view="ocr">OCR中心</button>
           <button class="nav-item" data-view="knowledge">AI知识库</button>
           <button class="nav-item" data-view="settings">系统设置</button>
@@ -380,6 +382,12 @@
           </section>
         </section>
 
+        <section class="view" id="gis">
+          <section class="gis-panel" aria-label="GIS地图">
+            <div id="gis-map" class="gis-map"></div>
+          </section>
+        </section>
+
         <section class="view" id="settings">
           <div class="content-grid">
             <section class="panel">
@@ -439,6 +447,7 @@
     <script>
       window.API_BASE = window.API_BASE || "/api/v1";
     </script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="src/app.js"></script>
   </body>
 </html>

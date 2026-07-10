@@ -476,6 +476,22 @@ textarea:focus {
   line-height: 1.6;
 }
 
+.gis-panel {
+  width: 100%;
+  min-height: calc(100vh - 128px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.gis-map {
+  width: 100%;
+  height: calc(100vh - 130px);
+  min-height: 520px;
+}
+
 .empty {
   padding: 22px;
   color: var(--muted);
@@ -532,5 +548,14 @@ textarea:focus {
   .table-row.bindings {
     grid-template-columns: 1fr;
     min-width: 0;
+  }
+
+  .gis-panel,
+  .gis-map {
+    min-height: calc(100dvh - 178px);
+  }
+
+  .gis-map {
+    height: calc(100dvh - 178px);
   }
 }

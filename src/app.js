@@ -49,6 +49,42 @@ let state = {
   knowledgeDocuments: [],
 };
 
+const GIS_STYLE_URL = "https://api.maptiler.com/maps/jp-gsi-standard/style.json?key=z957GVzlIZ4zQdQ4as3E";
+const OSAKA_STATION_COORDINATES = [135.495951, 34.702485];
+let gisMap;
+
+function initializeGisMap() {
+  const mapContainer = document.getElementById("gis-map");
+  if (!mapContainer || gisMap) {
+    if (gisMap) gisMap.resize();
+    return;
+  }
+
+  if (!window.maplibregl) {
+    mapContainer.innerHTML = '<div class="empty">地图资源加载失败，请检查网络连接。</div>';
+    return;
+  }
+
+  const maplibre = window.maplibregl;
+
+  gisMap = new maplibre.Map({
+    container: mapContainer,
+    style: GIS_STYLE_URL,
+    center: OSAKA_STATION_COORDINATES,
+    zoom: 10,
+  });
+
+  gisMap.addControl(new maplibre.NavigationControl(), "top-right");
+  gisMap.addControl(new maplibre.FullscreenControl(), "top-right");
+  gisMap.addControl(
+    new maplibre.ScaleControl({
+      maxWidth: 160,
+      unit: "metric",
+    }),
+    "bottom-left",
+  );
+}
+
 function formatMoney(value) {
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
@@ -486,6 +522,9 @@ document.querySelectorAll(".nav-item, [data-view-jump]").forEach((button) => {
     document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === viewId));
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
     document.getElementById("page-title").textContent = button.textContent.trim();
+    if (viewId === "gis") {
+      window.requestAnimationFrame(initializeGisMap);
+    }
   });
 });
 
