@@ -21,6 +21,7 @@ export interface FrontendRoom {
   id: string;
   projectId?: string | null;
   buildingId: string;
+  houseNumber?: string | null;
   number: string;
   area?: string | null;
   floor?: number | null;
@@ -35,6 +36,7 @@ export interface FrontendRoom {
 
 export interface FrontendTenant {
   id: string;
+  customerCode?: string | null;
   name: string;
   kana?: string | null;
   nationality?: string | null;
@@ -49,6 +51,7 @@ export interface FrontendTenant {
 
 export interface FrontendOwner {
   id: string;
+  customerCode?: string | null;
   ownerType: string;
   name: string;
   kana?: string | null;

@@ -72,6 +72,7 @@ export class FrontendApiService {
         id: room.id,
         projectId: room.property.projectId,
         buildingId: room.propertyId,
+        houseNumber: room.houseNumber,
         number: room.roomNumber,
         area: decimalToString(room.area),
         floor: room.floor,
@@ -90,6 +91,7 @@ export class FrontendApiService {
       })),
       tenants: tenants.map((tenant) => ({
         id: tenant.id,
+        customerCode: tenant.customerCode,
         name: tenant.name,
         kana: tenant.nameKana,
         nationality: tenant.nationality,
@@ -103,6 +105,7 @@ export class FrontendApiService {
       })),
       owners: owners.map((owner) => ({
         id: owner.id,
+        customerCode: owner.customerCode,
         ownerType: owner.ownerType,
         name: owner.name,
         kana: owner.nameKana,
@@ -189,9 +192,11 @@ export class FrontendApiService {
       },
     });
 
+    await this.ensureHouseNumberUnique(dto.houseNumber);
     await this.prisma.room.create({
       data: {
         propertyId: property.id,
+        houseNumber: dto.houseNumber,
         roomNumber: dto.roomNumber,
         area: this.optionalDecimal(dto.area),
         floor: dto.floor ? Number(dto.floor) : undefined,
@@ -204,10 +209,63 @@ export class FrontendApiService {
     return { ok: true };
   }
 
+  async updateRoom(id: string, dto: CreateRoomDto) {
+    const project = await this.prisma.project.upsert({
+      where: { name: dto.projectName },
+      create: { name: dto.projectName },
+      update: {},
+    });
+    const property = await this.prisma.property.upsert({
+      where: { projectId_name: { projectId: project.id, name: dto.buildingName } },
+      create: {
+        projectId: project.id,
+        name: dto.buildingName,
+        latitude: this.optionalDecimal(dto.buildingLatitude),
+        longitude: this.optionalDecimal(dto.buildingLongitude),
+      },
+      update: {
+        latitude: this.optionalDecimal(dto.buildingLatitude),
+        longitude: this.optionalDecimal(dto.buildingLongitude),
+      },
+    });
+
+    await this.ensureHouseNumberUnique(dto.houseNumber, id);
+    await this.prisma.room.update({
+      where: { id },
+      data: {
+        propertyId: property.id,
+        houseNumber: dto.houseNumber,
+        roomNumber: dto.roomNumber,
+        area: this.optionalDecimal(dto.area),
+        floor: dto.floor ? Number(dto.floor) : undefined,
+        latitude: this.optionalDecimal(dto.roomLatitude),
+        longitude: this.optionalDecimal(dto.roomLongitude),
+        status: this.normalizeRoomStatus(dto.status),
+        note: dto.note,
+      },
+    });
+    return { ok: true };
+  }
+
+  async deleteRoom(id: string) {
+    await this.prisma.$transaction([
+      this.prisma.transaction.updateMany({ where: { roomId: id }, data: { roomId: null } }),
+      this.prisma.document.updateMany({ where: { roomId: id }, data: { roomId: null } }),
+      this.prisma.roomTenant.deleteMany({ where: { roomId: id } }),
+      this.prisma.roomOwner.deleteMany({ where: { roomId: id } }),
+      this.prisma.contract.deleteMany({ where: { roomId: id } }),
+      this.prisma.room.delete({ where: { id } }),
+    ]);
+    return { ok: true };
+  }
+
   async createCustomer(dto: CreateCustomerDto) {
+    await this.ensureCustomerUnique(dto.customerCode, dto.phone, dto.email);
+
     if (dto.kind === 'tenant') {
       await this.prisma.tenant.create({
         data: {
+          customerCode: dto.customerCode,
           name: dto.name,
           nameKana: dto.kana,
           nationality: dto.nationality,
@@ -225,6 +283,7 @@ export class FrontendApiService {
 
     await this.prisma.owner.create({
       data: {
+        customerCode: dto.customerCode,
         ownerType: dto.ownerType ?? 'PERSON',
         name: dto.name,
         nameKana: dto.kana,
@@ -234,6 +293,58 @@ export class FrontendApiService {
         note: dto.attachments,
       },
     });
+    return { ok: true };
+  }
+
+  async updateCustomer(id: string, dto: CreateCustomerDto) {
+    await this.ensureCustomerUnique(dto.customerCode, dto.phone, dto.email, id);
+
+    if (dto.kind === 'tenant') {
+      await this.prisma.tenant.update({
+        where: { id },
+        data: {
+          customerCode: dto.customerCode,
+          name: dto.name,
+          nameKana: dto.kana,
+          nationality: dto.nationality,
+          phone: dto.phone,
+          email: dto.email,
+          birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+          occupation: dto.occupation,
+          annualIncome: dto.annualIncome ? toDecimal(dto.annualIncome) : undefined,
+          address1: dto.address,
+          note: dto.attachments,
+        },
+      });
+      return { ok: true };
+    }
+
+    await this.prisma.owner.update({
+      where: { id },
+      data: {
+        customerCode: dto.customerCode,
+        ownerType: dto.ownerType ?? 'PERSON',
+        name: dto.name,
+        nameKana: dto.kana,
+        phone: dto.phone,
+        email: dto.email,
+        address1: dto.address,
+        note: dto.attachments,
+      },
+    });
+    return { ok: true };
+  }
+
+  async deleteCustomer(id: string) {
+    await this.prisma.$transaction([
+      this.prisma.document.updateMany({ where: { tenantId: id }, data: { tenantId: null } }),
+      this.prisma.document.updateMany({ where: { ownerId: id }, data: { ownerId: null } }),
+      this.prisma.roomTenant.deleteMany({ where: { tenantId: id } }),
+      this.prisma.roomOwner.deleteMany({ where: { ownerId: id } }),
+      this.prisma.contract.deleteMany({ where: { tenantId: id } }),
+      this.prisma.tenant.deleteMany({ where: { id } }),
+      this.prisma.owner.deleteMany({ where: { id } }),
+    ]);
     return { ok: true };
   }
 
@@ -254,6 +365,34 @@ export class FrontendApiService {
     } else {
       await this.prisma.roomOwner.create({ data: { ...data, ownerId: dto.customerId } });
     }
+    return { ok: true };
+  }
+
+  async updateBinding(id: string, dto: CreateBindingDto) {
+    if (!dto.roomId || !dto.customerId) {
+      throw new BadRequestException('roomId and customerId are required');
+    }
+
+    const data = {
+      roomId: dto.roomId,
+      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+      endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      status: this.normalizeLinkStatus(dto.status),
+    };
+
+    if (dto.kind === 'tenant') {
+      await this.prisma.roomTenant.update({ where: { id }, data: { ...data, tenantId: dto.customerId } });
+    } else {
+      await this.prisma.roomOwner.update({ where: { id }, data: { ...data, ownerId: dto.customerId } });
+    }
+    return { ok: true };
+  }
+
+  async deleteBinding(id: string) {
+    await this.prisma.$transaction([
+      this.prisma.roomTenant.deleteMany({ where: { id } }),
+      this.prisma.roomOwner.deleteMany({ where: { id } }),
+    ]);
     return { ok: true };
   }
 
@@ -367,6 +506,39 @@ export class FrontendApiService {
   private normalizeLinkStatus(status?: string): LinkStatus {
     if (status === 'ENDED' || status === 'PENDING') return status;
     return 'ACTIVE';
+  }
+
+  private async ensureHouseNumberUnique(houseNumber?: string, excludeId?: string) {
+    if (!houseNumber) {
+      throw new BadRequestException('房屋编号不能为空');
+    }
+    const existing = await this.prisma.room.findFirst({
+      where: {
+        houseNumber,
+        NOT: excludeId ? { id: excludeId } : undefined,
+      },
+    });
+    if (existing) throw new BadRequestException('房屋编号不可重复');
+  }
+
+  private async ensureCustomerUnique(customerCode?: string, phone?: string, email?: string, excludeId?: string) {
+    if (!customerCode || !/^\d{4,}$/.test(customerCode)) {
+      throw new BadRequestException('客户编号需为至少4位数字');
+    }
+
+    const notCurrent = excludeId ? { NOT: { id: excludeId } } : {};
+    const [tenantCode, ownerCode, tenantPhone, ownerPhone, tenantEmail, ownerEmail] = await Promise.all([
+      this.prisma.tenant.findFirst({ where: { customerCode, ...notCurrent } }),
+      this.prisma.owner.findFirst({ where: { customerCode, ...notCurrent } }),
+      phone ? this.prisma.tenant.findFirst({ where: { phone, ...notCurrent } }) : null,
+      phone ? this.prisma.owner.findFirst({ where: { phone, ...notCurrent } }) : null,
+      email ? this.prisma.tenant.findFirst({ where: { email, ...notCurrent } }) : null,
+      email ? this.prisma.owner.findFirst({ where: { email, ...notCurrent } }) : null,
+    ]);
+
+    if (tenantCode || ownerCode) throw new BadRequestException('客户编号不可重复');
+    if (tenantPhone || ownerPhone) throw new BadRequestException('客户电话不可重复');
+    if (tenantEmail || ownerEmail) throw new BadRequestException('客户邮箱不可重复');
   }
 
   private optionalDecimal(value?: string) {

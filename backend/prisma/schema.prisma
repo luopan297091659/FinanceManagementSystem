@@ -135,6 +135,7 @@ model Room {
   property          Property           @relation(fields: [propertyId], references: [id])
   companyId         String?
   company           ManagementCompany? @relation(fields: [companyId], references: [id])
+  houseNumber       String?            @unique
   roomNumber        String
   area              Decimal?           @db.Decimal(10, 2)
   floor             Int?
@@ -162,11 +163,12 @@ model Room {
 
 model Tenant {
   id           String       @id @default(uuid())
+  customerCode String?      @unique
   name         String
   nameKana     String?
   nationality  String?
-  phone        String?
-  email        String?
+  phone        String?      @unique
+  email        String?      @unique
   birthDate    DateTime?
   occupation   String?
   annualIncome Decimal?     @db.Decimal(18, 2)
@@ -183,13 +185,14 @@ model Tenant {
 
 model Owner {
   id                 String      @id @default(uuid())
+  customerCode       String?     @unique
   ownerType          OwnerType    @default(PERSON)
   name               String
   nameKana           String?
   representativeName String?
   companyPhone       String?
-  phone              String?
-  email              String?
+  phone              String?     @unique
+  email              String?     @unique
   address1           String?
   address2           String?
   address3           String?

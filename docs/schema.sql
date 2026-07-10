@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS room (
   id TEXT PRIMARY KEY,
   building_id TEXT NOT NULL REFERENCES building(id),
   management_company_id TEXT REFERENCES management_company(id),
+  house_number TEXT,
   room_number TEXT NOT NULL,
   area REAL,
   floor INTEGER,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS room (
 
 CREATE TABLE IF NOT EXISTS tenant (
   id TEXT PRIMARY KEY,
+  customer_code TEXT,
   name TEXT NOT NULL,
   name_kana TEXT,
   nationality TEXT,
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS tenant (
 
 CREATE TABLE IF NOT EXISTS owner (
   id TEXT PRIMARY KEY,
+  customer_code TEXT,
   owner_type TEXT NOT NULL DEFAULT 'PERSON',
   name TEXT NOT NULL,
   name_kana TEXT,
@@ -178,3 +181,10 @@ CREATE INDEX IF NOT EXISTS idx_room_owner_room ON room_owner(room_id);
 CREATE INDEX IF NOT EXISTS idx_income_room_date ON income(room_id, income_date);
 CREATE INDEX IF NOT EXISTS idx_expense_room_date ON expense(room_id, expense_date);
 CREATE INDEX IF NOT EXISTS idx_document_room ON document(room_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_room_house_number_unique ON room(house_number) WHERE house_number IS NOT NULL AND house_number <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_customer_code_unique ON tenant(customer_code) WHERE customer_code IS NOT NULL AND customer_code <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_customer_code_unique ON owner(customer_code) WHERE customer_code IS NOT NULL AND customer_code <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_phone_unique ON tenant(phone) WHERE phone IS NOT NULL AND phone <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_phone_unique ON owner(phone) WHERE phone IS NOT NULL AND phone <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_email_unique ON tenant(email) WHERE email IS NOT NULL AND email <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_email_unique ON owner(email) WHERE email IS NOT NULL AND email <> '';

@@ -9,6 +9,9 @@ export class CreateCustomerDto {
   ownerType?: 'PERSON' | 'COMPANY';
 
   @IsString()
+  customerCode!: string;
+
+  @IsString()
   name!: string;
 
   @IsOptional()

@@ -18,6 +18,9 @@ export class CreateRoomDto {
   @IsString()
   roomNumber!: string;
 
+  @IsString()
+  houseNumber!: string;
+
   @IsOptional()
   @IsString()
   area?: string;

@@ -19,6 +19,20 @@ const api = {
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   },
+  async put(path, payload) {
+    const response = await fetch(apiPath(path), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+  async delete(path) {
+    const response = await fetch(apiPath(path), { method: "DELETE" });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
 };
 
 let state = {
@@ -56,6 +70,61 @@ function byId(list, id) {
   return list.find((item) => String(item.id) === String(id));
 }
 
+function errorMessage(error) {
+  try {
+    return JSON.parse(error.message).error || error.message;
+  } catch {
+    return error.message;
+  }
+}
+
+function setFormValue(form, name, value) {
+  const field = form.elements[name];
+  if (field) field.value = value ?? "";
+}
+
+function setEditMode(formId, active, label) {
+  const submit = document.getElementById(`${formId}-submit`);
+  const cancel = document.getElementById(`${formId}-cancel-edit`);
+  if (submit) submit.textContent = active ? `更新${label}` : `保存${label}`;
+  if (cancel) cancel.classList.toggle("hidden", !active);
+}
+
+function customerPayload(data) {
+  return {
+    kind: data.kind,
+    ownerType: data.ownerType || "PERSON",
+    customerCode: data.customerCode.trim(),
+    name: data.name.trim(),
+    kana: data.kana,
+    nationality: data.nationality,
+    phone: data.phone.trim(),
+    email: data.email.trim(),
+    birthDate: data.birthDate,
+    occupation: data.occupation,
+    annualIncome: data.annualIncome,
+    address: data.address,
+    attachments: data.attachments,
+  };
+}
+
+function roomPayload(data) {
+  return {
+    projectName: data.projectName.trim(),
+    buildingName: data.buildingName.trim(),
+    buildingLatitude: data.buildingLatitude,
+    buildingLongitude: data.buildingLongitude,
+    houseNumber: data.houseNumber.trim(),
+    roomNumber: data.roomNumber.trim(),
+    area: data.area,
+    floor: data.floor,
+    roomLatitude: data.roomLatitude,
+    roomLongitude: data.roomLongitude,
+    status: data.status,
+    note: data.note,
+  };
+}
+
 function getProjectName(room) {
   return byId(state.projects, room?.projectId)?.name || "-";
 }
@@ -67,7 +136,8 @@ function getBuildingName(room) {
 function getRoomLabel(roomId) {
   const room = byId(state.rooms, roomId);
   if (!room) return "-";
-  return `${getProjectName(room)} / ${getBuildingName(room)} / ${room.number}`;
+  const house = room.houseNumber ? `${room.houseNumber} / ` : "";
+  return `${getProjectName(room)} / ${getBuildingName(room)} / ${house}${room.number}`;
 }
 
 function getRoomCoordinateLabel(room) {
@@ -187,44 +257,83 @@ function renderDashboard() {
 
 function renderRooms() {
   document.getElementById("rooms-table").innerHTML = `
-    <div class="table-row header wide"><span>项目</span><span>楼栋 / 房号</span><span>面积 / 楼层</span><span>状态</span></div>
+    <div class="table-row header rooms"><span>项目</span><span>房屋编号 / 房号</span><span>面积 / 楼层</span><span>状态</span><span>操作</span></div>
     ${state.rooms
       .map((room) => `
-        <div class="table-row wide">
+        <div class="table-row rooms">
           <span>${escapeHtml(getProjectName(room))}</span>
-          <span>${escapeHtml(getBuildingName(room))} / ${escapeHtml(room.number)}</span>
+          <span>${escapeHtml(room.houseNumber || "-")}<br>${escapeHtml(getBuildingName(room))} / ${escapeHtml(room.number)}</span>
           <span>${escapeHtml(room.area || "-")}㎡ / ${escapeHtml(room.floor || "-")}F<br>${escapeHtml(getRoomCoordinateLabel(room))}</span>
           <span>${statusPill(room.status)}</span>
+          <span class="row-actions">
+            <button class="ghost-button mini" type="button" data-edit-room="${escapeHtml(room.id)}">编辑</button>
+            <button class="danger-button mini" type="button" data-delete-room="${escapeHtml(room.id)}">删除</button>
+          </span>
         </div>
       `)
       .join("") || `<div class="empty">暂无房间</div>`}
   `;
 }
 
+function renderCustomers() {
+  const rows = [
+    ...state.tenants.map((customer) => ({ ...customer, kind: "tenant", kindLabel: "租客" })),
+    ...state.owners.map((customer) => ({ ...customer, kind: "owner", kindLabel: "业主" })),
+  ].sort((a, b) => String(a.customerCode || "").localeCompare(String(b.customerCode || "")));
+
+  document.getElementById("customers-table").innerHTML = `
+    <div class="table-row header customers"><span>客户编号</span><span>类型 / 名称</span><span>电话 / 邮箱</span><span>地址</span><span>操作</span></div>
+    ${rows
+      .map((customer) => `
+        <div class="table-row customers">
+          <span>${escapeHtml(customer.customerCode || "-")}</span>
+          <span>${escapeHtml(customer.kindLabel)}<br>${escapeHtml(customer.name)}</span>
+          <span>${escapeHtml(customer.phone || "-")}<br>${escapeHtml(customer.email || "-")}</span>
+          <span>${escapeHtml(customer.address || "-")}</span>
+          <span class="row-actions">
+            <button class="ghost-button mini" type="button" data-edit-customer="${escapeHtml(customer.kind)}:${escapeHtml(customer.id)}">编辑</button>
+            <button class="danger-button mini" type="button" data-delete-customer="${escapeHtml(customer.id)}">删除</button>
+          </span>
+        </div>
+      `)
+      .join("") || `<div class="empty">暂无客户</div>`}
+  `;
+}
+
 function renderBindings() {
   const tenantRows = state.roomTenants.map((link) => ({
+    id: link.id,
+    kind: "tenant",
+    kindLabel: "租客",
+    customerId: link.tenantId,
     room: getRoomLabel(link.roomId),
-    kind: "租客",
     name: byId(state.tenants, link.tenantId)?.name || "-",
     period: `${link.startDate || "-"} ~ ${link.endDate || "现在"}`,
     status: link.status,
   }));
   const ownerRows = state.roomOwners.map((link) => ({
+    id: link.id,
+    kind: "owner",
+    kindLabel: "业主",
+    customerId: link.ownerId,
     room: getRoomLabel(link.roomId),
-    kind: "业主",
     name: byId(state.owners, link.ownerId)?.name || "-",
     period: `${link.startDate || "-"} ~ ${link.endDate || "现在"}`,
     status: link.status,
   }));
   document.getElementById("bindings-table").innerHTML = `
-    <div class="table-row wide header"><span>房间</span><span>类型</span><span>客户</span><span>期间</span></div>
+    <div class="table-row header bindings"><span>房间</span><span>类型</span><span>客户</span><span>期间</span><span>操作</span></div>
     ${[...tenantRows, ...ownerRows]
       .map((row) => `
-        <div class="table-row wide">
+        <div class="table-row bindings">
           <span>${escapeHtml(row.room)}</span>
-          <span>${escapeHtml(row.kind)} ${statusPill(row.status)}</span>
+          <span>${escapeHtml(row.kindLabel || row.kind)} ${statusPill(row.status)}</span>
           <span>${escapeHtml(row.name)}</span>
           <span>${escapeHtml(row.period)}</span>
+          <span class="row-actions">
+            <button class="ghost-button mini" type="button" data-edit-binding="${escapeHtml(row.kind)}:${escapeHtml(row.id)}">编辑</button>
+            <button class="danger-button mini" type="button" data-delete-binding="${escapeHtml(row.id)}">删除</button>
+          </span>
         </div>
       `)
       .join("") || `<div class="empty">暂无绑定</div>`}
@@ -325,6 +434,7 @@ function renderAll() {
   renderMetrics();
   renderDashboard();
   renderRooms();
+  renderCustomers();
   renderBindings();
   renderTransactions();
   renderDocuments();
@@ -340,10 +450,34 @@ async function submitJson(event, path, payloadBuilder, afterSubmit) {
   event.preventDefault();
   const form = event.currentTarget;
   const payload = payloadBuilder(Object.fromEntries(new FormData(form)));
-  await api.post(path, payload);
-  form.reset();
-  if (afterSubmit) afterSubmit();
-  await refresh();
+  try {
+    await api.post(path, payload);
+    form.reset();
+    if (afterSubmit) afterSubmit();
+    await refresh();
+  } catch (error) {
+    alert(errorMessage(error));
+  }
+}
+
+async function submitEntity(event, path, payloadBuilder, label, afterSubmit) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const payload = payloadBuilder(data);
+  try {
+    if (data.id) {
+      await api.put(`${path}/${encodeURIComponent(data.id)}`, payload);
+    } else {
+      await api.post(path, payload);
+    }
+    form.reset();
+    setEditMode(form.id.replace("-form", ""), false, label);
+    if (afterSubmit) afterSubmit();
+    await refresh();
+  } catch (error) {
+    alert(errorMessage(error));
+  }
 }
 
 document.querySelectorAll(".nav-item, [data-view-jump]").forEach((button) => {
@@ -362,19 +496,7 @@ document.getElementById("reset-demo").addEventListener("click", async () => {
 });
 
 document.getElementById("room-form").addEventListener("submit", (event) =>
-  submitJson(event, "/api/rooms", (data) => ({
-    projectName: data.projectName.trim(),
-    buildingName: data.buildingName.trim(),
-    buildingLatitude: data.buildingLatitude,
-    buildingLongitude: data.buildingLongitude,
-    roomNumber: data.roomNumber.trim(),
-    area: data.area,
-    floor: data.floor,
-    roomLatitude: data.roomLatitude,
-    roomLongitude: data.roomLongitude,
-    status: data.status,
-    note: data.note,
-  })),
+  submitEntity(event, "/api/rooms", roomPayload, "房间"),
 );
 
 document.getElementById("customer-kind").addEventListener("change", (event) => {
@@ -382,38 +504,127 @@ document.getElementById("customer-kind").addEventListener("change", (event) => {
 });
 
 document.getElementById("customer-form").addEventListener("submit", (event) =>
-  submitJson(
+  submitEntity(
     event,
     "/api/customers",
-    (data) => ({
-      kind: data.kind,
-      ownerType: data.ownerType || "PERSON",
-      name: data.name,
-      kana: data.kana,
-      nationality: data.nationality,
-      phone: data.phone,
-      email: data.email,
-      birthDate: data.birthDate,
-      occupation: data.occupation,
-      annualIncome: data.annualIncome,
-      address: data.address,
-      attachments: data.attachments,
-    }),
+    customerPayload,
+    "客户",
     () => document.getElementById("owner-type-field").classList.add("hidden"),
   ),
 );
 
 document.getElementById("binding-kind").addEventListener("change", renderBindingCustomers);
 document.getElementById("binding-form").addEventListener("submit", (event) =>
-  submitJson(event, "/api/bindings", (data) => ({
+  submitEntity(event, "/api/bindings", (data) => ({
     kind: data.kind,
     roomId: data.roomId,
     customerId: data.customerId,
     startDate: data.startDate,
     endDate: data.endDate,
     status: data.status,
-  })),
+  }), "绑定"),
 );
+
+document.getElementById("room-cancel-edit").addEventListener("click", () => {
+  document.getElementById("room-form").reset();
+  setEditMode("room", false, "房间");
+});
+
+document.getElementById("customer-cancel-edit").addEventListener("click", () => {
+  document.getElementById("customer-form").reset();
+  document.getElementById("owner-type-field").classList.add("hidden");
+  setEditMode("customer", false, "客户");
+});
+
+document.getElementById("binding-cancel-edit").addEventListener("click", () => {
+  document.getElementById("binding-form").reset();
+  renderBindingCustomers();
+  setEditMode("binding", false, "绑定");
+});
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+
+  if (button.dataset.editRoom) {
+    const room = byId(state.rooms, button.dataset.editRoom);
+    const building = byId(state.buildings, room?.buildingId);
+    const project = byId(state.projects, room?.projectId);
+    const form = document.getElementById("room-form");
+    setFormValue(form, "id", room.id);
+    setFormValue(form, "projectName", project?.name);
+    setFormValue(form, "buildingName", building?.name);
+    setFormValue(form, "buildingLatitude", building?.latitude);
+    setFormValue(form, "buildingLongitude", building?.longitude);
+    setFormValue(form, "houseNumber", room.houseNumber);
+    setFormValue(form, "roomNumber", room.number);
+    setFormValue(form, "area", room.area);
+    setFormValue(form, "floor", room.floor);
+    setFormValue(form, "roomLatitude", room.latitude);
+    setFormValue(form, "roomLongitude", room.longitude);
+    setFormValue(form, "status", room.status);
+    setFormValue(form, "note", room.note);
+    setEditMode("room", true, "房间");
+    document.querySelector('[data-view="resources"]').click();
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (button.dataset.editCustomer) {
+    const [kind, id] = button.dataset.editCustomer.split(":");
+    const customer = byId(kind === "tenant" ? state.tenants : state.owners, id);
+    const form = document.getElementById("customer-form");
+    setFormValue(form, "id", customer.id);
+    setFormValue(form, "kind", kind);
+    setFormValue(form, "ownerType", customer.ownerType || "PERSON");
+    setFormValue(form, "customerCode", customer.customerCode);
+    setFormValue(form, "name", customer.name);
+    setFormValue(form, "kana", customer.kana);
+    setFormValue(form, "nationality", customer.nationality);
+    setFormValue(form, "phone", customer.phone);
+    setFormValue(form, "email", customer.email);
+    setFormValue(form, "birthDate", customer.birthDate);
+    setFormValue(form, "occupation", customer.occupation);
+    setFormValue(form, "annualIncome", customer.annualIncome);
+    setFormValue(form, "address", customer.address);
+    setFormValue(form, "attachments", customer.attachments);
+    document.getElementById("owner-type-field").classList.toggle("hidden", kind !== "owner");
+    setEditMode("customer", true, "客户");
+    document.querySelector('[data-view="customers"]').click();
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (button.dataset.editBinding) {
+    const [kind, id] = button.dataset.editBinding.split(":");
+    const list = kind === "tenant" ? state.roomTenants : state.roomOwners;
+    const link = byId(list, id);
+    const form = document.getElementById("binding-form");
+    setFormValue(form, "id", link.id);
+    setFormValue(form, "kind", kind);
+    renderBindingCustomers();
+    setFormValue(form, "roomId", link.roomId);
+    setFormValue(form, "customerId", kind === "tenant" ? link.tenantId : link.ownerId);
+    setFormValue(form, "startDate", link.startDate);
+    setFormValue(form, "endDate", link.endDate);
+    setFormValue(form, "status", link.status);
+    setEditMode("binding", true, "绑定");
+    document.querySelector('[data-view="customers"]').click();
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const deleteTarget =
+    button.dataset.deleteRoom && { path: `/api/rooms/${button.dataset.deleteRoom}`, text: "确认删除该房间及其绑定关系？" } ||
+    button.dataset.deleteCustomer && { path: `/api/customers/${button.dataset.deleteCustomer}`, text: "确认删除该客户及其绑定关系？" } ||
+    button.dataset.deleteBinding && { path: `/api/bindings/${button.dataset.deleteBinding}`, text: "确认删除该绑定？" };
+
+  if (deleteTarget && window.confirm(deleteTarget.text)) {
+    try {
+      await api.delete(deleteTarget.path);
+      await refresh();
+    } catch (error) {
+      alert(errorMessage(error));
+    }
+  }
+});
 
 document.getElementById("transaction-type").addEventListener("change", resetTransactionDetails);
 document.getElementById("add-detail").addEventListener("click", () => {

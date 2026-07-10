@@ -87,6 +87,7 @@
                 <span>Project / Building / Room</span>
               </div>
               <form id="room-form" class="form-grid">
+                <input type="hidden" name="id" />
                 <label>
                   项目
                   <input name="projectName" required placeholder="住之江区西住之江" />
@@ -102,6 +103,10 @@
                 <label>
                   Building 经度
                   <input name="buildingLongitude" type="number" step="0.0000001" placeholder="135.5021651" />
+                </label>
+                <label>
+                  房屋编号
+                  <input name="houseNumber" required placeholder="H0001" />
                 </label>
                 <label>
                   房号
@@ -135,7 +140,10 @@
                   备注
                   <textarea name="note" rows="3" placeholder="房间朝向、钥匙、特殊事项"></textarea>
                 </label>
-                <button class="primary-button span-2" type="submit">保存房间</button>
+                <div class="form-actions span-2">
+                  <button class="primary-button" type="submit" id="room-submit">保存房间</button>
+                  <button class="ghost-button hidden" type="button" id="room-cancel-edit">取消编辑</button>
+                </div>
               </form>
             </section>
 
@@ -157,6 +165,7 @@
                 <span>租客与业主统一维护</span>
               </div>
               <form id="customer-form" class="form-grid">
+                <input type="hidden" name="id" />
                 <label>
                   类型
                   <select name="kind" id="customer-kind">
@@ -170,6 +179,10 @@
                     <option value="PERSON">个人</option>
                     <option value="COMPANY">法人</option>
                   </select>
+                </label>
+                <label>
+                  客户编号
+                  <input name="customerCode" required pattern="[0-9]{4,}" placeholder="0001" />
                 </label>
                 <label>
                   姓名 / 法人名
@@ -211,8 +224,12 @@
                   附件备注
                   <textarea name="attachments" rows="2" placeholder="身份证、护照、在留卡、合同、营业执照"></textarea>
                 </label>
-                <button class="primary-button span-2" type="submit">保存客户</button>
+                <div class="form-actions span-2">
+                  <button class="primary-button" type="submit" id="customer-submit">保存客户</button>
+                  <button class="ghost-button hidden" type="button" id="customer-cancel-edit">取消编辑</button>
+                </div>
               </form>
+              <div id="customers-table" class="table spaced"></div>
             </section>
 
             <section class="panel">
@@ -221,6 +238,7 @@
                 <span>保留历史起止日期</span>
               </div>
               <form id="binding-form" class="form-grid compact">
+                <input type="hidden" name="id" />
                 <label>
                   房间
                   <select name="roomId" id="binding-room"></select>
@@ -251,7 +269,10 @@
                     <option value="ENDED">已结束</option>
                   </select>
                 </label>
-                <button class="primary-button span-2" type="submit">保存绑定</button>
+                <div class="form-actions span-2">
+                  <button class="primary-button" type="submit" id="binding-submit">保存绑定</button>
+                  <button class="ghost-button hidden" type="button" id="binding-cancel-edit">取消编辑</button>
+                </div>
               </form>
               <div id="bindings-table" class="table spaced"></div>
             </section>

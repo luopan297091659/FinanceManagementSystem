@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { CreateBindingDto } from './dto/create-binding.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
@@ -21,14 +21,44 @@ export class FrontendApiController {
     return this.frontendApi.createRoom(dto);
   }
 
+  @Put('rooms/:id')
+  updateRoom(@Param('id') id: string, @Body() dto: CreateRoomDto) {
+    return this.frontendApi.updateRoom(id, dto);
+  }
+
+  @Delete('rooms/:id')
+  deleteRoom(@Param('id') id: string) {
+    return this.frontendApi.deleteRoom(id);
+  }
+
   @Post('customers')
   createCustomer(@Body() dto: CreateCustomerDto) {
     return this.frontendApi.createCustomer(dto);
   }
 
+  @Put('customers/:id')
+  updateCustomer(@Param('id') id: string, @Body() dto: CreateCustomerDto) {
+    return this.frontendApi.updateCustomer(id, dto);
+  }
+
+  @Delete('customers/:id')
+  deleteCustomer(@Param('id') id: string) {
+    return this.frontendApi.deleteCustomer(id);
+  }
+
   @Post('bindings')
   createBinding(@Body() dto: CreateBindingDto) {
     return this.frontendApi.createBinding(dto);
+  }
+
+  @Put('bindings/:id')
+  updateBinding(@Param('id') id: string, @Body() dto: CreateBindingDto) {
+    return this.frontendApi.updateBinding(id, dto);
+  }
+
+  @Delete('bindings/:id')
+  deleteBinding(@Param('id') id: string) {
+    return this.frontendApi.deleteBinding(id);
   }
 
   @Post('transactions')
