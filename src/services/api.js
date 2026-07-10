@@ -42,6 +42,12 @@ export const api = {
   async deleteCustomer(id) {
     return request(`/customers/${id}`, { method: 'DELETE' });
   },
+  async createBinding(payload) {
+    return request('/bindings', { method: 'POST', body: payload });
+  },
+  async deleteBinding(id) {
+    return request(`/bindings/${id}`, { method: 'DELETE' });
+  },
   async createTransaction(payload) {
     return request('/transactions', { method: 'POST', body: payload });
   },

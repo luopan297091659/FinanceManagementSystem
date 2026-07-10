@@ -18,6 +18,14 @@
         <input v-model="form.roomNumber" required placeholder="101" />
       </label>
       <label>
+        Building 纬度
+        <input v-model="form.buildingLatitude" type="text" placeholder="34.6937378" />
+      </label>
+      <label>
+        Building 经度
+        <input v-model="form.buildingLongitude" type="text" placeholder="135.5021651" />
+      </label>
+      <label>
         面积（m²）
         <input v-model.number="form.area" type="number" min="0" step="0.01" />
       </label>
@@ -26,16 +34,26 @@
         <input v-model.number="form.floor" type="number" />
       </label>
       <label>
+        Room 自定义纬度
+        <input v-model="form.roomLatitude" type="text" placeholder="默认使用 Building" />
+      </label>
+      <label>
+        Room 自定义经度
+        <input v-model="form.roomLongitude" type="text" placeholder="默认使用 Building" />
+      </label>
+      <label>
         状态
         <select v-model="form.status">
           <option value="VACANT">空室</option>
           <option value="OCCUPIED">入居中</option>
           <option value="MAINTENANCE">维修中</option>
+          <option value="OVERDUE">逾期</option>
+          <option value="INACTIVE">停用</option>
         </select>
       </label>
       <label class="span-2">
         备注
-        <textarea v-model="form.note" rows="3" placeholder="朝向、钥匙等特殊事项"></textarea>
+        <textarea v-model="form.note" rows="3" placeholder="朝向、钥匙、特殊事项"></textarea>
       </label>
     </div>
 

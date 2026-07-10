@@ -9,15 +9,23 @@
         </select>
       </label>
       <label>
-        姓名 / 法人名
-        <input v-model="form.name" required placeholder="山田 太郎 / ABC株式会社" />
-      </label>
-      <label>
         客户编号
         <input v-model="form.customerCode" required placeholder="0001" />
       </label>
       <label>
-        联系方式
+        姓名 / 法人名
+        <input v-model="form.name" required placeholder="山田 太郎 / ABC株式会社" />
+      </label>
+      <label>
+        假名 / 负责人
+        <input v-model="form.kana" placeholder="ヤマダ タロウ" />
+      </label>
+      <label>
+        国籍
+        <input v-model="form.nationality" placeholder="日本 / 中国" />
+      </label>
+      <label>
+        电话
         <input v-model="form.phone" placeholder="090-0000-0000" />
       </label>
       <label>
@@ -25,8 +33,24 @@
         <input v-model="form.email" type="email" placeholder="name@example.com" />
       </label>
       <label>
-        备注
-        <input v-model="form.note" placeholder="客户标签或备注" />
+        出生日期
+        <input v-model="form.birthDate" type="date" />
+      </label>
+      <label>
+        职业 / 公司电话
+        <input v-model="form.occupation" placeholder="会社員 / 06-0000-0000" />
+      </label>
+      <label>
+        年收入
+        <input v-model="form.annualIncome" type="text" placeholder="4000000" />
+      </label>
+      <label>
+        地址
+        <input v-model="form.address" placeholder="大阪府大阪市..." />
+      </label>
+      <label class="span-2">
+        附件备注
+        <textarea v-model="form.attachments" rows="3" placeholder="身份证、护照、在留卡、合同、营业执照"></textarea>
       </label>
     </div>
 

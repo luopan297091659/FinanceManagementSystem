@@ -71,6 +71,8 @@
       <ResourcesView v-else-if="activeView === 'resources'" />
       <CustomersView v-else-if="activeView === 'customers'" />
       <FinanceView v-else-if="activeView === 'finance'" />
+      <OcrView v-else-if="activeView === 'ocr'" />
+      <KnowledgeView v-else-if="activeView === 'knowledge'" />
     </main>
   </div>
 </template>
@@ -81,6 +83,8 @@ import GisView from "./views/gis/index.vue";
 import ResourcesView from "./views/resources.vue";
 import CustomersView from "./views/customers.vue";
 import FinanceView from "./views/finance.vue";
+import OcrView from "./views/ocr.vue";
+import KnowledgeView from "./views/knowledge.vue";
 
 const activeView = ref("gis");
 const theme = ref("teal");
@@ -90,6 +94,8 @@ const navItems = [
   { key: "resources", label: "房源管理" },
   { key: "customers", label: "客户管理" },
   { key: "finance", label: "财务中心" },
+  { key: "ocr", label: "OCR 中心" },
+  { key: "knowledge", label: "AI 知识库" },
 ];
 const themes = [
   { key: "teal", label: "青绿", color: "#0f766e" },
@@ -113,7 +119,7 @@ const sidebarStyle = computed(() => ({ background: palette[theme.value].surface 
 const brandStyle = computed(() => ({ background: palette[theme.value].primary }));
 
 const currentTitle = computed(() => {
-  const titleMap = { overview: "业务概览", gis: "GIS 地图中心", resources: "房源管理", customers: "客户管理", finance: "财务中心" };
+  const titleMap = { overview: "业务概览", gis: "GIS 地图中心", resources: "房源管理", customers: "客户管理", finance: "财务中心", ocr: "OCR 中心", knowledge: "AI 知识库" };
   return titleMap[activeView.value] || "业务概览";
 });
 
@@ -124,6 +130,8 @@ const currentSubtitle = computed(() => {
     resources: "维护房屋、楼栋和房间状态，支撑日常运营。",
     customers: "统一管理租客、业主与相关业务联系人。",
     finance: "审查收支流水，辅助财务分析与预算控制。",
+    ocr: "上传文档并跟踪 OCR 识别结果，建立标准化档案。",
+    knowledge: "沉淀房源、租约与业务知识，支撑智能问答与检索。",
   };
   return map[activeView.value] || "";
 });
