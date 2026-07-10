@@ -28,7 +28,7 @@ async function bootstrap() {
     get(path: string, handler: (request: unknown, response: { sendFile(path: string): void }) => void): void;
   };
   express.get('/', (_request, response) => {
-    response.sendFile(join(projectRoot, 'index.html'));
+    response.sendFile(join(projectRoot, 'dist/index.html'));
   });
 
   await app.listen(config.get<number>('PORT') ?? 8006);
