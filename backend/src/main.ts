@@ -22,10 +22,11 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.useStaticAssets(join(projectRoot, 'dist'), { prefix: '/' });
   app.useStaticAssets(join(projectRoot, 'src'), { prefix: '/src' });
 
   const express = app.getHttpAdapter().getInstance() as {
-    get(path: string, handler: (request: unknown, response: { sendFile(path: string): void }) => void): void;
+    get(path: string | RegExp, handler: (request: unknown, response: { sendFile(path: string): void }) => void): void;
   };
   express.get('/', (_request, response) => {
     response.sendFile(join(projectRoot, 'dist/index.html'));
