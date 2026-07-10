@@ -384,6 +384,7 @@
 
         <section class="view" id="gis">
           <section class="gis-panel" aria-label="GIS地图">
+            <div id="gis-search-panel" class="gis-search-panel"></div>
             <div id="gis-map" class="gis-map"></div>
           </section>
         </section>
@@ -448,6 +449,12 @@
       window.API_BASE = window.API_BASE || "/api/v1";
     </script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="src/types/building.js"></script>
+    <script src="src/components/gis/BuildingService.js"></script>
+    <script src="src/composables/useBuildingSearch.js"></script>
+    <script src="src/components/gis/MarkerManager.js"></script>
+    <script src="src/components/gis/BuildingLayer.js"></script>
+    <script src="src/components/gis/SearchPanel.js"></script>
     <script src="src/app.js"></script>
   </body>
 </html>

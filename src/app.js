@@ -52,9 +52,12 @@ let state = {
 const GIS_STYLE_URL = "https://api.maptiler.com/maps/jp-gsi-standard/style.json?key=z957GVzlIZ4zQdQ4as3E";
 const OSAKA_STATION_COORDINATES = [135.495951, 34.702485];
 let gisMap;
+let gisBuildingLayer;
+let gisSearchPanel;
 
 function initializeGisMap() {
   const mapContainer = document.getElementById("gis-map");
+  const searchContainer = document.getElementById("gis-search-panel");
   if (!mapContainer || gisMap) {
     if (gisMap) gisMap.resize();
     return;
@@ -83,6 +86,21 @@ function initializeGisMap() {
     }),
     "bottom-left",
   );
+
+  gisMap.on("load", async () => {
+    gisBuildingLayer = new window.FmsGis.BuildingLayer(gisMap);
+    const featureCollection = await gisBuildingLayer.load();
+
+    if (searchContainer && !gisSearchPanel) {
+      gisSearchPanel = new window.FmsGis.SearchPanel({
+        container: searchContainer,
+        map: gisMap,
+        buildingLayer: gisBuildingLayer,
+        features: featureCollection.features,
+      });
+      gisSearchPanel.mount();
+    }
+  });
 }
 
 function formatMoney(value) {
