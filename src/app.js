@@ -1,4 +1,4 @@
-const API_BASE = window.API_BASE || "/api";
+const API_BASE = window.API_BASE || "/api/v1";
 
 function apiPath(path) {
   return `${API_BASE}${path.replace(/^\/api/, "")}`;
@@ -694,5 +694,5 @@ document.getElementById("fee-item-form").addEventListener("submit", (event) =>
 document.querySelector('#transaction-form [name="date"]').value = new Date().toISOString().slice(0, 10);
 resetTransactionDetails();
 refresh().catch((error) => {
-  document.body.innerHTML = `<main class="workspace"><section class="panel"><h1>启动失败</h1><p>${escapeHtml(error.message)}</p><p>请使用 <code>python server.py</code> 启动项目。</p></section></main>`;
+  document.body.innerHTML = `<main class="workspace"><section class="panel"><h1>启动失败</h1><p>${escapeHtml(error.message)}</p><p>请使用 <code>npm.cmd run dev</code> 启动 Nest 后端。</p></section></main>`;
 });

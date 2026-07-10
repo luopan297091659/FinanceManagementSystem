@@ -1,47 +1,69 @@
 # 运行说明
 
-本项目一期最小集不需要安装第三方依赖，使用 Python 标准库启动后端与静态前端，数据库使用 SQLite。
+本项目正式后端为 NestJS + PostgreSQL/PostGIS。Python `server.py` 仅保留为早期 SQLite 演示脚本，不再作为默认启动入口。
 
-## 启动
+## 本地启动
+
+1. 启动 PostgreSQL/PostGIS：
 
 ```powershell
-python server.py
+docker compose -f backend/docker-compose.yml up -d postgres
+```
+
+2. 设置数据库连接：
+
+```powershell
+$env:DATABASE_URL="postgresql://finance:finance@localhost:5432/finance_management?schema=public"
+```
+
+3. 执行数据库迁移并生成 Prisma Client：
+
+```powershell
+npm.cmd run backend:prisma:deploy
+npm.cmd run backend:prisma:generate
+```
+
+4. 启动 Nest 后端：
+
+```powershell
+npm.cmd run dev
 ```
 
 浏览器访问：
 
 ```text
-http://127.0.0.1:8000/
+http://127.0.0.1:8006/
 ```
 
-也可以指定端口：
+API 前缀：
+
+```text
+/api/v1
+```
+
+## 线上更新
 
 ```powershell
-python server.py 9000
+cd D:\PROJECT\FinanceManagementSystem
+$env:DATABASE_URL="postgresql://user:password@host:5432/dbname?schema=public"
+npm.cmd run backend:prisma:deploy
+npm.cmd run backend:prisma:generate
+npm.cmd run backend:build
+pm2 restart finance-management --update-env
 ```
 
-## 数据库
+## 数据库检查
 
-首次启动会自动创建：
+迁移后可执行：
+
+```powershell
+npm.cmd run backend:db:check
+```
+
+或访问：
 
 ```text
-data/app.db
+http://127.0.0.1:8006/api/v1/diagnostics
 ```
 
-数据库结构定义在：
-
-```text
-docs/schema.sql
-```
-
-页面右上角“重置演示数据”会清空并重新初始化 SQLite 演示数据。
-
-## 当前最小集能力
-
-- 房源管理：Project / Building / Room
-- 客户管理：Tenant / Owner
-- 房间绑定：room_tenant / room_owner，保留起止日期
-- 财务管理：Income / Expense + 动态费用明细
-- 费用项配置：FeeItem 支持 Money / Number / Text / Date
-- OCR中心：保存文件识别文本，并同步进入知识库
-- AI知识库：一期使用本地规则查询，后续可接向量库和大模型
+如果 `diagnostics.build` 不是 `customer-house-code-2026-07-10`，说明当前运行的服务仍是旧进程或旧部署目录。

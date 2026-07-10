@@ -24,6 +24,39 @@ import {
 export class FrontendApiService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async diagnostics() {
+    const columns = await this.prisma.$queryRaw<
+      Array<{ table_name: string; column_name: string }>
+    >`
+      SELECT table_name, column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND (
+          (table_name = 'Tenant' AND column_name = 'customerCode')
+          OR (table_name = 'Owner' AND column_name = 'customerCode')
+          OR (table_name = 'Room' AND column_name = 'houseNumber')
+        )
+      ORDER BY table_name, column_name
+    `;
+
+    const columnSet = new Set(columns.map((column) => `${column.table_name}.${column.column_name}`));
+    return {
+      ok: true,
+      service: 'nest',
+      apiPrefix: '/api/v1',
+      build: 'customer-house-code-2026-07-10',
+      dto: {
+        customerCode: true,
+        houseNumber: true,
+      },
+      database: {
+        roomHouseNumber: columnSet.has('Room.houseNumber'),
+        tenantCustomerCode: columnSet.has('Tenant.customerCode'),
+        ownerCustomerCode: columnSet.has('Owner.customerCode'),
+      },
+    };
+  }
+
   async bootstrap(): Promise<FrontendBootstrap> {
     const [
       projects,

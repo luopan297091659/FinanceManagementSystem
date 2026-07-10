@@ -16,6 +16,11 @@ export class FrontendApiController {
     return this.frontendApi.bootstrap();
   }
 
+  @Get('diagnostics')
+  diagnostics() {
+    return this.frontendApi.diagnostics();
+  }
+
   @Post('rooms')
   createRoom(@Body() dto: CreateRoomDto) {
     return this.frontendApi.createRoom(dto);
