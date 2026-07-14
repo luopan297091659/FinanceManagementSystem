@@ -2,37 +2,75 @@
   <form class="panel-form" @submit.prevent="emit('submit')">
     <div class="field-grid">
       <label>
-        类型
+        {{ labels.type }}
         <select v-model="form.kind">
-          <option value="income">收入</option>
-          <option value="expense">支出</option>
+          <option value="income">{{ labels.income }}</option>
+          <option value="expense">{{ labels.expense }}</option>
         </select>
       </label>
+
       <label>
-        金额
-        <input v-model.number="form.amount" type="number" min="0" step="0.01" required />
+        {{ labels.feeItem }}
+        <select v-model="form.feeItemId" required>
+          <option value="">{{ labels.selectFeeItem }}</option>
+          <option v-for="item in filteredFeeItems" :key="item.id" :value="item.id">
+            {{ item.name }}
+          </option>
+        </select>
       </label>
+
       <label>
-        发生日期
+        {{ labels.amount }}
+        <input v-model.number="form.amount" type="number" min="0" step="1" required />
+      </label>
+
+      <label>
+        {{ labels.date }}
         <input v-model="form.occurredAt" type="date" required />
       </label>
+
       <label>
-        说明
-        <input v-model="form.description" placeholder="租金、维修费" />
+        {{ labels.room }}
+        <select v-model="form.roomId">
+          <option value="">{{ labels.noRoom }}</option>
+          <option v-for="room in rooms" :key="room.id" :value="room.id">
+            {{ room.houseNumber || room.number }} / {{ room.number }}
+          </option>
+        </select>
       </label>
+
       <label>
-        关联房间
-        <input v-model="form.roomName" placeholder="101" />
+        {{ labels.counterparty }}
+        <input v-model="form.customerName" :placeholder="labels.counterpartyPlaceholder" />
       </label>
+
       <label>
-        关联客户
-        <input v-model="form.customerName" placeholder="山田 太郎" />
+        {{ labels.processingStatus }}
+        <select v-model="form.processingStatus">
+          <option value="INCLUDED">{{ labels.included }}</option>
+          <option value="DETAIL_ONLY">{{ labels.detailOnly }}</option>
+          <option value="DUPLICATE_EXCLUDED">{{ labels.duplicateExcluded }}</option>
+        </select>
+      </label>
+
+      <label>
+        {{ labels.confirmationStatus }}
+        <select v-model="form.confirmationStatus">
+          <option value="PENDING">{{ labels.pending }}</option>
+          <option value="CONFIRMED">{{ labels.confirmed }}</option>
+          <option value="REJECTED">{{ labels.rejected }}</option>
+        </select>
+      </label>
+
+      <label class="wide-field">
+        {{ labels.note }}
+        <input v-model="form.description" :placeholder="labels.notePlaceholder" />
       </label>
     </div>
 
     <div class="form-actions">
-      <button class="primary-button" type="submit">{{ editing ? "更新流水" : "新增流水" }}</button>
-      <button v-if="editing" class="ghost-button" type="button" @click="emit('cancel')">取消</button>
+      <button class="primary-button" type="submit">{{ editing ? labels.update : labels.create }}</button>
+      <button v-if="editing" class="ghost-button" type="button" @click="emit('cancel')">{{ labels.cancel }}</button>
     </div>
   </form>
 </template>
@@ -45,9 +83,21 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  rooms: {
+    type: Array,
+    default: () => [],
+  },
+  feeItems: {
+    type: Array,
+    default: () => [],
+  },
+  labels: {
+    type: Object,
+    required: true,
+  },
 });
 
-const emit = defineEmits(["submit", "cancel"]);
+const emit = defineEmits(["update:modelValue", "submit", "cancel"]);
 
 const form = computed({
   get: () => props.modelValue,
@@ -55,4 +105,7 @@ const form = computed({
 });
 
 const editing = computed(() => Boolean(props.modelValue.id));
+const filteredFeeItems = computed(() =>
+  props.feeItems.filter((item) => item.enabled && (item.category === props.modelValue.kind || item.category === "both")),
+);
 </script>

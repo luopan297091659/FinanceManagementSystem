@@ -176,7 +176,20 @@ export class FrontendApiService {
         type: toFrontendTransactionType(transaction.type),
         roomId: transaction.roomId,
         date: dateToIsoDate(transaction.date) ?? '',
+        sequenceNo: transaction.sequenceNo,
+        fileType: transaction.fileType,
         counterparty: transaction.counterparty,
+        counterpartyRaw: transaction.counterpartyRaw,
+        contentSummary: transaction.contentSummary,
+        fileAmount: decimalToString(transaction.fileAmount),
+        transferFeeAmount: decimalToString(transaction.transferFeeAmount),
+        statisticalAmount: decimalToString(transaction.statisticalAmount),
+        evidenceDateType: transaction.evidenceDateType,
+        sourcePageStart: transaction.sourcePageStart,
+        sourcePageEnd: transaction.sourcePageEnd,
+        processingStatus: transaction.processingStatus,
+        confirmationStatus: transaction.confirmationStatus,
+        totalAmount: decimalToString(transaction.totalAmount),
         note: transaction.note,
         details: transaction.details.map((detail) => ({
           feeItemId: detail.feeItemId,
@@ -434,26 +447,31 @@ export class FrontendApiService {
       where: { id: { in: dto.details.map((detail) => detail.feeItemId) } },
     });
     const feeItemById = new Map(feeItems.map((item) => [item.id, item]));
-    const moneyValues = dto.details
-      .filter((detail) => {
-        const item = feeItemById.get(detail.feeItemId);
-        return item?.valueType === 'MONEY' || item?.valueType === 'NUMBER';
-      })
-      .map((detail) => toDecimal(detail.value || 0));
 
     await this.prisma.transaction.create({
-      data: {
-        type: toPrismaTransactionType(dto.type),
-        roomId: dto.roomId || undefined,
-        date: new Date(dto.date),
-        counterparty: dto.counterparty,
-        totalAmount: addMoney(moneyValues),
-        note: dto.note,
-        details: {
-          create: dto.details.map((detail) => this.toTransactionDetailCreate(detail, feeItemById)),
-        },
-      },
+      data: this.toTransactionCreateInput(dto, feeItemById),
     });
+    return { ok: true };
+  }
+
+  async updateTransaction(id: string, dto: CreateTransactionDto) {
+    const feeItems = await this.prisma.feeItem.findMany({
+      where: { id: { in: dto.details.map((detail) => detail.feeItemId) } },
+    });
+    const feeItemById = new Map(feeItems.map((item) => [item.id, item]));
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.transactionDetail.deleteMany({ where: { transactionId: id } });
+      await tx.transaction.update({
+        where: { id },
+        data: this.toTransactionUpdateInput(dto, feeItemById),
+      });
+    });
+    return { ok: true };
+  }
+
+  async deleteTransaction(id: string) {
+    await this.prisma.transaction.delete({ where: { id } });
     return { ok: true };
   }
 
@@ -528,6 +546,75 @@ export class FrontendApiService {
     if (valueType === 'NUMBER') return { ...base, valueNumber: toDecimal(detail.value || 0) };
     if (valueType === 'DATE') return { ...base, valueDate: new Date(detail.value) };
     return { ...base, valueText: detail.value };
+  }
+
+  private toTransactionCreateInput(
+    dto: CreateTransactionDto,
+    feeItemById: Map<string, { valueType: string }>,
+  ): Prisma.TransactionCreateInput {
+    const moneyValues = this.moneyValues(dto, feeItemById);
+    return {
+      type: toPrismaTransactionType(dto.type),
+      room: dto.roomId ? { connect: { id: dto.roomId } } : undefined,
+      date: new Date(dto.date),
+      sequenceNo: dto.sequenceNo,
+      fileType: dto.fileType,
+      counterparty: dto.counterparty,
+      counterpartyRaw: dto.counterpartyRaw,
+      contentSummary: dto.contentSummary,
+      fileAmount: dto.fileAmount ? toDecimal(dto.fileAmount) : undefined,
+      transferFeeAmount: dto.transferFeeAmount ? toDecimal(dto.transferFeeAmount) : undefined,
+      statisticalAmount: dto.statisticalAmount ? toDecimal(dto.statisticalAmount) : undefined,
+      evidenceDateType: dto.evidenceDateType,
+      sourcePageStart: dto.sourcePageStart,
+      sourcePageEnd: dto.sourcePageEnd,
+      processingStatus: dto.processingStatus ?? 'INCLUDED',
+      confirmationStatus: dto.confirmationStatus ?? 'PENDING',
+      totalAmount: addMoney(moneyValues),
+      note: dto.note,
+      details: {
+        create: dto.details.map((detail) => this.toTransactionDetailCreate(detail, feeItemById)),
+      },
+    };
+  }
+
+  private toTransactionUpdateInput(
+    dto: CreateTransactionDto,
+    feeItemById: Map<string, { valueType: string }>,
+  ): Prisma.TransactionUpdateInput {
+    const moneyValues = this.moneyValues(dto, feeItemById);
+    return {
+      type: toPrismaTransactionType(dto.type),
+      room: dto.roomId ? { connect: { id: dto.roomId } } : { disconnect: true },
+      date: new Date(dto.date),
+      sequenceNo: dto.sequenceNo,
+      fileType: dto.fileType,
+      counterparty: dto.counterparty,
+      counterpartyRaw: dto.counterpartyRaw,
+      contentSummary: dto.contentSummary,
+      fileAmount: dto.fileAmount ? toDecimal(dto.fileAmount) : null,
+      transferFeeAmount: dto.transferFeeAmount ? toDecimal(dto.transferFeeAmount) : toDecimal(0),
+      statisticalAmount: dto.statisticalAmount ? toDecimal(dto.statisticalAmount) : null,
+      evidenceDateType: dto.evidenceDateType,
+      sourcePageStart: dto.sourcePageStart,
+      sourcePageEnd: dto.sourcePageEnd,
+      processingStatus: dto.processingStatus ?? 'INCLUDED',
+      confirmationStatus: dto.confirmationStatus ?? 'PENDING',
+      totalAmount: addMoney(moneyValues),
+      note: dto.note,
+      details: {
+        create: dto.details.map((detail) => this.toTransactionDetailCreate(detail, feeItemById)),
+      },
+    };
+  }
+
+  private moneyValues(dto: CreateTransactionDto, feeItemById: Map<string, { valueType: string }>) {
+    return dto.details
+      .filter((detail) => {
+        const item = feeItemById.get(detail.feeItemId);
+        return item?.valueType === 'MONEY' || item?.valueType === 'NUMBER';
+      })
+      .map((detail) => toDecimal(detail.value || 0));
   }
 
   private normalizeRoomStatus(status?: string) {

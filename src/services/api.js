@@ -51,6 +51,12 @@ export const api = {
   async createTransaction(payload) {
     return request('/transactions', { method: 'POST', body: payload });
   },
+  async updateTransaction(id, payload) {
+    return request(`/transactions/${id}`, { method: 'PUT', body: payload });
+  },
+  async deleteTransaction(id) {
+    return request(`/transactions/${id}`, { method: 'DELETE' });
+  },
   async createFeeItem(payload) {
     return request('/fee-items', { method: 'POST', body: payload });
   },

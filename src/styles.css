@@ -249,6 +249,10 @@ h3 {
   background: #fcfdff;
 }
 
+.table-row.finance-row {
+  grid-template-columns: minmax(180px, 1.4fr) minmax(110px, 0.7fr) minmax(120px, 0.8fr) auto;
+}
+
 .table-row p {
   margin: 4px 0 0;
   color: var(--muted);
@@ -295,6 +299,21 @@ h3 {
 .status-pill.occupied {
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.status-pill.neutral {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+@media (max-width: 760px) {
+  .table-row.finance-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .table-row.finance-row .row-actions {
+    grid-column: 1 / -1;
+  }
 }
 
 .primary-button,

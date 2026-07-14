@@ -98,7 +98,20 @@ export interface FrontendTransaction {
   type: FrontendTransactionType;
   roomId?: string | null;
   date: string;
+  sequenceNo?: number | null;
+  fileType?: string | null;
   counterparty?: string | null;
+  counterpartyRaw?: string | null;
+  contentSummary?: string | null;
+  fileAmount?: string | null;
+  transferFeeAmount?: string | null;
+  statisticalAmount?: string | null;
+  evidenceDateType?: string | null;
+  sourcePageStart?: number | null;
+  sourcePageEnd?: number | null;
+  processingStatus: string;
+  confirmationStatus: string;
+  totalAmount?: string | null;
   note?: string | null;
   details: FrontendTransactionDetail[];
 }

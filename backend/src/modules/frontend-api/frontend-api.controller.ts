@@ -71,6 +71,16 @@ export class FrontendApiController {
     return this.frontendApi.createTransaction(dto);
   }
 
+  @Put('transactions/:id')
+  updateTransaction(@Param('id') id: string, @Body() dto: CreateTransactionDto) {
+    return this.frontendApi.updateTransaction(id, dto);
+  }
+
+  @Delete('transactions/:id')
+  deleteTransaction(@Param('id') id: string) {
+    return this.frontendApi.deleteTransaction(id);
+  }
+
   @Post('documents')
   createDocument(@Body() dto: CreateDocumentDto) {
     return this.frontendApi.createDocument(dto);

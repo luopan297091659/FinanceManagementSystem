@@ -4,12 +4,11 @@
       <div class="brand">
         <span class="brand-mark" :style="brandStyle">F</span>
         <div>
-          <strong>房产管理平台</strong>
-          <small>Vue 3 迁移版</small>
+          <strong>{{ dictionary.appName }}</strong>
         </div>
       </div>
 
-      <nav class="nav" aria-label="主导航">
+      <nav class="nav" :aria-label="dictionary.appName">
         <button
           v-for="item in navItems"
           :key="item.key"
@@ -23,15 +22,14 @@
       </nav>
 
       <div class="sidebar-card">
-        <p class="eyebrow">当前进度</p>
-        <h3>Vue 3 业务页面已接入</h3>
-        <p>GIS、房源、客户与财务模块已经组件化，并支持主题色切换。</p>
+        <p class="eyebrow">{{ dictionary.progressTitle }}</p>
+        <p>{{ dictionary.progressBody }}</p>
       </div>
 
       <div class="theme-card">
-        <p class="eyebrow">主题色</p>
+        <p class="eyebrow">{{ dictionary.theme }}</p>
         <div class="theme-swatches">
-          <button v-for="theme in themes" :key="theme.key" class="swatch" :style="{ background: theme.color }" type="button" @click="setTheme(theme.key)" />
+          <button v-for="theme in themes" :key="theme.key" class="swatch" :aria-label="theme.label" :style="{ background: theme.color }" type="button" @click="setTheme(theme.key)" />
         </div>
       </div>
     </aside>
@@ -39,31 +37,35 @@
     <main class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">日本房产管理公司</p>
+          <p class="eyebrow">{{ dictionary.company }}</p>
           <h1>{{ currentTitle }}</h1>
           <p class="subtle">{{ currentSubtitle }}</p>
         </div>
         <div class="topbar-actions">
-          <button class="ghost-button" type="button" @click="activeView = 'gis'">查看 GIS</button>
-          <button class="primary-button" type="button" @click="activeView = 'overview'">业务概览</button>
+          <div class="locale-switch" role="group" aria-label="Language">
+            <button class="locale-button" :class="{ active: locale === 'ja' }" type="button" @click="setLocale('ja')">日本語</button>
+            <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">中文</button>
+          </div>
+          <button class="ghost-button" type="button" @click="activeView = 'gis'">{{ dictionary.openGis }}</button>
+          <button class="primary-button" type="button" @click="activeView = 'overview'">{{ dictionary.overview }}</button>
         </div>
       </header>
 
       <section v-if="activeView === 'overview'" class="overview-grid">
         <article class="metric-card">
-          <span class="metric-label">资产点位</span>
+          <span class="metric-label">{{ dictionary.metrics.assets }}</span>
           <strong class="metric-value">6</strong>
-          <p>包含梅田、难波等重点物业。</p>
+          <p>梅田・難波などの重点物件を含みます。</p>
         </article>
         <article class="metric-card">
-          <span class="metric-label">重点关注</span>
+          <span class="metric-label">{{ dictionary.metrics.alerts }}</span>
           <strong class="metric-value">4</strong>
-          <p>风险等级为 warning / attention / critical 的资产。</p>
+          <p>warning / attention / critical の物件です。</p>
         </article>
         <article class="metric-card">
-          <span class="metric-label">搜索体验</span>
-          <strong class="metric-value">实时</strong>
-          <p>支持楼栋、房间、租客、业主与地址检索。</p>
+          <span class="metric-label">{{ dictionary.metrics.search }}</span>
+          <strong class="metric-value">{{ dictionary.metrics.realtime }}</strong>
+          <p>建物、部屋、契約者、家主、住所を検索できます。</p>
         </article>
       </section>
 
@@ -85,18 +87,20 @@ import CustomersView from "./views/customers.vue";
 import FinanceView from "./views/finance.vue";
 import OcrView from "./views/ocr.vue";
 import KnowledgeView from "./views/knowledge.vue";
+import { useI18n } from "./i18n";
 
 const activeView = ref("gis");
 const theme = ref("teal");
-const navItems = [
-  { key: "overview", label: "业务概览" },
-  { key: "gis", label: "GIS 地图" },
-  { key: "resources", label: "房源管理" },
-  { key: "customers", label: "客户管理" },
-  { key: "finance", label: "财务中心" },
-  { key: "ocr", label: "OCR 中心" },
-  { key: "knowledge", label: "AI 知识库" },
-];
+const { locale, dictionary, setLocale } = useI18n();
+const navItems = computed(() => [
+  { key: "overview", label: dictionary.value.overview },
+  { key: "gis", label: dictionary.value.gis },
+  { key: "resources", label: dictionary.value.resources },
+  { key: "customers", label: dictionary.value.customers },
+  { key: "finance", label: dictionary.value.finance },
+  { key: "ocr", label: dictionary.value.ocr },
+  { key: "knowledge", label: dictionary.value.knowledge },
+]);
 const themes = [
   { key: "teal", label: "青绿", color: "#0f766e" },
   { key: "blue", label: "深蓝", color: "#2563eb" },
@@ -119,21 +123,11 @@ const sidebarStyle = computed(() => ({ background: palette[theme.value].surface 
 const brandStyle = computed(() => ({ background: palette[theme.value].primary }));
 
 const currentTitle = computed(() => {
-  const titleMap = { overview: "业务概览", gis: "GIS 地图中心", resources: "房源管理", customers: "客户管理", finance: "财务中心", ocr: "OCR 中心", knowledge: "AI 知识库" };
-  return titleMap[activeView.value] || "业务概览";
+  return dictionary.value[activeView.value] || dictionary.value.overview;
 });
 
 const currentSubtitle = computed(() => {
-  const map = {
-    overview: "汇总关键业务指标，快速掌握资产与风险状态。",
-    gis: "整合地图、搜索、图层与风险状态，提供更直观的运营视图。",
-    resources: "维护房屋、楼栋和房间状态，支撑日常运营。",
-    customers: "统一管理租客、业主与相关业务联系人。",
-    finance: "审查收支流水，辅助财务分析与预算控制。",
-    ocr: "上传文档并跟踪 OCR 识别结果，建立标准化档案。",
-    knowledge: "沉淀房源、租约与业务知识，支撑智能问答与检索。",
-  };
-  return map[activeView.value] || "";
+  return dictionary.value.subtitles[activeView.value] || "";
 });
 
 const setTheme = (key) => {
@@ -168,6 +162,32 @@ const setTheme = (key) => {
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+
+.locale-switch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.locale-button {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  padding: 0 10px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.locale-button:last-child {
+  border-right: 0;
+}
+
+.locale-button.active {
+  background: var(--primary);
+  color: #fff;
 }
 
 .swatch {

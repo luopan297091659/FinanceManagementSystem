@@ -70,6 +70,50 @@ enum AnomalySeverity {
   CRITICAL
 }
 
+enum FundProcessingStatus {
+  INCLUDED
+  DETAIL_ONLY
+  DUPLICATE_EXCLUDED
+}
+
+enum ConfirmationStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum AlertStatus {
+  OPEN
+  SELECTED_FOR_FIX
+  FIXING
+  RESOLVED
+  IGNORED
+}
+
+enum FeeBearer {
+  OWNER
+  COMPANY
+  NEGOTIATED
+}
+
+enum SettlementStatus {
+  DRAFT
+  CONFIRMED
+  REMITTED
+}
+
+enum ThresholdScope {
+  GLOBAL
+  PROPERTY
+  CONTRACT
+}
+
+enum PageReadStatus {
+  READ
+  UNREAD
+  FAILED
+}
+
 model ManagementCompany {
   id          String     @id @default(uuid())
   name        String
@@ -122,6 +166,7 @@ model Property {
   note        String?
   rooms       Room[]
   documents   Document[]
+  anomalyAlerts AnomalyAlert[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
@@ -153,6 +198,7 @@ model Room {
   contracts         Contract[]
   transactions      Transaction[]
   documents         Document[]
+  anomalyAlerts     AnomalyAlert[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -179,6 +225,7 @@ model Tenant {
   rooms        RoomTenant[]
   contracts    Contract[]
   documents    Document[]
+  bankAliases   BankNameAlias[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 }
@@ -199,6 +246,8 @@ model Owner {
   note               String?
   rooms              RoomOwner[]
   documents          Document[]
+  bankAliases        BankNameAlias[]
+  settlements        OwnerSettlement[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 }
@@ -248,12 +297,25 @@ model Contract {
   deposit         Decimal?       @db.Decimal(18, 2)
   keyMoney        Decimal?       @db.Decimal(18, 2)
   guaranteeFee    Decimal?       @db.Decimal(18, 2)
+  otherMonthlyFee1Name String?
+  otherMonthlyFee1 Decimal?       @db.Decimal(18, 2)
+  otherMonthlyFee2Name String?
+  otherMonthlyFee2 Decimal?       @db.Decimal(18, 2)
+  otherMonthlyFee3Name String?
+  otherMonthlyFee3 Decimal?       @db.Decimal(18, 2)
+  paymentCycleMonths Int           @default(1)
+  paymentDay         Int?
+  nextDueDate        DateTime?
+  reminderDays       Int?
+  feeBearer          FeeBearer     @default(OWNER)
   status          ContractStatus @default(ACTIVE)
+  anomalyAlerts   AnomalyAlert[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   @@index([roomId, status])
   @@index([tenantId])
+  @@index([nextDueDate])
 }
 
 model FeeItem {
@@ -274,17 +336,31 @@ model Transaction {
   roomId       String?
   room         Room?           @relation(fields: [roomId], references: [id])
   date         DateTime
+  sequenceNo   Int?
+  fileType     String?
   counterparty String?
+  counterpartyRaw String?
+  contentSummary String?
+  fileAmount   Decimal?        @db.Decimal(18, 2)
+  transferFeeAmount Decimal    @default(0) @db.Decimal(18, 2)
+  statisticalAmount Decimal?   @db.Decimal(18, 2)
+  evidenceDateType String?
+  sourcePageStart Int?
+  sourcePageEnd   Int?
+  processingStatus FundProcessingStatus @default(INCLUDED)
+  confirmationStatus ConfirmationStatus @default(PENDING)
   totalAmount  Decimal         @default(0) @db.Decimal(18, 2)
   note         String?
   details      TransactionDetail[]
   bankMatches  ReconciliationMatch[]
   anomalies    Anomaly[]
+  anomalyAlerts AnomalyAlert[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
   @@index([roomId, date])
   @@index([type, date])
+  @@index([processingStatus, confirmationStatus])
 }
 
 model TransactionDetail {
@@ -320,6 +396,25 @@ model BankTransaction {
   @@index([reconciliationStatus])
 }
 
+model BankNameAlias {
+  id             String    @id @default(uuid())
+  rawName        String
+  normalizedName String
+  tenantId       String?
+  ownerId        String?
+  tenant         Tenant?   @relation(fields: [tenantId], references: [id])
+  owner          Owner?    @relation(fields: [ownerId], references: [id])
+  confidence     Decimal?  @db.Decimal(5, 4)
+  confirmedBy    String?
+  confirmedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([normalizedName])
+  @@index([tenantId])
+  @@index([ownerId])
+}
+
 model ReconciliationMatch {
   id                String          @id @default(uuid())
   transactionId     String
@@ -335,6 +430,29 @@ model ReconciliationMatch {
   @@unique([transactionId, bankTransactionId])
 }
 
+model OwnerSettlement {
+  id                   String           @id @default(uuid())
+  ownerId              String
+  owner                Owner            @relation(fields: [ownerId], references: [id])
+  periodStart          DateTime
+  periodEnd            DateTime
+  grossIncomeAmount    Decimal          @default(0) @db.Decimal(18, 2)
+  managementFeeAmount  Decimal          @default(0) @db.Decimal(18, 2)
+  expenseAmount        Decimal          @default(0) @db.Decimal(18, 2)
+  transferFeeAmount    Decimal          @default(0) @db.Decimal(18, 2)
+  overdueAmount        Decimal          @default(0) @db.Decimal(18, 2)
+  remittanceAmount     Decimal          @default(0) @db.Decimal(18, 2)
+  status               SettlementStatus @default(DRAFT)
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  note                 String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([ownerId, periodStart, periodEnd])
+  @@index([status])
+}
+
 model Anomaly {
   id            String          @id @default(uuid())
   transactionId String?
@@ -347,6 +465,35 @@ model Anomaly {
   createdAt     DateTime        @default(now())
 
   @@index([severity, createdAt])
+}
+
+model AnomalyAlert {
+  id              String          @id @default(uuid())
+  propertyId      String?
+  roomId          String?
+  contractId      String?
+  transactionId   String?
+  property        Property?       @relation(fields: [propertyId], references: [id])
+  room            Room?           @relation(fields: [roomId], references: [id])
+  contract        Contract?       @relation(fields: [contractId], references: [id])
+  transaction     Transaction?    @relation(fields: [transactionId], references: [id])
+  alertType       String
+  severity        AnomalySeverity
+  amount          Decimal?        @db.Decimal(18, 2)
+  differenceAmount Decimal?       @db.Decimal(18, 2)
+  occurredOn      DateTime?
+  status          AlertStatus     @default(OPEN)
+  assigneeUserId  String?
+  handledBy       String?
+  handledAt       DateTime?
+  resolutionNote  String?
+  changedFields   Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status, severity])
+  @@index([propertyId, alertType])
+  @@index([roomId, alertType])
 }
 
 model Document {
@@ -366,8 +513,25 @@ model Document {
   extractedJson Json?
   status        String     @default("PENDING_CONFIRM")
   knowledge     KnowledgeDocument[]
+  pageCoverage  PageCoverage[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model PageCoverage {
+  id              String         @id @default(uuid())
+  documentId      String
+  document        Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  pageNumber      Int
+  readStatus      PageReadStatus @default(UNREAD)
+  relatedSequenceNos Int[] @default([])
+  fileType        String?
+  pageNote        String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([documentId, pageNumber])
+  @@index([readStatus])
 }
 
 model KnowledgeDocument {
@@ -380,6 +544,26 @@ model KnowledgeDocument {
   sourceType  String?
   metadata    Json?
   createdAt   DateTime  @default(now())
+}
+
+model AnomalyThresholdConfig {
+  id                 String         @id @default(uuid())
+  scope              ThresholdScope
+  propertyId         String?
+  contractId         String?
+  anomalyType        String
+  graceDays          Int?
+  amountTolerance    Decimal?       @db.Decimal(18, 2)
+  percentTolerance   Decimal?       @db.Decimal(8, 4)
+  reminderLeadDays   Int?
+  enabled            Boolean        @default(true)
+  updatedBy          String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([scope, anomalyType, enabled])
+  @@index([propertyId])
+  @@index([contractId])
 }
 
 model AuditLog {
