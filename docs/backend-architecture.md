@@ -17,7 +17,7 @@
 | auth | 登录、JWT、权限控制 |
 | users | 用户、角色、公司成员 |
 | companies | 房产管理公司资料 |
-| properties | 项目、建筑物、地址、GIS 坐标 |
+| properties | 物件名、建筑物、地址、GIS 坐标 |
 | rooms | 房间、状态、租客/业主绑定 |
 | tenants | 租客档案 |
 | contracts | 租赁合同、租期、租金、押金 |
