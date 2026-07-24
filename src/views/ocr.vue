@@ -86,7 +86,18 @@
               </div>
             </div>
             <div class="upload-actions">
-              <button class="primary-button" type="button" @click="openFilePicker">{{ selectedFiles.length ? '添加文件' : '上传文件' }}</button>
+              <div class="upload-actions-primary">
+                <button class="primary-button" type="button" @click="openFilePicker">{{ selectedFiles.length ? '添加文件' : '选择文件' }}</button>
+                <button
+                  v-if="selectedFiles.length"
+                  class="primary-button"
+                  type="button"
+                  :disabled="isBusy || !makeWebhookUrl || !callbackUrl"
+                  @click="uploadFiles"
+                >
+                  上传文件
+                </button>
+              </div>
               <button
                 class="secondary-button"
                 type="button"
@@ -304,6 +315,12 @@ const activeTask = computed(() => tasks.value.find((task) => task.id === activeT
 
 const openFilePicker = () => {
   fileInput.value?.click();
+};
+
+const uploadFiles = async () => {
+  if (selectedFiles.value.length && !isBusy.value) {
+    await uploadSelectedFiles(selectedFiles.value);
+  }
 };
 
 const removeFile = (index) => {
@@ -748,6 +765,13 @@ const completeReview = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  align-items: center;
+}
+
+.upload-actions-primary {
+  display: flex;
+  gap: 10px;
+  flex: 1;
 }
 
 .upload-summary {
@@ -784,19 +808,39 @@ const completeReview = () => {
 
 .file-item-container {
   display: grid;
-  gap: 8px;
-  max-height: 300px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  max-height: 280px;
   overflow-y: auto;
+  padding-right: 8px;
+}
+
+.file-item-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.file-item-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-item-container::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.file-item-container::-webkit-scrollbar-thumb:hover {
+  background: #bbb;
 }
 
 .file-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: #f8fbff;
   border-radius: 12px;
   border: 1px solid var(--line);
+  position: relative;
 }
 
 .file-info {
@@ -821,11 +865,12 @@ const completeReview = () => {
 
 .file-name {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100px;
 }
 
 .file-meta {
@@ -835,15 +880,16 @@ const completeReview = () => {
 }
 
 .remove-btn {
-  padding: 6px 10px;
+  padding: 4px 6px;
   background: transparent;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
   transition: color 0.2s ease;
   flex-shrink: 0;
+  margin-left: 8px;
 }
 
 .remove-btn:hover {
