@@ -1,0 +1,22 @@
+【契約物件】物件名	【契約物件】部屋・区画番号	【家主】家主名	【契約者】氏名/名称	【契約者】氏名/名称カナ	PDF转化后銀行摘要名義	标准名称	【保証会社】名称	賃料等支払方法	賃料	管理費・共益費	その他月次費用：項目名	その他月次費用	その他月次費用２：項目名	その他月次費用２	その他月次費用３：項目名	契約期間（年数）	契約期間（月数）	契約開始日	契約満了日	【契約者】個人法人区分	【契約者】氏名/名称カナ	【契約物件】物件名フリガナ	【契約物件】郵便番号	【契約物件】住所	【契約物件】物件種別	【契約物件】物件種目	【駐車場1】駐車場名		賃料等支払月区分	賃料等支払期限日		賃料：支払者		管理費・共益費：支払者	駐車料	敷金	礼金	保証金	保証料	初回振込先	初回振込先管理コード
+
+
+curl -X POST 'https://api.dify.ai/v1/workflows/run' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "inputs": {},
+  "response_mode": "streaming",
+  "user": "abc-123"
+}'
+
+curl -X POST "https://trigger.ai-plugin.io/triggers/webhook-debug/Xa9UbihvtIK_0xJWh2zHpozO" \
+  -F "requestFile=@D:\/requestFile.pdf" \
+  -F 'hitoryData={
+      "tenant":"山田太郎",
+      "project":"A001"
+  }'
+
+  curl.exe -X POST "https://trigger.ai-plugin.io/triggers/webhook-debug/Xa9UbihvtIK_0xJWh2zHpozO" `
+  -F "requestFile=@D:\requestFile.pdf" `
+  -F "hitoryData={\"tenant\":\"山田太郎\",\"project\":\"A001\"}"
