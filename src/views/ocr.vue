@@ -56,10 +56,10 @@
               accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx,.doc,.docx"
               @change="handleFileSelection"
             />
-            <!-- 文件列表显示 -->
+            <!-- 待上传文件列表 -->
             <div v-if="selectedFiles.length" class="files-list">
               <div class="files-header">
-                <strong>{{ selectedFiles.length }} 个文件已选择</strong>
+                <strong>{{ selectedFiles.length }} 个文件待上传</strong>
                 <span class="file-size">{{ totalFileSize }}</span>
               </div>
               <div class="file-item-container">
@@ -89,10 +89,9 @@
               <div class="upload-actions-primary">
                 <button class="primary-button" type="button" @click="openFilePicker">{{ selectedFiles.length ? '添加文件' : '选择文件' }}</button>
                 <button
-                  v-if="selectedFiles.length"
                   class="primary-button"
                   type="button"
-                  :disabled="isBusy || !makeWebhookUrl || !callbackUrl"
+                  :disabled="isBusy || !selectedFiles.length || !makeWebhookUrl || !callbackUrl"
                   @click="uploadFiles"
                 >
                   上传文件
@@ -101,16 +100,35 @@
               <button
                 class="secondary-button"
                 type="button"
-                :disabled="isBusy || !selectedFiles.length || !makeWebhookUrl || !callbackUrl"
+                :disabled="isBusy || !uploadedFileCount || !makeWebhookUrl || !callbackUrl"
                 @click="startReconciliation"
               >
                 开始对账
               </button>
-              <button class="ghost-button" type="button" :disabled="!selectedFiles.length" @click="clearAll">清空</button>
+              <button class="ghost-button" type="button" :disabled="!selectedFiles.length && !uploadedFileCount" @click="clearAll">清空</button>
             </div>
-          </div>
 
-          <div class="status-block">
+            <!-- 已上传文件列表 -->
+            <div v-if="uploadedFiles.length" class="files-list">
+              <div class="files-header">
+                <strong>{{ uploadedFiles.length }} 个文件已上传</strong>
+              </div>
+              <div class="file-item-container">
+                <div v-for="(file, index) in uploadedFiles" :key="`uploaded-${index}`" class="file-item">
+                  <div class="file-info">
+                    <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                      <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                    <div class="file-text">
+                      <p class="file-name">{{ file.name }}</p>
+                      <p class="file-meta">{{ formatFileSize(file.size) }}</p>
+                    </div>
+                  </div>
+                  <span class="file-badge">已上传</span>
+                </div>
+              </div>
+            </div>
             <div class="status-pill" :class="statusClass">{{ statusLabel }}</div>
             <p>{{ statusMessage }}</p>
             <div class="progress-line">
@@ -257,6 +275,7 @@ const DEFAULT_WEBHOOK_URL = 'https://hook.eu1.make.com/saj12egei1j9ox8jzipmdwa62
 
 const fileInput = ref(null);
 const selectedFiles = ref([]);
+const uploadedFiles = ref([]);
 const tasks = ref([]);
 const results = ref([]);
 const taskLog = ref([]);
@@ -273,6 +292,7 @@ const reviewComment = ref('');
 const currentStep = ref('idle');
 const fileUploadProgress = ref(0);
 const processingProgress = ref(0);
+const uploadedFileCount = ref(0);
 
 const isBusy = computed(() => status.value === 'uploading' || status.value === 'processing');
 const statusLabel = computed(() => {
@@ -318,8 +338,44 @@ const openFilePicker = () => {
 };
 
 const uploadFiles = async () => {
-  if (selectedFiles.value.length && !isBusy.value) {
-    await uploadSelectedFiles(selectedFiles.value);
+  if (selectedFiles.value.length && !isBusy.value && makeWebhookUrl.value && callbackUrl.value) {
+    status.value = 'uploading';
+    currentStep.value = 'uploading';
+    statusMessage.value = '正在上传文件到服务器...';
+    fileUploadProgress.value = 10;
+
+    saveSettings();
+
+    const formData = new FormData();
+    formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
+    formData.append('webhookUrl', makeWebhookUrl.value);
+    formData.append('callbackUrl', callbackUrl.value);
+    selectedFiles.value.forEach((file) => {
+      formData.append('files', file, file.name);
+    });
+
+    try {
+      const response = await fetch('/api/v1/ocr/tasks/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error(`上传失败：${response.status}`);
+      }
+
+      // 将选中的文件移到已上传列表
+      uploadedFiles.value.push(...selectedFiles.value);
+      uploadedFileCount.value += selectedFiles.value.length;
+      selectedFiles.value = [];
+      fileUploadProgress.value = 100;
+      status.value = 'idle';
+      statusMessage.value = '文件已上传，可继续添加文件或开始对账';
+      pushLog('文件已成功上传至服务器。');
+    } catch (error) {
+      status.value = 'failed';
+      statusMessage.value = '文件上传失败，请重试。';
+      pushLog(`上传失败：${error.message}`);
+    }
   }
 };
 
@@ -346,19 +402,32 @@ const resetTaskState = () => {
   processingProgress.value = 0;
 };
 
+const resetUploadState = () => {
+  selectedFiles.value = [];
+  uploadedFiles.value = [];
+  uploadedFileCount.value = 0;
+  status.value = 'idle';
+  statusMessage.value = '等待上传文件';
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
+};
+
 const uploadSelectedFiles = async (files) => {
-  selectedFiles.value = files;
   resetTaskState();
 
   if (!makeWebhookUrl.value || !callbackUrl.value) {
     status.value = 'failed';
-    statusMessage.value = '请先填写 Webhook 和回调地址，然后重试上传。';
+    statusMessage.value = '请先填写 Webhook 和回调地址，然后重试。';
     return;
   }
 
+  // 收集所有已上传和待上传的文件用于开始对账
+  const allFiles = [...uploadedFiles.value, ...files];
+
   status.value = 'uploading';
   currentStep.value = 'uploading';
-  statusMessage.value = '正在上传文件到服务器...';
+  statusMessage.value = '正在提交文件到 Make workflow...';
   fileUploadProgress.value = 10;
 
   saveSettings();
@@ -367,7 +436,7 @@ const uploadSelectedFiles = async (files) => {
   formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
   formData.append('webhookUrl', makeWebhookUrl.value);
   formData.append('callbackUrl', callbackUrl.value);
-  files.forEach((file) => {
+  allFiles.forEach((file) => {
     formData.append('files', file, file.name);
   });
 
@@ -383,16 +452,17 @@ const uploadSelectedFiles = async (files) => {
     const task = await response.json();
     backendTask.value = task;
     const taskSummary = createTaskSummary(task);
+    taskSummary.fileCount = allFiles.length;
     tasks.value = [taskSummary];
     activeTaskId.value = taskSummary.id;
     status.value = 'uploaded';
-    statusMessage.value = '文件已上传至服务器，准备开始对账。';
+    statusMessage.value = '文件已提交，开始 AI 处理...';
     fileUploadProgress.value = 100;
-    pushLog('文件已成功上传至服务器。');
+    pushLog(`已提交 ${allFiles.length} 个文件进行对账。`);
   } catch (error) {
     status.value = 'failed';
-    statusMessage.value = '文件上传失败，请重试。';
-    pushLog(`上传失败：${error.message}`);
+    statusMessage.value = '文件提交失败，请重试。';
+    pushLog(`提交失败：${error.message}`);
   }
 };
 
@@ -421,15 +491,9 @@ const handleDrop = (event) => {
 };
 
 const clearAll = () => {
-  selectedFiles.value = [];
+  resetUploadState();
   backendTask.value = null;
   resetTaskState();
-  status.value = 'idle';
-  currentStep.value = 'idle';
-  statusMessage.value = '等待上传文件';
-  if (fileInput.value) {
-    fileInput.value.value = '';
-  }
 };
 
 const pushLog = (message) => {
@@ -463,11 +527,12 @@ const createBackendTask = async () => {
 };
 
 const triggerMakeWorkflow = async (task) => {
+  const allFiles = [...uploadedFiles.value, ...selectedFiles.value];
   const formData = new FormData();
   formData.append('taskId', task.taskId);
   formData.append('callbackUrl', task.callbackUrl);
   formData.append('taskName', task.taskName);
-  selectedFiles.value.forEach((file, index) => {
+  allFiles.forEach((file, index) => {
     formData.append('fileName', file.name);
     formData.append('index', String(index + 1));
     formData.append('requestFile', file, file.name);
@@ -491,9 +556,9 @@ const createTaskSummary = (taskData) => ({
   taskName: taskData.taskName,
   webhookUrl: taskData.webhookUrl,
   callbackUrl: taskData.callbackUrl,
-  status: status.value === 'uploaded' ? '已上传' : '上传中',
+  status: status.value === 'uploaded' ? '已上传' : '处理中',
   reviewStatus: '待审核',
-  fileCount: selectedFiles.value.length,
+  fileCount: uploadedFileCount.value,
   createdAt: new Date().toISOString(),
 });
 
@@ -541,52 +606,20 @@ const pollTask = async (taskIdValue) => {
 };
 
 const startReconciliation = async () => {
-  if (!selectedFiles.value.length || isBusy.value || !makeWebhookUrl.value || !callbackUrl.value) return;
+  if (!uploadedFileCount.value || isBusy.value || !makeWebhookUrl.value || !callbackUrl.value) return;
   
-  // 先上传文件
-  if (!backendTask.value) {
-    status.value = 'uploading';
-    currentStep.value = 'uploading';
-    statusMessage.value = '正在上传文件到服务器...';
-    fileUploadProgress.value = 10;
-
-    saveSettings();
-
-    const formData = new FormData();
-    formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
-    formData.append('webhookUrl', makeWebhookUrl.value);
-    formData.append('callbackUrl', callbackUrl.value);
-    selectedFiles.value.forEach((file) => {
-      formData.append('files', file, file.name);
-    });
-
-    try {
-      const response = await fetch('/api/v1/ocr/tasks/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!response.ok) {
-        throw new Error(`上传失败：${response.status}`);
-      }
-
-      const task = await response.json();
-      backendTask.value = task;
-      fileUploadProgress.value = 100;
-      pushLog('文件已成功上传至服务器。');
-    } catch (error) {
-      status.value = 'failed';
-      statusMessage.value = '文件上传失败，请重试。';
-      pushLog(`上传失败：${error.message}`);
-      return;
-    }
+  // 如果还有待上传文件，先都上传
+  if (selectedFiles.value.length) {
+    await uploadSelectedFiles(selectedFiles.value);
   }
 
-  status.value = 'uploading';
-  statusMessage.value = '正在提交文件到 Make workflow...';
-  currentStep.value = 'uploading';
-  fileUploadProgress.value = 10;
+  if (!backendTask.value) return;
+
+  status.value = 'processing';
+  statusMessage.value = '已提交至 Make，等待回调结果...';
+  currentStep.value = 'processing';
+  fileUploadProgress.value = 50;
   results.value = [];
-  taskLog.value = [];
   manualReviewMode.value = false;
   reviewComment.value = '';
 
@@ -787,6 +820,7 @@ const completeReview = () => {
 .files-list {
   display: grid;
   gap: 12px;
+  margin-top: 12px;
 }
 
 .files-header {
@@ -843,6 +877,16 @@ const completeReview = () => {
   position: relative;
 }
 
+.file-badge {
+  padding: 4px 8px;
+  background: #e8f9ee;
+  color: #177b3f;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .file-info {
   display: flex;
   align-items: center;
@@ -894,6 +938,16 @@ const completeReview = () => {
 
 .remove-btn:hover {
   color: #c63a3a;
+}
+
+.file-badge {
+  padding: 4px 8px;
+  background: #e8f9ee;
+  color: #177b3f;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .primary-button,
