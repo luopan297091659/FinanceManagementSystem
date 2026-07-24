@@ -496,6 +496,31 @@ model AnomalyAlert {
   @@index([roomId, alertType])
 }
 
+enum OcrTaskStatus {
+  PENDING
+  UPLOADING
+  PROCESSING
+  COMPLETED
+  REVIEW_REQUIRED
+  FAILED
+}
+
+model OcrTask {
+  id            String        @id @default(uuid())
+  taskId        String        @unique
+  taskName      String?
+  webhookUrl    String
+  callbackUrl   String
+  state         OcrTaskStatus @default(PENDING)
+  fileNames     String[]
+  resultJson    Json?
+  callbackPayload Json?
+  reviewStatus  String?       @default("PENDING")
+  errorMessage  String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
 model Document {
   id            String     @id @default(uuid())
   roomId        String?
