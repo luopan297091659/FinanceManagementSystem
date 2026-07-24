@@ -241,6 +241,7 @@ const processingProgress = ref(0);
 const isBusy = computed(() => status.value === 'uploading' || status.value === 'processing');
 const statusLabel = computed(() => {
   if (status.value === 'uploading') return '上传中';
+  if (status.value === 'uploaded') return '已上传';
   if (status.value === 'processing') return 'AI 处理中';
   if (status.value === 'success') return '已完成';
   if (status.value === 'failed') return '失败';
@@ -273,6 +274,7 @@ const filteredResults = computed(() => {
   );
 });
 
+const backendTask = ref(null);
 const activeTask = computed(() => tasks.value.find((task) => task.id === activeTaskId.value) || tasks.value[0] || null);
 
 const openFilePicker = () => {
@@ -284,20 +286,60 @@ const resetTaskState = () => {
   results.value = [];
   taskLog.value = [];
   activeTaskId.value = '';
+  backendTask.value = null;
   manualReviewMode.value = false;
   reviewComment.value = '';
   fileUploadProgress.value = 0;
   processingProgress.value = 0;
 };
 
+const uploadSelectedFiles = async (files) => {
+  selectedFiles.value = files;
+  resetTaskState();
+  status.value = 'uploading';
+  currentStep.value = 'uploading';
+  statusMessage.value = '正在上传文件到服务器...';
+  fileUploadProgress.value = 10;
+
+  saveSettings();
+
+  const formData = new FormData();
+  formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
+  formData.append('webhookUrl', makeWebhookUrl.value);
+  formData.append('callbackUrl', callbackUrl.value);
+  files.forEach((file) => {
+    formData.append('files', file, file.name);
+  });
+
+  try {
+    const response = await fetch('/api/v1/ocr/tasks/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error(`上传失败：${response.status}`);
+    }
+
+    const task = await response.json();
+    backendTask.value = task;
+    const taskSummary = createTaskSummary(task);
+    tasks.value = [taskSummary];
+    activeTaskId.value = taskSummary.id;
+    status.value = 'uploaded';
+    statusMessage.value = '文件已上传至服务器，准备开始对账。';
+    fileUploadProgress.value = 100;
+    pushLog('文件已成功上传至服务器。');
+  } catch (error) {
+    status.value = 'failed';
+    statusMessage.value = '文件上传失败，请重试。';
+    pushLog(`上传失败：${error.message}`);
+  }
+};
+
 const handleFileSelection = (event) => {
   const files = Array.from(event.target.files || []);
   if (files.length) {
-    selectedFiles.value = files;
-    resetTaskState();
-    status.value = 'idle';
-    currentStep.value = 'idle';
-    statusMessage.value = '已选择文件，可开始对账。';
+    void uploadSelectedFiles(files);
   }
   event.target.value = '';
 };
@@ -314,11 +356,19 @@ const handleDrop = (event) => {
   isDragging.value = false;
   const files = Array.from(event.dataTransfer?.files || []);
   if (files.length) {
-    selectedFiles.value = files;
-    resetTaskState();
-    status.value = 'idle';
-    currentStep.value = 'idle';
-    statusMessage.value = '已选择文件，可开始对账。';
+    void uploadSelectedFiles(files);
+  }
+};
+
+const clearAll = () => {
+  selectedFiles.value = [];
+  backendTask.value = null;
+  resetTaskState();
+  status.value = 'idle';
+  currentStep.value = 'idle';
+  statusMessage.value = '等待上传文件';
+  if (fileInput.value) {
+    fileInput.value.value = '';
   }
 };
 
@@ -381,7 +431,7 @@ const createTaskSummary = (taskData) => ({
   taskName: taskData.taskName,
   webhookUrl: taskData.webhookUrl,
   callbackUrl: taskData.callbackUrl,
-  status: '上传中',
+  status: status.value === 'uploaded' ? '已上传' : '上传中',
   reviewStatus: '待审核',
   fileCount: selectedFiles.value.length,
   createdAt: new Date().toISOString(),
@@ -432,8 +482,13 @@ const pollTask = async (taskIdValue) => {
 
 const startReconciliation = async () => {
   if (!selectedFiles.value.length || isBusy.value || !makeWebhookUrl.value || !callbackUrl.value) return;
+  if (!backendTask.value) {
+    await uploadSelectedFiles(selectedFiles.value);
+    if (!backendTask.value) return;
+  }
+
   status.value = 'uploading';
-  statusMessage.value = '正在创建对账任务并上传文件...';
+  statusMessage.value = '正在提交文件到 Make workflow...';
   currentStep.value = 'uploading';
   fileUploadProgress.value = 10;
   results.value = [];
@@ -442,11 +497,11 @@ const startReconciliation = async () => {
   reviewComment.value = '';
 
   try {
-    const createdTask = await createBackendTask();
+    const createdTask = backendTask.value;
     const taskSummary = createTaskSummary(createdTask);
     tasks.value = [taskSummary];
     activeTaskId.value = taskSummary.id;
-    pushLog(`已创建任务 ${taskSummary.taskName}。`);
+    pushLog(`已准备任务 ${taskSummary.taskName}。`);
 
     const sendOk = await triggerMakeWorkflow(createdTask);
     fileUploadProgress.value = 50;
@@ -466,7 +521,7 @@ const startReconciliation = async () => {
     await pollTask(createdTask.taskId);
   } catch (error) {
     status.value = 'failed';
-    statusMessage.value = '任务创建或上传失败。';
+    statusMessage.value = '任务提交失败。';
     pushLog(`任务失败：${error.message}`);
   }
 };

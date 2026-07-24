@@ -20,6 +20,21 @@ export class OcrService {
     return task;
   }
 
+  async uploadTaskFiles(dto: { taskName: string; webhookUrl: string; callbackUrl: string }, files: Express.Multer.File[]) {
+    const taskId = `TASK-${Date.now()}`;
+    const task = await this.prisma.ocrTask.create({
+      data: {
+        taskId,
+        taskName: dto.taskName,
+        webhookUrl: dto.webhookUrl,
+        callbackUrl: dto.callbackUrl,
+        fileNames: files.map((file) => file.originalname),
+        state: 'UPLOADING',
+      },
+    });
+    return task;
+  }
+
   async getTask(taskId: string) {
     const task = await this.prisma.ocrTask.findUnique({ where: { taskId } });
     if (!task) {
