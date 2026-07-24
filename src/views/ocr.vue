@@ -497,6 +497,10 @@ const completeReview = () => {
 </script>
 
 <style scoped>
+.hidden-input {
+  display: none;
+}
+
 .page-shell {
   display: grid;
   gap: 24px;
