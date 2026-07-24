@@ -58,34 +58,79 @@ export class FrontendApiService {
   }
 
   async bootstrap(): Promise<FrontendBootstrap> {
-    const [
-      projects,
-      properties,
-      rooms,
-      tenants,
-      owners,
-      roomTenants,
-      roomOwners,
-      feeItems,
-      transactions,
-      documents,
-      knowledgeDocuments,
-    ] = await Promise.all([
-      this.prisma.project.findMany({ orderBy: { name: 'asc' } }),
-      this.prisma.property.findMany({ orderBy: { name: 'asc' } }),
-      this.prisma.room.findMany({ include: { property: true }, orderBy: [{ propertyId: 'asc' }, { roomNumber: 'asc' }] }),
-      this.prisma.tenant.findMany({ orderBy: { name: 'asc' } }),
-      this.prisma.owner.findMany({ orderBy: { name: 'asc' } }),
-      this.prisma.roomTenant.findMany({ orderBy: { startDate: 'desc' } }),
-      this.prisma.roomOwner.findMany({ orderBy: { startDate: 'desc' } }),
-      this.prisma.feeItem.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
-      this.prisma.transaction.findMany({
-        include: { details: true },
-        orderBy: [{ date: 'desc' }, { id: 'desc' }],
-      }),
-      this.prisma.document.findMany({ orderBy: { createdAt: 'desc' } }),
-      this.prisma.knowledgeDocument.findMany({ orderBy: { createdAt: 'desc' } }),
-    ]);
+    const fallbackEmpty = () => ({
+      projects: [],
+      properties: [],
+      rooms: [],
+      tenants: [],
+      owners: [],
+      roomTenants: [],
+      roomOwners: [],
+      feeItems: [],
+      transactions: [],
+      documents: [],
+      knowledgeDocuments: [],
+    });
+
+    let projects: any[] = [];
+    let properties: any[] = [];
+    let rooms: any[] = [];
+    let tenants: any[] = [];
+    let owners: any[] = [];
+    let roomTenants: any[] = [];
+    let roomOwners: any[] = [];
+    let feeItems: any[] = [];
+    let transactions: any[] = [];
+    let documents: any[] = [];
+    let knowledgeDocuments: any[] = [];
+
+    try {
+      [
+        projects,
+        properties,
+        rooms,
+        tenants,
+        owners,
+        roomTenants,
+        roomOwners,
+        feeItems,
+        transactions,
+        documents,
+        knowledgeDocuments,
+      ] = await Promise.all([
+        this.prisma.project.findMany({ orderBy: { name: 'asc' } }),
+        this.prisma.property.findMany({ orderBy: { name: 'asc' } }),
+        this.prisma.room.findMany({ include: { property: true }, orderBy: [{ propertyId: 'asc' }, { roomNumber: 'asc' }] }),
+        this.prisma.tenant.findMany({ orderBy: { name: 'asc' } }),
+        this.prisma.owner.findMany({ orderBy: { name: 'asc' } }),
+        this.prisma.roomTenant.findMany({ orderBy: { startDate: 'desc' } }),
+        this.prisma.roomOwner.findMany({ orderBy: { startDate: 'desc' } }),
+        this.prisma.feeItem.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+        this.prisma.transaction.findMany({
+          include: { details: true },
+          orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        }),
+        this.prisma.document.findMany({ orderBy: { createdAt: 'desc' } }),
+        this.prisma.knowledgeDocument.findMany({ orderBy: { createdAt: 'desc' } }),
+      ]);
+    } catch (error) {
+      const missingTable = /relation "Project" does not exist|表 "Project" 不存在|table "Project" does not exist|relation \"project\" does not exist/i;
+      if (missingTable.test(String(error))) {
+        projects = [];
+        properties = [];
+        rooms = [];
+        tenants = [];
+        owners = [];
+        roomTenants = [];
+        roomOwners = [];
+        feeItems = [];
+        transactions = [];
+        documents = [];
+        knowledgeDocuments = [];
+      } else {
+        throw error;
+      }
+    }
 
     return {
       projects: projects.map((project) => ({

@@ -12,8 +12,8 @@
         <div class="panel-card upload-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">上传配置</p>
-              <h3>配置 Webhook 并上传文件</h3>
+              <p class="eyebrow">文件上传</p>
+              <h3>选择文件并配置对账参数</h3>
             </div>
             <div class="badge">MVP</div>
           </div>
@@ -56,8 +56,37 @@
               accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx,.doc,.docx"
               @change="handleFileSelection"
             />
+            <!-- 文件列表显示 -->
+            <div v-if="selectedFiles.length" class="files-list">
+              <div class="files-header">
+                <strong>{{ selectedFiles.length }} 个文件已选择</strong>
+                <span class="file-size">{{ totalFileSize }}</span>
+              </div>
+              <div class="file-item-container">
+                <div v-for="(file, index) in selectedFiles" :key="index" class="file-item">
+                  <div class="file-info">
+                    <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                      <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                    <div class="file-text">
+                      <p class="file-name">{{ file.name }}</p>
+                      <p class="file-meta">{{ formatFileSize(file.size) }}</p>
+                    </div>
+                  </div>
+                  <button
+                    class="remove-btn"
+                    type="button"
+                    title="移除此文件"
+                    @click="removeFile(index)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="upload-actions">
-              <button class="primary-button" type="button" @click="openFilePicker">上传文件</button>
+              <button class="primary-button" type="button" @click="openFilePicker">{{ selectedFiles.length ? '添加文件' : '上传文件' }}</button>
               <button
                 class="secondary-button"
                 type="button"
@@ -67,10 +96,6 @@
                 开始对账
               </button>
               <button class="ghost-button" type="button" :disabled="!selectedFiles.length" @click="clearAll">清空</button>
-            </div>
-            <div v-if="selectedFiles.length" class="upload-summary">
-              <span>{{ selectedFiles.length }} 个文件已准备就绪</span>
-              <span>{{ totalFileSize }} 总大小</span>
             </div>
           </div>
 
@@ -281,6 +306,17 @@ const openFilePicker = () => {
   fileInput.value?.click();
 };
 
+const removeFile = (index) => {
+  selectedFiles.value.splice(index, 1);
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
+
 const resetTaskState = () => {
   tasks.value = [];
   results.value = [];
@@ -296,6 +332,13 @@ const resetTaskState = () => {
 const uploadSelectedFiles = async (files) => {
   selectedFiles.value = files;
   resetTaskState();
+
+  if (!makeWebhookUrl.value || !callbackUrl.value) {
+    status.value = 'failed';
+    statusMessage.value = '请先填写 Webhook 和回调地址，然后重试上传。';
+    return;
+  }
+
   status.value = 'uploading';
   currentStep.value = 'uploading';
   statusMessage.value = '正在上传文件到服务器...';
@@ -339,7 +382,7 @@ const uploadSelectedFiles = async (files) => {
 const handleFileSelection = (event) => {
   const files = Array.from(event.target.files || []);
   if (files.length) {
-    void uploadSelectedFiles(files);
+    selectedFiles.value.push(...files);
   }
   event.target.value = '';
 };
@@ -356,7 +399,7 @@ const handleDrop = (event) => {
   isDragging.value = false;
   const files = Array.from(event.dataTransfer?.files || []);
   if (files.length) {
-    void uploadSelectedFiles(files);
+    selectedFiles.value.push(...files);
   }
 };
 
@@ -482,9 +525,43 @@ const pollTask = async (taskIdValue) => {
 
 const startReconciliation = async () => {
   if (!selectedFiles.value.length || isBusy.value || !makeWebhookUrl.value || !callbackUrl.value) return;
+  
+  // 先上传文件
   if (!backendTask.value) {
-    await uploadSelectedFiles(selectedFiles.value);
-    if (!backendTask.value) return;
+    status.value = 'uploading';
+    currentStep.value = 'uploading';
+    statusMessage.value = '正在上传文件到服务器...';
+    fileUploadProgress.value = 10;
+
+    saveSettings();
+
+    const formData = new FormData();
+    formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
+    formData.append('webhookUrl', makeWebhookUrl.value);
+    formData.append('callbackUrl', callbackUrl.value);
+    selectedFiles.value.forEach((file) => {
+      formData.append('files', file, file.name);
+    });
+
+    try {
+      const response = await fetch('/api/v1/ocr/tasks/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error(`上传失败：${response.status}`);
+      }
+
+      const task = await response.json();
+      backendTask.value = task;
+      fileUploadProgress.value = 100;
+      pushLog('文件已成功上传至服务器。');
+    } catch (error) {
+      status.value = 'failed';
+      statusMessage.value = '文件上传失败，请重试。';
+      pushLog(`上传失败：${error.message}`);
+      return;
+    }
   }
 
   status.value = 'uploading';
@@ -681,6 +758,96 @@ const completeReview = () => {
   border-radius: 14px;
   background: #f6f8ff;
   color: var(--muted);
+}
+
+.files-list {
+  display: grid;
+  gap: 12px;
+}
+
+.files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.files-header strong {
+  font-weight: 700;
+}
+
+.file-size {
+  color: var(--muted);
+}
+
+.file-item-container {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: #f8fbff;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.file-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.file-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.remove-btn {
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.remove-btn:hover {
+  color: #c63a3a;
 }
 
 .primary-button,
