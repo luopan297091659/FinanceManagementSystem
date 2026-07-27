@@ -2,56 +2,56 @@
   <section class="page-shell data-page">
     <div class="page-title-row">
       <div>
-        <p class="eyebrow">客户管理</p>
-        <h2>租客与业主统一视图</h2>
+        <p class="eyebrow">{{ labels.eyebrow }}</p>
+        <h2>{{ labels.heading }}</h2>
       </div>
     </div>
 
     <div class="content-grid data-content-grid">
       <div class="panel-card full-panel">
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-        <p v-if="loading" class="form-hint">正在同步后端数据...</p>
+        <p v-if="loading" class="form-hint">{{ common.loading }}</p>
 
         <div class="section-heading">
-          <div><strong>房间绑定</strong></div>
-          <div><small>点击客户行的“绑定”按钮来添加房间绑定</small></div>
+          <div><strong>{{ labels.bindingTitle }}</strong></div>
+          <div><small>{{ labels.bindingHelp }}</small></div>
         </div>
         <div v-if="bindings.length" class="table-list compact-binding-list">
           <div class="table-row binding-row header">
-            <div>房间</div>
-            <div>类型 / 客户</div>
-            <div>起止日期</div>
-            <div>状态</div>
-            <div>操作</div>
+            <div>{{ labels.room }}</div>
+            <div>{{ labels.typeCustomer }}</div>
+            <div>{{ labels.period }}</div>
+            <div>{{ labels.status }}</div>
+            <div>{{ common.actions }}</div>
           </div>
           <div v-for="item in bindings" :key="item.id" class="table-row binding-row">
             <div>{{ getRoomLabel(item.roomId) }}</div>
-            <div>{{ item.kind === "owner" ? "业主" : "租客" }} / {{ getCustomerName(item.customerId) }}</div>
+            <div>{{ item.kind === "owner" ? labels.owner : labels.tenant }} / {{ getCustomerName(item.customerId) }}</div>
             <div>{{ item.startDate || "-" }} - {{ item.endDate || "-" }}</div>
             <div>{{ item.status }}</div>
             <div class="row-actions">
-              <button class="danger-button mini" type="button" @click="deleteBinding(item.id)">删除</button>
+              <button class="danger-button mini" type="button" @click="deleteBinding(item.id)">{{ common.delete }}</button>
             </div>
           </div>
         </div>
-        <div v-else class="empty-state">暂无绑定记录。</div>
+        <div v-else class="empty-state">{{ labels.noBindings }}</div>
 
         <div class="table-controls data-toolbar customer-toolbar">
           <div class="toolbar-actions">
-            <input v-model="searchQuery" class="search-input" type="text" placeholder="搜索客户、电话、地址、类型..." />
-            <button class="primary-button" type="button" @click="openCustomerModal">新增客户</button>
-            <button class="secondary-button" type="button" @click="triggerImport">导入</button>
-            <button class="secondary-button" type="button" @click="exportCustomers">导出</button>
-            <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">批量删除</button>
+            <input v-model="searchQuery" class="search-input" type="text" :placeholder="labels.searchPlaceholder" />
+            <button class="primary-button" type="button" @click="openCustomerModal">{{ labels.newCustomer }}</button>
+            <button class="secondary-button" type="button" @click="triggerImport">{{ common.import }}</button>
+            <button class="secondary-button" type="button" @click="exportCustomers">{{ common.export }}</button>
+            <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">{{ common.batchDelete }}</button>
             <input ref="fileInput" class="hidden-file-input" type="file" accept=".xls,.csv,.tsv,.html,.txt" @change="importCustomers" />
           </div>
           <div class="column-panel-container">
-            <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">显示字段 ▾</button>
+            <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
             <div v-if="showColumnPanel" class="column-panel">
               <div class="panel-body">
                 <label v-for="column in customerColumns" :key="column.key" class="panel-item">
                   <input type="checkbox" v-model="column.visible" />
-                  {{ column.label }}
+                  {{ labels[column.labelKey] }}
                 </label>
               </div>
             </div>
@@ -61,6 +61,8 @@
           v-model:selected-ids="selectedIds"
           :items="filteredCustomers"
           :columns="customerColumns"
+          :labels="labels"
+          :common="common"
           @edit="editCustomer"
           @delete="deleteCustomer"
           @bind="openBindingModal"
@@ -72,59 +74,59 @@
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ customerModalTitle }}</h3>
-          <button class="modal-close-button" type="button" @click="closeCustomerModal">×</button>
+          <button class="modal-close-button" type="button" @click="closeCustomerModal" :title="common.close">×</button>
         </div>
-        <CustomerForm v-model="form" @submit="saveCustomer" @cancel="closeCustomerModal" />
+        <CustomerForm v-model="form" :labels="labels" :common="common" @submit="saveCustomer" @cancel="closeCustomerModal" />
       </div>
     </div>
     <div v-if="showBindingModal" class="modal-overlay" @click.self="closeBindingModal">
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ bindingModalTitle }}</h3>
-          <button class="modal-close-button" type="button" @click="closeBindingModal">×</button>
+          <button class="modal-close-button" type="button" @click="closeBindingModal" :title="common.close">×</button>
         </div>
         <div class="field-grid">
           <label>
-            房间
+            {{ labels.room }}
             <select v-model="bindingForm.roomId">
-              <option value="">请选择</option>
+              <option value="">{{ common.select }}</option>
               <option v-for="room in rooms" :key="room.id" :value="room.id">{{ room.projectName }} / {{ room.buildingName }} / {{ room.roomNumber }}</option>
             </select>
           </label>
           <label>
-            客户
+            {{ labels.customerType }}
             <select v-model="bindingForm.customerId">
-              <option value="">请选择</option>
-              <option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }} ({{ customer.kind === "owner" ? "业主" : "租客" }})</option>
+              <option value="">{{ common.select }}</option>
+              <option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }} ({{ customer.kind === "owner" ? labels.owner : labels.tenant }})</option>
             </select>
           </label>
           <label>
-            客户类型
+            {{ labels.type }}
             <select v-model="bindingForm.kind">
-              <option value="tenant">租客</option>
-              <option value="owner">业主</option>
+              <option value="tenant">{{ labels.tenant }}</option>
+              <option value="owner">{{ labels.owner }}</option>
             </select>
           </label>
           <label>
-            开始日期
+            {{ labels.startDate }}
             <input type="date" v-model="bindingForm.startDate" />
           </label>
           <label>
-            结束日期
+            {{ labels.endDate }}
             <input type="date" v-model="bindingForm.endDate" />
           </label>
           <label>
-            状态
+            {{ labels.status }}
             <select v-model="bindingForm.status">
-              <option value="ACTIVE">有效</option>
-              <option value="PENDING">待生效</option>
-              <option value="ENDED">已结束</option>
+              <option value="ACTIVE">{{ labels.active }}</option>
+              <option value="PENDING">{{ labels.pending }}</option>
+              <option value="ENDED">{{ labels.ended }}</option>
             </select>
           </label>
         </div>
         <div class="form-actions" style="margin-top: 12px;">
-          <button class="primary-button" type="button" @click="saveBinding">保存绑定</button>
-          <button class="ghost-button" type="button" @click="closeBindingModal">取消</button>
+          <button class="primary-button" type="button" @click="saveBinding">{{ labels.saveBinding }}</button>
+          <button class="ghost-button" type="button" @click="closeBindingModal">{{ common.cancel }}</button>
         </div>
       </div>
     </div>
@@ -135,6 +137,7 @@
 import { computed, onMounted, ref } from "vue";
 import CustomerForm from "../components/customers/CustomerForm.vue";
 import CustomerTable from "../components/customers/CustomerTable.vue";
+import { useI18n } from "../i18n";
 import { api } from "../services/api";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
@@ -166,6 +169,9 @@ const blankBinding = () => ({
 });
 
 const form = ref(blankForm());
+const { dictionary } = useI18n();
+const labels = computed(() => dictionary.value.customersLabels);
+const common = computed(() => dictionary.value.common);
 const bindingForm = ref(blankBinding());
 const customers = ref([]);
 const rooms = ref([]);
@@ -176,20 +182,21 @@ const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
 const showCustomerModal = ref(false);
-const customerModalTitle = ref("新增客户");
+const customerModalTitle = ref("");
 const showBindingModal = ref(false);
-const bindingModalTitle = ref("新增绑定");
+const bindingModalTitle = ref("");
 const customerColumns = ref([
-  { key: "name", label: "客户 / 编号", visible: true },
-  { key: "contact", label: "联系方式", visible: true },
-  { key: "address", label: "地址 / 附件", visible: true },
-  { key: "type", label: "客户类型", visible: true },
-  { key: "dates", label: "出生 / 年收入", visible: true },
-  { key: "extra", label: "假名 / 国籍", visible: true },
+  { key: "name", labelKey: "customerCode", visible: true },
+  { key: "contact", labelKey: "contact", visible: true },
+  { key: "address", labelKey: "addressAttachment", visible: true },
+  { key: "type", labelKey: "customerType", visible: true },
+  { key: "dates", labelKey: "dates", visible: true },
+  { key: "extra", labelKey: "extra", visible: true },
 ]);
 
 const showColumnPanel = ref(false);
 const visibleCustomerColumns = computed(() => customerColumns.value.filter((column) => column.visible));
+const exportCustomerColumns = computed(() => visibleCustomerColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredCustomers = computed(() => customers.value.filter(matchesCustomerSearch));
 
 const resetForm = () => {
@@ -202,7 +209,7 @@ const resetBinding = () => {
 
 const openCustomerModal = () => {
   resetForm();
-  customerModalTitle.value = "新增客户";
+  customerModalTitle.value = labels.value.newCustomer;
   showCustomerModal.value = true;
 };
 
@@ -217,7 +224,7 @@ const openBindingModal = (customer) => {
     bindingForm.value.customerId = customer.id;
     bindingForm.value.kind = customer.kind;
   }
-  bindingModalTitle.value = "新增绑定";
+  bindingModalTitle.value = labels.value.newBinding;
   showBindingModal.value = true;
 };
 
@@ -228,12 +235,12 @@ const closeBindingModal = () => {
 
 const getRoomLabel = (roomId) => {
   const room = rooms.value.find((item) => item.id === roomId);
-  return room ? `${room.projectName} / ${room.buildingName} / ${room.roomNumber}` : "未指定房间";
+  return room ? `${room.projectName} / ${room.buildingName} / ${room.roomNumber}` : labels.value.unassignedRoom;
 };
 
 const getCustomerName = (customerId) => {
   const customer = customers.value.find((item) => item.id === customerId);
-  return customer ? customer.name : "未指定客户";
+  return customer ? customer.name : labels.value.unassignedCustomer;
 };
 
 const loadCustomers = async () => {
@@ -305,7 +312,7 @@ const loadCustomers = async () => {
     bindings.value = [...tenantBindings, ...ownerBindings];
     selectedIds.value = selectedIds.value.filter((id) => customers.value.some((item) => item.id === id));
   } catch (error) {
-    errorMessage.value = error.message || "加载客户失败";
+    errorMessage.value = error.message || labels.value.loadFailed;
   } finally {
     loading.value = false;
   }
@@ -334,7 +341,7 @@ const saveCustomer = async () => {
     await loadCustomers();
     closeCustomerModal();
   } catch (error) {
-    errorMessage.value = error.message || "保存客户失败";
+    errorMessage.value = error.message || labels.value.saveFailed;
   }
 };
 
@@ -349,14 +356,14 @@ const getExportValue = (item, key) =>
     name: `${item.name || ""} / ${item.customerCode || ""}`,
     contact: `${item.phone || ""} / ${item.email || ""}`,
     address: `${item.address || ""} / ${item.note || ""}`,
-    type: `${item.kind === "owner" ? "业主" : "租客"} / ${item.ownerType === "COMPANY" ? "法人/企业" : "个人"}`,
+    type: `${item.kind === "owner" ? labels.value.owner : labels.value.tenant} / ${item.ownerType === "COMPANY" ? labels.value.company : labels.value.person}`,
     dates: `${item.birthDate || ""} / ${item.annualIncome || ""}`,
     extra: `${item.kana || ""} / ${item.nationality || ""}`,
   })[key] || "";
 
 const editCustomer = (item) => {
   form.value = { ...item };
-  customerModalTitle.value = "编辑客户";
+  customerModalTitle.value = labels.value.editCustomer;
   showCustomerModal.value = true;
 };
 
@@ -365,7 +372,7 @@ const deleteCustomer = async (id) => {
     await api.deleteCustomer(id);
     await loadCustomers();
   } catch (error) {
-    errorMessage.value = error.message || "删除客户失败";
+    errorMessage.value = error.message || labels.value.deleteFailed;
   }
 };
 
@@ -376,7 +383,7 @@ const batchDelete = async () => {
     selectedIds.value = [];
     await loadCustomers();
   } catch (error) {
-    errorMessage.value = error.message || "批量删除客户失败";
+    errorMessage.value = error.message || labels.value.batchDeleteFailed;
   }
 };
 
@@ -394,7 +401,7 @@ const saveBinding = async () => {
     await loadCustomers();
     closeBindingModal();
   } catch (error) {
-    errorMessage.value = error.message || "保存绑定失败";
+    errorMessage.value = error.message || labels.value.bindingSaveFailed;
   }
 };
 
@@ -403,14 +410,14 @@ const deleteBinding = async (id) => {
     await api.deleteBinding(id);
     await loadCustomers();
   } catch (error) {
-    errorMessage.value = error.message || "删除绑定失败";
+    errorMessage.value = error.message || labels.value.bindingDeleteFailed;
   }
 };
 
 const exportCustomers = () => {
   exportTableXls(
-    "客户管理.xls",
-    visibleCustomerColumns.value,
+    labels.value.exportFileName,
+    exportCustomerColumns.value,
     filteredCustomers.value.map((item) =>
       Object.fromEntries(visibleCustomerColumns.value.map((column) => [column.key, getExportValue(item, column.key)])),
     ),
@@ -431,15 +438,15 @@ const importCustomers = async (event) => {
     const labelIndex = (label) => header.findIndex((item) => item === label);
     await Promise.all(
       dataRows.map((row) => {
-        const nameParts = String(row[labelIndex("客户 / 编号")] || "").split("/");
-        const contactParts = String(row[labelIndex("联系方式")] || "").split("/");
-        const addressParts = String(row[labelIndex("地址 / 附件")] || "").split("/");
-        const typeParts = String(row[labelIndex("客户类型")] || "").split("/");
-        const dateParts = String(row[labelIndex("出生 / 年收入")] || "").split("/");
-        const extraParts = String(row[labelIndex("假名 / 国籍")] || "").split("/");
+        const nameParts = String(row[labelIndex(labels.value.customerCode)] || "").split("/");
+        const contactParts = String(row[labelIndex(labels.value.contact)] || "").split("/");
+        const addressParts = String(row[labelIndex(labels.value.addressAttachment)] || "").split("/");
+        const typeParts = String(row[labelIndex(labels.value.customerType)] || "").split("/");
+        const dateParts = String(row[labelIndex(labels.value.dates)] || "").split("/");
+        const extraParts = String(row[labelIndex(labels.value.extra)] || "").split("/");
         return api.createCustomer({
-          kind: typeParts[0]?.includes("业主") ? "owner" : "tenant",
-          ownerType: typeParts[1]?.includes("法人") ? "COMPANY" : "PERSON",
+          kind: typeParts[0]?.includes(labels.value.owner) ? "owner" : "tenant",
+          ownerType: typeParts[1]?.includes(labels.value.company.split("/")[0]) ? "COMPANY" : "PERSON",
           customerCode: nameParts[1]?.trim() || "",
           name: nameParts[0]?.trim() || "",
           phone: contactParts[0]?.trim() || "",
@@ -455,7 +462,7 @@ const importCustomers = async (event) => {
     );
     await loadCustomers();
   } catch (error) {
-    errorMessage.value = error.message || "导入客户失败";
+    errorMessage.value = error.message || labels.value.importFailed;
   } finally {
     event.target.value = "";
   }

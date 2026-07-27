@@ -3,14 +3,19 @@
   <LoginView v-if="!isAuthenticated" @authenticated="handleAuthenticated" />
 
   <!-- Main Application -->
-  <div v-else class="app-shell" :style="shellStyle">
+  <div v-else class="app-shell" :class="{ 'sidebar-collapsed': isSidebarCollapsed }" :style="shellStyle">
     <aside class="sidebar" :style="sidebarStyle">
-      <div class="brand">
-        <span class="brand-mark" :style="brandStyle">F</span>
-        <div>
-          <strong>{{ dictionary.appName }}</strong>
+      <div class="sidebar-main">
+        <div class="brand">
+          <span class="brand-mark" :style="brandStyle">F</span>
+          <div class="brand-text">
+            <strong>{{ dictionary.appName }}</strong>
+          </div>
         </div>
-      </div>
+
+        <button class="sidebar-toggle" type="button" :title="sidebarToggleLabel" @click="toggleSidebar">
+          {{ isSidebarCollapsed ? "›" : "‹" }}
+        </button>
 
       <nav class="nav" :aria-label="dictionary.appName">
         <button
@@ -18,33 +23,27 @@
           :key="item.key"
           class="nav-item"
           :class="{ active: activeNavKey === item.key }"
+          :title="item.label"
           type="button"
           @click="setActiveNavItem(item)"
         >
-          {{ item.label }}
+          <span class="nav-label">{{ isSidebarCollapsed ? item.label.slice(0, 1) : item.label }}</span>
         </button>
       </nav>
-
-      <div class="sidebar-card">
-        <p class="eyebrow">{{ dictionary.progressTitle }}</p>
-        <p>{{ dictionary.progressBody }}</p>
       </div>
 
-      <div class="theme-card">
-        <p class="eyebrow">{{ dictionary.theme }}</p>
-        <div class="theme-swatches">
-          <button v-for="theme in themes" :key="theme.key" class="swatch" :aria-label="theme.label" :style="{ background: theme.color }" type="button" @click="setTheme(theme.key)" />
+      <div class="sidebar-footer">
+        <div class="sidebar-card">
+          <p class="eyebrow">{{ dictionary.progressTitle }}</p>
+          <p>{{ dictionary.progressBody }}</p>
         </div>
-      </div>
 
-      <div class="user-card">
-        <div class="user-info">
-          <p class="user-name">{{ currentUser?.name || 'User' }}</p>
-          <p class="user-role">{{ currentUser?.userRoles?.[0]?.role?.name || 'User' }}</p>
+        <div class="theme-card">
+          <p class="eyebrow">{{ dictionary.theme }}</p>
+          <div class="theme-swatches">
+            <button v-for="theme in themes" :key="theme.key" class="swatch" :aria-label="dictionary[theme.labelKey]" :style="{ background: theme.color }" type="button" @click="setTheme(theme.key)" />
+          </div>
         </div>
-        <button class="logout-button" @click="handleLogout" title="Logout">
-          ↪ 
-        </button>
       </div>
     </aside>
 
@@ -61,7 +60,15 @@
             <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">中文</button>
           </div>
           <button class="ghost-button" type="button" @click="setActiveNavItem({ key: 'gis' })">{{ dictionary.openGis }}</button>
-          <button class="primary-button" type="button" @click="setActiveNavItem({ key: 'overview' })">{{ dictionary.overview }}</button>
+          <div class="topbar-user">
+            <div class="user-info">
+              <p class="user-name">{{ currentUser?.name || dictionary.userFallback }}</p>
+              <p class="user-role">{{ currentUser?.userRoles?.[0]?.role?.name || dictionary.userFallback }}</p>
+            </div>
+            <button class="logout-button" type="button" @click="handleLogout" :title="dictionary.logout">
+              →
+            </button>
+          </div>
         </div>
       </header>
 
@@ -69,17 +76,17 @@
         <article class="metric-card">
           <span class="metric-label">{{ dictionary.metrics.assets }}</span>
           <strong class="metric-value">6</strong>
-          <p>梅田・難波などの重点物件を含みます。</p>
+          <p>{{ dictionary.metrics.assetsDescription }}</p>
         </article>
         <article class="metric-card">
           <span class="metric-label">{{ dictionary.metrics.alerts }}</span>
           <strong class="metric-value">4</strong>
-          <p>warning / attention / critical の物件です。</p>
+          <p>{{ dictionary.metrics.alertsDescription }}</p>
         </article>
         <article class="metric-card">
           <span class="metric-label">{{ dictionary.metrics.search }}</span>
           <strong class="metric-value">{{ dictionary.metrics.realtime }}</strong>
-          <p>建物、部屋、契約者、家主、住所を検索できます。</p>
+          <p>{{ dictionary.metrics.searchDescription }}</p>
         </article>
       </section>
 
@@ -111,6 +118,7 @@ const activeView = ref("gis");
 const activeNavKey = ref("gis");
 const activeSystemTab = ref("users");
 const theme = ref("teal");
+const isSidebarCollapsed = ref(false);
 const isAuthenticated = ref(false);
 const currentUser = ref(null);
 const currentPermissions = ref([]);
@@ -148,9 +156,9 @@ const setActiveNavItem = (item) => {
 };
 
 const themes = [
-  { key: "teal", label: "青绿", color: "#0f766e" },
-  { key: "blue", label: "深蓝", color: "#2563eb" },
-  { key: "purple", label: "紫罗兰", color: "#7c3aed" },
+  { key: "teal", labelKey: "themeTeal", color: "#0f766e" },
+  { key: "blue", labelKey: "themeBlue", color: "#2563eb" },
+  { key: "purple", labelKey: "themePurple", color: "#7c3aed" },
 ];
 
 const palette = {
@@ -163,10 +171,12 @@ const shellStyle = computed(() => ({
   "--primary": palette[theme.value].primary,
   "--primary-strong": palette[theme.value].accent,
   "--sidebar-bg": palette[theme.value].surface,
+  "--sidebar-width": isSidebarCollapsed.value ? "72px" : "240px",
 }));
 
 const sidebarStyle = computed(() => ({ background: palette[theme.value].surface }));
 const brandStyle = computed(() => ({ background: palette[theme.value].primary }));
+const sidebarToggleLabel = computed(() => (isSidebarCollapsed.value ? dictionary.value.expandSidebar : dictionary.value.collapseSidebar));
 
 const currentTitle = computed(() => {
   const current = visibleNavItems.value.find((item) => item.key === activeNavKey.value);
@@ -179,6 +189,10 @@ const currentSubtitle = computed(() => {
 
 const setTheme = (key) => {
   theme.value = key;
+};
+
+const toggleSidebar = () => {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value;
 };
 
 const clearAuth = () => {
@@ -636,6 +650,224 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1080px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.app-shell {
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: 0;
+  padding: 16px 12px;
+  overflow: hidden;
+  gap: 14px;
+}
+
+.sidebar-main {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.sidebar-footer {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 12px;
+}
+
+.brand {
+  min-height: 40px;
+  margin-bottom: 14px;
+}
+
+.brand-text,
+.nav-label,
+.sidebar-footer {
+  transition: opacity 0.18s ease;
+}
+
+.sidebar-toggle {
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5eef7;
+  font-size: 18px;
+}
+
+.nav {
+  margin-bottom: 0;
+}
+
+.nav-item {
+  width: 100%;
+  min-height: 40px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-collapsed .brand-text,
+.sidebar-collapsed .nav-label,
+.sidebar-collapsed .sidebar-footer {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-collapsed .nav-item {
+  display: grid;
+  place-items: center;
+  padding-inline: 0;
+}
+
+.sidebar-collapsed .nav-label {
+  width: auto;
+  overflow: visible;
+  opacity: 1;
+}
+
+.workspace {
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 24px 28px;
+}
+
+.workspace > * {
+  width: min(100%, 1440px);
+  margin-inline: auto;
+}
+
+.topbar {
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 0;
+}
+
+.topbar > div:first-child {
+  min-width: 0;
+}
+
+.topbar-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.locale-button,
+.ghost-button,
+.primary-button,
+.logout-button {
+  border-radius: 8px;
+}
+
+.locale-button {
+  background: transparent;
+  color: var(--muted);
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.04);
+  color: #e5eef7;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.topbar-user .user-info {
+  min-width: 88px;
+}
+
+.topbar-user p {
+  margin: 0;
+}
+
+.sidebar-card,
+.theme-card,
+.metric-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.overview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 24px 0 0;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    max-height: 220px;
+  }
+
+  .sidebar-main {
+    overflow: visible;
+  }
+
+  .brand,
+  .sidebar-toggle,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    width: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace {
+    padding: 0 14px 20px;
+  }
+
+  .topbar {
+    align-items: stretch;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  .topbar-user {
+    width: 100%;
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+
   .overview-grid {
     grid-template-columns: 1fr;
   }

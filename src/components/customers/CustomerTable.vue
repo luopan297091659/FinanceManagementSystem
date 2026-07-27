@@ -1,8 +1,8 @@
 <template>
   <div class="table-card data-table-card">
     <div class="table-head">
-      <strong>客户清单</strong>
-      <span>{{ items.length }} 条记录</span>
+      <strong>{{ labels.customerList }}</strong>
+      <span>{{ items.length }} {{ common.records }}</span>
     </div>
     <div class="data-table-wrap">
       <table class="data-table">
@@ -11,9 +11,9 @@
             <th class="select-cell">
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
             </th>
-            <th class="index-cell">序号</th>
-            <th v-for="column in visibleColumns" :key="column.key">{{ column.label }}</th>
-            <th class="actions-cell">操作</th>
+            <th class="index-cell">{{ common.index }}</th>
+            <th v-for="column in visibleColumns" :key="column.key">{{ labels[column.labelKey] }}</th>
+            <th class="actions-cell">{{ common.actions }}</th>
           </tr>
         </thead>
         <tbody>
@@ -36,8 +36,8 @@
                 <p>{{ item.note || "-" }}</p>
               </template>
               <template v-else-if="column.key === 'type'">
-                <p>{{ item.kind === "owner" ? "业主" : "租客" }}</p>
-                <p>{{ item.ownerType === "COMPANY" ? "法人/企业" : "个人" }}</p>
+                <p>{{ item.kind === "owner" ? labels.owner : labels.tenant }}</p>
+                <p>{{ item.ownerType === "COMPANY" ? labels.company : labels.person }}</p>
               </template>
               <template v-else-if="column.key === 'dates'">
                 <p>{{ item.birthDate || "-" }}</p>
@@ -50,9 +50,9 @@
             </td>
             <td class="actions-cell">
               <div class="row-actions">
-                <button class="ghost-button mini" type="button" @click="emit('bind', item)">绑定</button>
-                <button class="ghost-button mini" type="button" @click="emit('edit', item)">编辑</button>
-                <button class="danger-button mini" type="button" @click="emit('delete', item.id)">删除</button>
+                <button class="ghost-button mini" type="button" @click="emit('bind', item)">{{ labels.bind }}</button>
+                <button class="ghost-button mini" type="button" @click="emit('edit', item)">{{ common.edit }}</button>
+                <button class="danger-button mini" type="button" @click="emit('delete', item.id)">{{ common.delete }}</button>
               </div>
             </td>
           </tr>
@@ -77,6 +77,14 @@ const props = defineProps({
   selectedIds: {
     type: Array,
     default: () => [],
+  },
+  labels: {
+    type: Object,
+    required: true,
+  },
+  common: {
+    type: Object,
+    required: true,
   },
 });
 

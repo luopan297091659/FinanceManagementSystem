@@ -11,9 +11,9 @@
             <th class="select-cell">
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
             </th>
-            <th class="index-cell">序号</th>
-            <th v-for="column in visibleColumns" :key="column.key">{{ column.label }}</th>
-            <th class="actions-cell">操作</th>
+            <th class="index-cell">{{ common.index }}</th>
+            <th v-for="column in visibleColumns" :key="column.key">{{ labels[column.labelKey] }}</th>
+            <th class="actions-cell">{{ common.actions }}</th>
           </tr>
         </thead>
         <tbody>
@@ -68,6 +68,10 @@ const props = defineProps({
     default: () => [],
   },
   labels: {
+    type: Object,
+    required: true,
+  },
+  common: {
     type: Object,
     required: true,
   },

@@ -1222,3 +1222,222 @@ textarea:focus {
 .data-page .data-content-grid {
   grid-template-columns: minmax(0, 1fr);
 }
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #0f172a;
+  --surface: #151f2c;
+  --surface-2: #1b2836;
+  --text: #e5eef7;
+  --muted: #aab8c6;
+  --line: rgba(255, 255, 255, 0.1);
+  --shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+}
+
+.page-shell,
+.data-page,
+.content-grid,
+.data-content-grid,
+.panel-card,
+.full-panel,
+.table-card,
+.data-table-card {
+  min-width: 0;
+}
+
+.page-shell {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  gap: 16px;
+}
+
+.content-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.panel-card,
+.panel,
+.metric,
+.room-card,
+.timeline-item,
+.answer-box,
+.detail-box,
+.modal-card,
+.gis-search-card {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.page-title-row,
+.section-heading,
+.table-head {
+  color: var(--text);
+}
+
+.section-heading span,
+.section-heading small,
+.table-head,
+.table-head span,
+label,
+.data-table p,
+.table-row p,
+.empty,
+.empty-state {
+  color: var(--muted);
+}
+
+input,
+select,
+textarea,
+.search-input {
+  min-width: 0;
+  border-color: var(--line);
+  background: #0f172a;
+  color: var(--text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #778699;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.danger-button,
+.gis-tool-button,
+.modal-button {
+  min-height: 38px;
+  border-radius: 8px;
+  padding-inline: 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.primary-button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.primary-button:hover {
+  background: var(--primary-strong);
+}
+
+.secondary-button,
+.ghost-button,
+.gis-tool-button {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.secondary-button:hover,
+.ghost-button:hover,
+.gis-tool-button:hover {
+  border-color: var(--primary-strong);
+  color: var(--primary-strong);
+  box-shadow: none;
+}
+
+.danger-button {
+  background: rgba(180, 35, 24, 0.12);
+  border-color: rgba(248, 113, 113, 0.32);
+  color: #fca5a5;
+}
+
+.data-toolbar,
+.toolbar-actions,
+.form-actions,
+.row-actions {
+  min-width: 0;
+}
+
+.data-table-wrap,
+.table {
+  max-width: 100%;
+  overflow: auto;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.data-table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+.data-table th,
+.data-table td {
+  border-color: var(--line);
+}
+
+.data-table th,
+.data-table thead .actions-cell,
+.table-row.header {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.data-table td,
+.data-table .actions-cell,
+.table-row,
+.gis-result-item {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.data-table tbody tr:hover,
+.gis-result-item:hover,
+.gis-result-item.selected {
+  background: #182635;
+}
+
+.column-panel,
+.upload-box {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.toggle-chip,
+.gis-search-card,
+.gis-tool-button,
+.gis-result-item {
+  background: var(--surface);
+}
+
+.gis-panel {
+  min-width: 0;
+  border-radius: 8px;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+@media (max-width: 1080px) {
+  .content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .data-toolbar {
+    align-items: stretch;
+  }
+
+  .toolbar-actions,
+  .search-input {
+    width: 100%;
+  }
+}

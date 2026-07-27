@@ -13,20 +13,20 @@
         <p v-if="loading" class="form-hint">{{ labels.loading }}</p>
         <div class="table-controls data-toolbar">
           <div class="toolbar-actions">
-            <input v-model="searchQuery" class="search-input" type="text" placeholder="搜索描述、金额、房间、客户、状态..." />
+            <input v-model="searchQuery" class="search-input" type="text" :placeholder="labels.searchPlaceholder" />
             <button class="primary-button" type="button" @click="openFinanceModal">{{ labels.newTransaction }}</button>
-            <button class="secondary-button" type="button" @click="triggerImport">导入</button>
-            <button class="secondary-button" type="button" @click="exportFinance">导出</button>
-            <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">批量删除</button>
+            <button class="secondary-button" type="button" @click="triggerImport">{{ common.import }}</button>
+            <button class="secondary-button" type="button" @click="exportFinance">{{ common.export }}</button>
+            <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">{{ common.batchDelete }}</button>
             <input ref="fileInput" class="hidden-file-input" type="file" accept=".xls,.csv,.tsv,.html,.txt" @change="importFinance" />
           </div>
           <div class="column-panel-container">
-            <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">显示字段 ▾</button>
+            <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
             <div v-if="showColumnPanel" class="column-panel">
               <div class="panel-body">
                 <label v-for="column in financeColumns" :key="column.key" class="panel-item">
                   <input type="checkbox" v-model="column.visible" />
-                  {{ column.label }}
+                  {{ labels[column.labelKey] }}
                 </label>
               </div>
             </div>
@@ -37,6 +37,7 @@
           :items="filteredItems"
           :columns="financeColumns"
           :labels="labels"
+          :common="common"
           @edit="editFinance"
           @delete="deleteFinance"
         />
@@ -46,7 +47,7 @@
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ financeModalTitle }}</h3>
-          <button class="modal-close-button" type="button" @click="closeFinanceModal">×</button>
+          <button class="modal-close-button" type="button" @click="closeFinanceModal" :title="common.close">×</button>
         </div>
         <FinanceForm v-model="form" :rooms="rooms" :fee-items="feeItems" :labels="labels" @submit="saveFinance" @cancel="closeFinanceModal" />
       </div>
@@ -77,6 +78,7 @@ const blankForm = () => ({
 
 const { dictionary } = useI18n();
 const labels = computed(() => dictionary.value.financeLabels);
+const common = computed(() => dictionary.value.common);
 const form = ref(blankForm());
 const items = ref([]);
 const rooms = ref([]);
@@ -87,17 +89,18 @@ const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
 const showFinanceModal = ref(false);
-const financeModalTitle = ref("新增财务记录");
+const financeModalTitle = ref("");
 const financeColumns = ref([
-  { key: "description", label: "描述 / 日期", visible: true },
-  { key: "amount", label: "类型 / 金额", visible: true },
-  { key: "room", label: "房间", visible: true },
-  { key: "status", label: "处理 / 确认", visible: true },
-  { key: "customer", label: "客户", visible: true },
+  { key: "description", labelKey: "descriptionDate", visible: true },
+  { key: "amount", labelKey: "typeAmount", visible: true },
+  { key: "room", labelKey: "roomColumn", visible: true },
+  { key: "status", labelKey: "statusColumn", visible: true },
+  { key: "customer", labelKey: "customerColumn", visible: true },
 ]);
 
 const showColumnPanel = ref(false);
 const visibleFinanceColumns = computed(() => financeColumns.value.filter((column) => column.visible));
+const exportFinanceColumns = computed(() => visibleFinanceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredItems = computed(() => items.value.filter(matchesFinanceSearch));
 
 const resetForm = () => {
@@ -106,7 +109,7 @@ const resetForm = () => {
 
 const openFinanceModal = () => {
   resetForm();
-  financeModalTitle.value = "新增财务记录";
+  financeModalTitle.value = labels.value.newTransaction;
   showFinanceModal.value = true;
 };
 
@@ -198,7 +201,7 @@ const confirmationLabel = (status) =>
 
 const editFinance = (item) => {
   form.value = { ...item };
-  financeModalTitle.value = "编辑财务记录";
+  financeModalTitle.value = labels.value.editTransaction;
   showFinanceModal.value = true;
 };
 
@@ -218,14 +221,14 @@ const batchDelete = async () => {
     selectedIds.value = [];
     await loadFinance();
   } catch (error) {
-    errorMessage.value = error.message || "批量删除财务记录失败";
+    errorMessage.value = error.message || labels.value.batchDeleteFailed;
   }
 };
 
 const exportFinance = () => {
   exportTableXls(
-    "财务中心.xls",
-    visibleFinanceColumns.value,
+    labels.value.exportFileName,
+    exportFinanceColumns.value,
     filteredItems.value.map((item) =>
       Object.fromEntries(visibleFinanceColumns.value.map((column) => [column.key, getExportValue(item, column.key)])),
     ),
@@ -245,16 +248,16 @@ const importFinance = async (event) => {
     const dataRows = rows.slice(1);
     const labelIndex = (label) => header.findIndex((item) => item === label);
     const defaultFeeItemId = feeItems.value[0]?.id;
-    if (!defaultFeeItemId) throw new Error("请先维护费用项后再导入财务记录");
+    if (!defaultFeeItemId) throw new Error(labels.value.importNeedsFeeItem);
     await Promise.all(
       dataRows.map((row) => {
-        const descriptionParts = String(row[labelIndex("描述 / 日期")] || "").split("/");
-        const amountParts = String(row[labelIndex("类型 / 金额")] || "").split("/");
-        const statusParts = String(row[labelIndex("处理 / 确认")] || "").split("/");
+        const descriptionParts = String(row[labelIndex(labels.value.descriptionDate)] || "").split("/");
+        const amountParts = String(row[labelIndex(labels.value.typeAmount)] || "").split("/");
+        const statusParts = String(row[labelIndex(labels.value.statusColumn)] || "").split("/");
         return api.createTransaction({
           type: amountParts[0]?.includes(labels.value.expense) ? "expense" : "income",
           date: descriptionParts[1]?.trim() || new Date().toISOString().slice(0, 10),
-          counterparty: row[labelIndex("客户")] || undefined,
+          counterparty: row[labelIndex(labels.value.customerColumn)] || undefined,
           note: descriptionParts[0]?.trim() || "",
           processingStatus: statusParts[0]?.trim() || "INCLUDED",
           confirmationStatus: statusParts[1]?.trim() || "PENDING",
@@ -264,7 +267,7 @@ const importFinance = async (event) => {
     );
     await loadFinance();
   } catch (error) {
-    errorMessage.value = error.message || "导入财务记录失败";
+    errorMessage.value = error.message || labels.value.importFailed;
   } finally {
     event.target.value = "";
   }

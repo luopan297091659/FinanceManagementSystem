@@ -6,4 +6,5 @@ backend/node_modules/
 backend/dist/
 logs/*.log
 !logs/.gitkeep
+backend/dist/
 dist/

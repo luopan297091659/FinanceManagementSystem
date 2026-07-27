@@ -2,31 +2,31 @@
   <section class="page-shell data-page">
     <div class="page-title-row">
       <div>
-        <p class="eyebrow">房源管理</p>
-        <h2>房源结构与状态维护</h2>
+        <p class="eyebrow">{{ labels.eyebrow }}</p>
+        <h2>{{ labels.heading }}</h2>
       </div>
     </div>
 
     <div class="content-grid data-content-grid">
       <div class="panel-card full-panel">
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-        <p v-if="loading" class="form-hint">正在同步后端数据...</p>
+        <p v-if="loading" class="form-hint">{{ common.loading }}</p>
         <div class="table-controls data-toolbar">
           <div class="toolbar-actions">
-            <input v-model="searchQuery" class="search-input" type="text" placeholder="搜索房源、楼栋、房号、状态..." />
-            <button class="primary-button" type="button" @click="openResourceModal">新增房源</button>
-            <button class="secondary-button" type="button" @click="triggerImport">导入</button>
-            <button class="secondary-button" type="button" @click="exportResources">导出</button>
-            <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">批量删除</button>
+            <input v-model="searchQuery" class="search-input" type="text" :placeholder="labels.searchPlaceholder" />
+            <button class="primary-button" type="button" @click="openResourceModal">{{ labels.newResource }}</button>
+            <button class="secondary-button" type="button" @click="triggerImport">{{ common.import }}</button>
+            <button class="secondary-button" type="button" @click="exportResources">{{ common.export }}</button>
+            <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">{{ common.batchDelete }}</button>
             <input ref="fileInput" class="hidden-file-input" type="file" accept=".xls,.csv,.tsv,.html,.txt" @change="importResources" />
           </div>
           <div class="column-panel-container">
-            <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">显示字段 ▾</button>
+            <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
             <div v-if="showColumnPanel" class="column-panel">
               <div class="panel-body">
                 <label v-for="column in resourceColumns" :key="column.key" class="panel-item">
                   <input type="checkbox" v-model="column.visible" />
-                  {{ column.label }}
+                  {{ labels[column.labelKey] }}
                 </label>
               </div>
             </div>
@@ -36,6 +36,8 @@
           v-model:selected-ids="selectedIds"
           :items="filteredResources"
           :columns="resourceColumns"
+          :labels="labels"
+          :common="common"
           @edit="editResource"
           @delete="deleteResource"
         />
@@ -45,9 +47,9 @@
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ resourceModalTitle }}</h3>
-          <button class="modal-close-button" type="button" @click="closeResourceModal">×</button>
+          <button class="modal-close-button" type="button" @click="closeResourceModal" :title="common.close">×</button>
         </div>
-        <ResourceForm v-model="form" @submit="saveResource" @cancel="closeResourceModal" />
+        <ResourceForm v-model="form" :labels="labels" :common="common" @submit="saveResource" @cancel="closeResourceModal" />
       </div>
     </div>
   </section>
@@ -57,6 +59,7 @@
 import { computed, onMounted, ref } from "vue";
 import ResourceForm from "../components/resources/ResourceForm.vue";
 import ResourceTable from "../components/resources/ResourceTable.vue";
+import { useI18n } from "../i18n";
 import { api } from "../services/api";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
@@ -77,6 +80,9 @@ const blankForm = () => ({
 });
 
 const form = ref(blankForm());
+const { dictionary } = useI18n();
+const labels = computed(() => dictionary.value.resourcesLabels);
+const common = computed(() => dictionary.value.common);
 const resources = ref([]);
 const selectedIds = ref([]);
 const fileInput = ref(null);
@@ -84,18 +90,19 @@ const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
 const showResourceModal = ref(false);
-const resourceModalTitle = ref("新增房源");
+const resourceModalTitle = ref("");
 const resourceColumns = ref([
-  { key: "project", label: "项目 / 楼栋", visible: true },
-  { key: "house", label: "房屋编号 / 房号", visible: true },
-  { key: "area", label: "面积 / 楼层", visible: true },
-  { key: "location", label: "经纬度", visible: true },
-  { key: "status", label: "状态", visible: true },
-  { key: "note", label: "备注", visible: true },
+  { key: "project", labelKey: "projectBuilding", visible: true },
+  { key: "house", labelKey: "houseRoom", visible: true },
+  { key: "area", labelKey: "areaFloor", visible: true },
+  { key: "location", labelKey: "location", visible: true },
+  { key: "status", labelKey: "status", visible: true },
+  { key: "note", labelKey: "note", visible: true },
 ]);
 
 const showColumnPanel = ref(false);
 const visibleResourceColumns = computed(() => resourceColumns.value.filter((column) => column.visible));
+const exportResourceColumns = computed(() => visibleResourceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredResources = computed(() => resources.value.filter(matchesSearch));
 
 const resetForm = () => {
@@ -104,7 +111,7 @@ const resetForm = () => {
 
 const openResourceModal = () => {
   resetForm();
-  resourceModalTitle.value = "新增房源";
+  resourceModalTitle.value = labels.value.newResource;
   showResourceModal.value = true;
 };
 
@@ -139,7 +146,7 @@ const loadResources = async () => {
     });
     selectedIds.value = selectedIds.value.filter((id) => resources.value.some((item) => item.id === id));
   } catch (error) {
-    errorMessage.value = error.message || "加载房源失败";
+    errorMessage.value = error.message || labels.value.loadFailed;
   } finally {
     loading.value = false;
   }
@@ -181,13 +188,13 @@ const saveResource = async () => {
     await loadResources();
     closeResourceModal();
   } catch (error) {
-    errorMessage.value = error.message || "保存房源失败";
+    errorMessage.value = error.message || labels.value.saveFailed;
   }
 };
 
 const editResource = (item) => {
   form.value = { ...item };
-  resourceModalTitle.value = "编辑房源";
+  resourceModalTitle.value = labels.value.editResource;
   showResourceModal.value = true;
 };
 
@@ -196,7 +203,7 @@ const deleteResource = async (id) => {
     await api.deleteRoom(id);
     await loadResources();
   } catch (error) {
-    errorMessage.value = error.message || "删除房源失败";
+    errorMessage.value = error.message || labels.value.deleteFailed;
   }
 };
 
@@ -207,14 +214,14 @@ const batchDelete = async () => {
     selectedIds.value = [];
     await loadResources();
   } catch (error) {
-    errorMessage.value = error.message || "批量删除房源失败";
+    errorMessage.value = error.message || labels.value.batchDeleteFailed;
   }
 };
 
 const exportResources = () => {
   exportTableXls(
-    "房源管理.xls",
-    visibleResourceColumns.value,
+    labels.value.exportFileName,
+    exportResourceColumns.value,
     filteredResources.value.map((item) =>
       Object.fromEntries(visibleResourceColumns.value.map((column) => [column.key, getExportValue(item, column.key)])),
     ),
@@ -235,9 +242,9 @@ const importResources = async (event) => {
     const labelIndex = (label) => header.findIndex((item) => item === label);
     await Promise.all(
       dataRows.map((row) => {
-        const projectParts = String(row[labelIndex("项目 / 楼栋")] || "").split("/");
-        const houseParts = String(row[labelIndex("房屋编号 / 房号")] || "").split("/");
-        const areaParts = String(row[labelIndex("面积 / 楼层")] || "").split("/");
+        const projectParts = String(row[labelIndex(labels.value.projectBuilding)] || "").split("/");
+        const houseParts = String(row[labelIndex(labels.value.houseRoom)] || "").split("/");
+        const areaParts = String(row[labelIndex(labels.value.areaFloor)] || "").split("/");
         return api.createRoom({
           projectName: projectParts[0]?.trim() || "",
           buildingName: projectParts[1]?.trim() || "",
@@ -245,14 +252,14 @@ const importResources = async (event) => {
           roomNumber: houseParts[1]?.trim() || "",
           area: areaParts[0]?.trim() || "",
           floor: areaParts[1]?.trim() || "",
-          status: row[labelIndex("状态")] || "VACANT",
-          note: row[labelIndex("备注")] || "",
+          status: row[labelIndex(labels.value.status)] || "VACANT",
+          note: row[labelIndex(labels.value.note)] || "",
         });
       }),
     );
     await loadResources();
   } catch (error) {
-    errorMessage.value = error.message || "导入房源失败";
+    errorMessage.value = error.message || labels.value.importFailed;
   } finally {
     event.target.value = "";
   }

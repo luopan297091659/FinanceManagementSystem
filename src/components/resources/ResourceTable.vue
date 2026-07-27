@@ -1,8 +1,8 @@
 <template>
   <div class="table-card data-table-card">
     <div class="table-head">
-      <strong>房源清单</strong>
-      <span>{{ items.length }} 条记录</span>
+      <strong>{{ labels.resourceList }}</strong>
+      <span>{{ items.length }} {{ common.records }}</span>
     </div>
     <div class="data-table-wrap">
       <table class="data-table">
@@ -11,9 +11,9 @@
             <th class="select-cell">
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
             </th>
-            <th class="index-cell">序号</th>
-            <th v-for="column in visibleColumns" :key="column.key">{{ column.label }}</th>
-            <th class="actions-cell">操作</th>
+            <th class="index-cell">{{ common.index }}</th>
+            <th v-for="column in visibleColumns" :key="column.key">{{ labels[column.labelKey] }}</th>
+            <th class="actions-cell">{{ common.actions }}</th>
           </tr>
         </thead>
         <tbody>
@@ -32,8 +32,8 @@
                 <p>{{ item.roomNumber || "-" }}</p>
               </template>
               <template v-else-if="column.key === 'area'">
-                <p>{{ item.area || "-" }} ㎡</p>
-                <p>{{ item.floor || "-" }} 层</p>
+                <p>{{ item.area || "-" }} m2</p>
+                <p>{{ item.floor || "-" }}</p>
               </template>
               <template v-else-if="column.key === 'location'">
                 <p>{{ item.buildingLatitude || "-" }}, {{ item.buildingLongitude || "-" }}</p>
@@ -48,8 +48,8 @@
             </td>
             <td class="actions-cell">
               <div class="row-actions">
-                <button class="ghost-button mini" type="button" @click="emit('edit', item)">编辑</button>
-                <button class="danger-button mini" type="button" @click="emit('delete', item.id)">删除</button>
+                <button class="ghost-button mini" type="button" @click="emit('edit', item)">{{ common.edit }}</button>
+                <button class="danger-button mini" type="button" @click="emit('delete', item.id)">{{ common.delete }}</button>
               </div>
             </td>
           </tr>
@@ -74,6 +74,14 @@ const props = defineProps({
   selectedIds: {
     type: Array,
     default: () => [],
+  },
+  labels: {
+    type: Object,
+    required: true,
+  },
+  common: {
+    type: Object,
+    required: true,
   },
 });
 
@@ -102,10 +110,10 @@ const toggleOne = (id) => {
 
 const statusLabel = (status) =>
   ({
-    VACANT: "空置",
-    OCCUPIED: "已入住",
-    MAINTENANCE: "维修中",
-    OVERDUE: "逾期",
-    INACTIVE: "停用",
+    VACANT: props.labels.vacant,
+    OCCUPIED: props.labels.occupied,
+    MAINTENANCE: props.labels.maintenance,
+    OVERDUE: props.labels.overdue,
+    INACTIVE: props.labels.inactive,
   })[status] || status || "-";
 </script>
