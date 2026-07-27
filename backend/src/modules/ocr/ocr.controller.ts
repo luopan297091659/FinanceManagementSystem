@@ -30,7 +30,7 @@ export class OcrController {
     FilesInterceptor('files', 50, {
       storage: diskStorage({
         destination: OCR_UPLOAD_DIR,
-        filename: (_req: Express.Multer.File, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
+        filename: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
           const suffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
           cb(null, `${suffix}${extname(file.originalname)}`);
         },
