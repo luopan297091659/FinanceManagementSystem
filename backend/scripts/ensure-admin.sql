@@ -44,6 +44,44 @@ DECLARE
     ARRAY['audit_log:view', 'audit', '查看日志']
   ];
 BEGIN
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "username" TEXT;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "email" TEXT;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "name" TEXT;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "role" TEXT NOT NULL DEFAULT 'operator';
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN NOT NULL DEFAULT true;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "defaultDataScope" "DataScopeType" DEFAULT 'SELF';
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "defaultDataScopeValue" TEXT;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+  WITH numbered_users AS (
+    SELECT
+      "id",
+      'user_' || row_number() OVER (ORDER BY COALESCE("createdAt", now()), "id") AS generated_username
+    FROM "User"
+    WHERE "username" IS NULL OR "username" = ''
+  )
+  UPDATE "User"
+  SET "username" = numbered_users.generated_username
+  FROM numbered_users
+  WHERE "User"."id" = numbered_users."id";
+
+  UPDATE "User"
+  SET
+    "name" = COALESCE(NULLIF("name", ''), "username"),
+    "passwordHash" = COALESCE(NULLIF("passwordHash", ''), '240be518fabd2724d2f79524080cb2c5d563550a03d4f62d4898e71b0a39fef7'),
+    "role" = COALESCE(NULLIF("role", ''), 'operator'),
+    "defaultDataScope" = COALESCE("defaultDataScope", 'SELF');
+
+  ALTER TABLE "User" ALTER COLUMN "username" SET NOT NULL;
+  ALTER TABLE "User" ALTER COLUMN "name" SET NOT NULL;
+  ALTER TABLE "User" ALTER COLUMN "passwordHash" SET NOT NULL;
+  ALTER TABLE "User" ALTER COLUMN "role" SET NOT NULL;
+  ALTER TABLE "User" ALTER COLUMN "defaultDataScope" SET DEFAULT 'SELF';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username");
+
   INSERT INTO "Role" ("id", "name", "code", "description", "isSystem", "isActive", "dataScope", "createdAt", "updatedAt")
   VALUES (md5(random()::text || clock_timestamp()::text), '超级管理员', 'SUPER_ADMIN', '系统超级管理员', true, true, 'ALL', now(), now())
   ON CONFLICT ("code") DO UPDATE SET
