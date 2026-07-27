@@ -1,7 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UnauthorizedException } from '@nestjs/common';
 import { RbacService } from './rbac.service';
 import { Request } from 'express';
 import { RequirePermission } from './permissions.decorator';
+
+type LoginBody = {
+  username?: unknown;
+  password?: unknown;
+  userName?: unknown;
+  account?: unknown;
+};
 
 @Controller('rbac')
 export class RbacController {
@@ -17,10 +24,19 @@ export class RbacController {
   }
 
   @Post('login')
-  async login(@Body() body: { username: string; password: string }) {
-    const result = await this.rbacService.login(body.username, body.password);
+  async login(@Body() body: LoginBody = {}) {
+    const username = this.normalizeString(body.username ?? body.userName ?? body.account);
+    const password = this.normalizeString(body.password);
+    if (!username || !password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const result = await this.rbacService.login(username, password);
     await this.rbacService.logAction(result.user.id, 'login', 'auth', result.user.id, undefined, 'login success');
     return result;
+  }
+
+  private normalizeString(value: unknown) {
+    return typeof value === 'string' ? value.trim() : '';
   }
 
   @Get('roles')

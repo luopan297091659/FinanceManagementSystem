@@ -32,7 +32,7 @@
           />
         </div>
 
-        <button type="submit" class="login-button" :disabled="loading">
+        <button type="submit" class="login-button" :disabled="loading || !canSubmit">
           {{ loading ? dict.loggingIn : dict.login }}
         </button>
 
@@ -98,6 +98,7 @@ const showResetModal = ref(false);
 const resetMessage = ref('');
 
 const dict = computed(() => messages[currentLocale.value].login);
+const canSubmit = computed(() => form.value.username.trim() && form.value.password);
 
 const setLocale = (loc) => {
   currentLocale.value = loc;
@@ -107,6 +108,10 @@ const setLocale = (loc) => {
 
 const handleLogin = async () => {
   error.value = '';
+  if (!canSubmit.value) {
+    error.value = dict.value.loginFailed;
+    return;
+  }
   loading.value = true;
   try {
     const result = await api.login(form.value.username.trim(), form.value.password);
