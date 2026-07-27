@@ -112,7 +112,7 @@ BEGIN
   VALUES (
     md5(random()::text || clock_timestamp()::text),
     'admin',
-    NULL,
+    'luo97091659@gmail.com',
     'System Admin',
     '240be518fabd2724d2f79524080cb2c5d563550a03d4f62d4898e71b0a39fef7',
     'SUPER_ADMIN',
