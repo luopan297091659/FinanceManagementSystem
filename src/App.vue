@@ -1,5 +1,9 @@
 <template>
-  <div class="app-shell" :style="shellStyle">
+  <!-- Login View -->
+  <LoginView v-if="!isAuthenticated" />
+
+  <!-- Main Application -->
+  <div v-else class="app-shell" :style="shellStyle">
     <aside class="sidebar" :style="sidebarStyle">
       <div class="brand">
         <span class="brand-mark" :style="brandStyle">F</span>
@@ -31,6 +35,16 @@
         <div class="theme-swatches">
           <button v-for="theme in themes" :key="theme.key" class="swatch" :aria-label="theme.label" :style="{ background: theme.color }" type="button" @click="setTheme(theme.key)" />
         </div>
+      </div>
+
+      <div class="user-card">
+        <div class="user-info">
+          <p class="user-name">{{ currentUser?.name || 'User' }}</p>
+          <p class="user-role">{{ currentUser?.userRoles?.[0]?.role?.name || 'User' }}</p>
+        </div>
+        <button class="logout-button" @click="handleLogout" title="Logout">
+          ↪ 
+        </button>
       </div>
     </aside>
 
@@ -81,7 +95,8 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, onMounted } from "vue";
+import LoginView from "./views/login.vue";
 import GisView from "./views/gis/index.vue";
 import ResourcesView from "./views/resources.vue";
 import CustomersView from "./views/customers.vue";
@@ -90,10 +105,14 @@ import OcrView from "./views/ocr.vue";
 import KnowledgeView from "./views/knowledge.vue";
 import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
 import { useI18n } from "./i18n";
+import { api } from "./services/api";
 
 const activeView = ref("gis");
 const theme = ref("teal");
+const isAuthenticated = ref(false);
+const currentUser = ref(null);
 const { locale, dictionary, setLocale } = useI18n();
+
 const navItems = computed(() => [
   { key: "overview", label: dictionary.value.overview },
   { key: "gis", label: dictionary.value.gis },
@@ -102,8 +121,9 @@ const navItems = computed(() => [
   { key: "finance", label: dictionary.value.finance },
   { key: "ocr", label: dictionary.value.ocr },
   { key: "knowledge", label: dictionary.value.knowledge },
-  { key: "system", label: "系统管理" },
+  { key: "system", label: dictionary.value.systemAdmin },
 ]);
+
 const themes = [
   { key: "teal", label: "青绿", color: "#0f766e" },
   { key: "blue", label: "深蓝", color: "#2563eb" },
@@ -136,9 +156,328 @@ const currentSubtitle = computed(() => {
 const setTheme = (key) => {
   theme.value = key;
 };
+
+const checkAuth = async () => {
+  const token = localStorage.getItem('auth-token');
+  const user = localStorage.getItem('user');
+  if (token && user) {
+    try {
+      currentUser.value = JSON.parse(user);
+      isAuthenticated.value = true;
+    } catch (e) {
+      isAuthenticated.value = false;
+    }
+  }
+};
+
+const handleLogout = () => {
+  localStorage.removeItem('auth-token');
+  localStorage.removeItem('user');
+  isAuthenticated.value = false;
+  currentUser.value = null;
+};
+
+onMounted(() => {
+  checkAuth();
+});
 </script>
 
 <style scoped>
+.app-shell {
+  --line: rgba(255, 255, 255, 0.06);
+  --muted: #b7c2ce;
+  --surface: var(--sidebar-bg);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100vh;
+  background: #0f172a;
+  color: #e5eef7;
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.brand strong {
+  font-size: 14px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.nav-item {
+  border: 0;
+  border-left: 3px solid transparent;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.active {
+  color: var(--primary-strong);
+  border-left-color: var(--primary-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-card,
+.theme-card,
+.user-card {
+  margin-top: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5eef7;
+}
+
+.eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.sidebar-card p,
+.theme-card p,
+.user-card p {
+  margin: 0;
+  color: #b7c2ce;
+  line-height: 1.6;
+}
+
+.theme-swatches {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.user-card {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e5eef7;
+}
+
+.user-role {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.logout-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+.logout-button:hover {
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  overflow: hidden;
+}
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  padding: 20px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.topbar > div:first-child h1 {
+  margin: 6px 0;
+  font-size: 28px;
+  color: #e5eef7;
+}
+
+.topbar > div:first-child p {
+  margin: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.locale-switch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.locale-button {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  padding: 0 10px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.locale-button:last-child {
+  border-right: 0;
+}
+
+.locale-button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.ghost-button,
+.primary-button {
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.ghost-button:hover {
+  border-color: var(--primary);
+  color: var(--primary-strong);
+}
+
+.primary-button {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.primary-button:hover {
+  opacity: 0.9;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+.metric-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.metric-label {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.metric-value {
+  display: block;
+  font-size: 30px;
+  color: var(--primary-strong);
+}
+
+.metric-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.subtle {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+@media (max-width: 1080px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+}
 .sidebar-card,
 .theme-card {
   margin-top: 24px;

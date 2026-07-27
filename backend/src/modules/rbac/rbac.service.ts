@@ -274,16 +274,24 @@ export class RbacService implements OnModuleInit {
     return user;
   }
 
-  async updateUser(id: string, data: { name?: string; email?: string | null; phone?: string | null; isActive?: boolean; roles?: string[]; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
+  async updateUser(id: string, data: { name?: string; email?: string | null; phone?: string | null; isActive?: boolean; roleId?: string; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new BadRequestException('User not found');
     const updated = await this.prisma.user.update({ where: { id }, data: { name: data.name, email: data.email ?? null, phone: data.phone ?? null, isActive: data.isActive, defaultDataScope: data.defaultDataScope, defaultDataScopeValue: data.defaultDataScopeValue } });
-    if (data.roles) {
+    if (data.roleId) {
       await this.prisma.userRole.deleteMany({ where: { userId: id } });
-      const roles = await this.prisma.role.findMany({ where: { code: { in: data.roles } } });
-      await this.prisma.$transaction(roles.map((role: { id: string }) => this.prisma.userRole.create({ data: { userId: id, roleId: role.id } })));
+      await this.prisma.userRole.create({ data: { userId: id, roleId: data.roleId } });
     }
     return updated;
+  }
+
+  async deleteUser(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new BadRequestException('User not found');
+    if (user.username === 'admin') throw new BadRequestException('Cannot delete admin user');
+    await this.prisma.userRole.deleteMany({ where: { userId: id } });
+    await this.prisma.user.delete({ where: { id } });
+    await this.logAction(null, 'delete', 'user', id, undefined, `User ${user.username} deleted`);
   }
 
   async resetPassword(userId: string, newPassword: string) {
@@ -301,6 +309,18 @@ export class RbacService implements OnModuleInit {
 
   async login(username: string, password: string) {
     const user = await this.validateCredentials(username, password);
-    return { user: { id: user.id, username: user.username, name: user.name, email: user.email, roles: user.role }, permissions: await this.getUserPermissions(user.id) };
+    const userRoles = await this.prisma.userRole.findMany({ where: { userId: user.id }, include: { role: true } });
+    const token = crypto.randomBytes(32).toString('hex');
+    return { 
+      token, 
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        name: user.name, 
+        email: user.email, 
+        userRoles
+      }, 
+      permissions: await this.getUserPermissions(user.id) 
+    };
   }
 }

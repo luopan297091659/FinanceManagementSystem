@@ -66,6 +66,13 @@ export class RbacController {
     return this.rbacService.updateUser(id, body);
   }
 
+  @Delete('users/:id')
+  @RequirePermission('user:delete')
+  async deleteUser(@Param('id') id: string) {
+    await this.rbacService.deleteUser(id);
+    return { success: true };
+  }
+
   @Post('password-reset')
   async requestReset(@Body() body: { username: string }) {
     const user = await this.rbacService.getCurrentUserByUsername(body.username);
