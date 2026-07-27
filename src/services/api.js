@@ -25,8 +25,8 @@ async function request(path, { method = 'GET', body } = {}) {
         localStorage.removeItem('auth-token');
         localStorage.removeItem('user');
       }
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-expired'));
       }
     }
     throw new Error(text || 'request failed');
@@ -74,6 +74,10 @@ export const api = {
   // Role Management APIs
   async listRoles() {
     return request('/rbac/roles');
+  },
+
+  async listPermissions() {
+    return request('/rbac/permissions');
   },
 
   async createRole(payload) {

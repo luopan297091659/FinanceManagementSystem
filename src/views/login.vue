@@ -85,11 +85,10 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { locale, messages } from '../i18n.js';
 import { api } from '../services/api.js';
 
-const router = useRouter();
+const emit = defineEmits(['authenticated']);
 const currentLocale = ref(locale.value);
 const form = ref({ username: '', password: '' });
 const resetForm = ref({ username: '' });
@@ -114,12 +113,12 @@ const handleLogin = async () => {
     if (result.token) {
       localStorage.setItem('auth-token', result.token);
       localStorage.setItem('user', JSON.stringify(result.user));
-      router.push('/');
+      emit('authenticated', result.user);
     } else {
-      error.value = dict.loginFailed;
+      error.value = dict.value.loginFailed;
     }
   } catch (e) {
-    error.value = dict.loginError + (e.message || '');
+    error.value = dict.value.loginError + (e.message || '');
   } finally {
     loading.value = false;
   }
@@ -129,12 +128,12 @@ const handlePasswordReset = async () => {
   try {
     const result = await api.requestPasswordReset(resetForm.value.username);
     if (result.success) {
-      resetMessage.value = dict.resetSent;
+      resetMessage.value = dict.value.resetSent;
     } else {
-      resetMessage.value = result.message || dict.resetFailed;
+      resetMessage.value = result.message || dict.value.resetFailed;
     }
   } catch (e) {
-    resetMessage.value = dict.resetError;
+    resetMessage.value = dict.value.resetError;
   }
 };
 

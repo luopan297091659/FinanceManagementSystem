@@ -16,7 +16,7 @@
     <div v-if="activeTab === 'users'" class="tab-content">
       <div class="content-header">
         <h3>{{ dict.users }}</h3>
-        <button @click="showUserModal = true" class="primary-button">{{ dict.newUser }}</button>
+        <button @click="openNewUser" class="primary-button">{{ dict.newUser }}</button>
       </div>
       <div class="table-wrapper">
         <table class="data-table">
@@ -55,7 +55,7 @@
     <div v-if="activeTab === 'roles'" class="tab-content">
       <div class="content-header">
         <h3>{{ dict.roles }}</h3>
-        <button @click="showRoleModal = true" class="primary-button">{{ dict.newRole }}</button>
+        <button @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
       </div>
       <div class="role-grid">
         <div v-for="role in roles" :key="role.id" class="role-card">
@@ -113,7 +113,7 @@
     </div>
 
     <!-- User Modal -->
-    <div v-if="showUserModal" class="modal-overlay" @click="showUserModal = false">
+    <div v-if="showUserModal" class="modal-overlay" @click="closeUserModal">
       <div class="modal-card" @click.stop>
         <h2>{{ editingUser ? dict.editUser : dict.newUser }}</h2>
         <div class="form-group">
@@ -141,15 +141,19 @@
             </option>
           </select>
         </div>
+        <label class="status-checkbox">
+          <input v-model="userForm.isActive" type="checkbox" />
+          {{ dict.active }}
+        </label>
         <div class="modal-actions">
           <button @click="saveUser" class="modal-button primary">{{ dict.save }}</button>
-          <button @click="showUserModal = false" class="modal-button">{{ dict.cancel }}</button>
+          <button @click="closeUserModal" class="modal-button">{{ dict.cancel }}</button>
         </div>
       </div>
     </div>
 
     <!-- Role Modal -->
-    <div v-if="showRoleModal" class="modal-overlay" @click="showRoleModal = false">
+    <div v-if="showRoleModal" class="modal-overlay" @click="closeRoleModal">
       <div class="modal-card wide" @click.stop>
         <h2>{{ editingRole ? dict.editRole : dict.newRole }}</h2>
         <div class="form-group">
@@ -179,7 +183,7 @@
         </div>
         <div class="modal-actions">
           <button @click="saveRole" class="modal-button primary">{{ dict.save }}</button>
-          <button @click="showRoleModal = false" class="modal-button">{{ dict.cancel }}</button>
+          <button @click="closeRoleModal" class="modal-button">{{ dict.cancel }}</button>
         </div>
       </div>
     </div>
@@ -202,7 +206,7 @@ const showRoleModal = ref(false);
 const editingUser = ref(null);
 const editingRole = ref(null);
 
-const userForm = ref({ username: '', name: '', email: '', password: '', roleId: '' });
+const userForm = ref({ username: '', name: '', email: '', password: '', roleId: '', isActive: true });
 const roleForm = ref({ name: '', code: '', description: '', permissions: [] });
 
 const dict = computed(() => messages[locale.value].system || messages[locale.value].systemAdmin);
@@ -227,11 +231,8 @@ const loadUsers = async () => {
 
 const loadRoles = async () => {
   try {
-    const data = await api.listRoles();
-    roles.value = data;
-    if (data.length > 0) {
-      allPermissions.value = data[0].rolePermissions?.map(rp => rp.permission) || [];
-    }
+    roles.value = await api.listRoles();
+    allPermissions.value = await api.listPermissions();
   } catch (e) {
     console.error('Failed to load roles:', e);
   }
@@ -249,6 +250,36 @@ const loadData = async () => {
   await Promise.all([loadUsers(), loadRoles(), loadLogs()]);
 };
 
+const resetUserForm = () => {
+  editingUser.value = null;
+  userForm.value = { username: '', name: '', email: '', password: '', roleId: '', isActive: true };
+};
+
+const resetRoleForm = () => {
+  editingRole.value = null;
+  roleForm.value = { name: '', code: '', description: '', permissions: [] };
+};
+
+const openNewUser = () => {
+  resetUserForm();
+  showUserModal.value = true;
+};
+
+const closeUserModal = () => {
+  showUserModal.value = false;
+  resetUserForm();
+};
+
+const openNewRole = () => {
+  resetRoleForm();
+  showRoleModal.value = true;
+};
+
+const closeRoleModal = () => {
+  showRoleModal.value = false;
+  resetRoleForm();
+};
+
 const editUser = (user) => {
   editingUser.value = user;
   userForm.value = {
@@ -257,6 +288,7 @@ const editUser = (user) => {
     email: user.email,
     password: '',
     roleId: user.userRoles?.[0]?.roleId || '',
+    isActive: user.isActive,
   };
   showUserModal.value = true;
 };
@@ -268,9 +300,7 @@ const saveUser = async () => {
     } else {
       await api.createUser(userForm.value);
     }
-    showUserModal.value = false;
-    editingUser.value = null;
-    userForm.value = { username: '', name: '', email: '', password: '', roleId: '' };
+    closeUserModal();
     await loadUsers();
   } catch (e) {
     console.error('Failed to save user:', e);
@@ -306,9 +336,7 @@ const saveRole = async () => {
     } else {
       await api.createRole(roleForm.value);
     }
-    showRoleModal.value = false;
-    editingRole.value = null;
-    roleForm.value = { name: '', code: '', description: '', permissions: [] };
+    closeRoleModal();
     await loadRoles();
   } catch (e) {
     console.error('Failed to save role:', e);
@@ -631,6 +659,19 @@ onMounted(loadData);
 .permission-checkbox input {
   width: auto;
   cursor: pointer;
+}
+
+.status-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.status-checkbox input {
+  width: auto;
 }
 
 .modal-actions {

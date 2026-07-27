@@ -209,6 +209,50 @@ export class RbacService implements OnModuleInit {
     return crypto.createHash('sha256').update(password).digest('hex');
   }
 
+  private getAuthSecret() {
+    return process.env.AUTH_TOKEN_SECRET || process.env.DATABASE_URL || 'finance-management-dev-secret';
+  }
+
+  private signTokenPayload(payload: string) {
+    return crypto.createHmac('sha256', this.getAuthSecret()).update(payload).digest('base64url');
+  }
+
+  createAuthToken(userId: string) {
+    const expiresAt = Date.now() + 1000 * 60 * 60 * 8;
+    const payload = Buffer.from(JSON.stringify({ userId, expiresAt })).toString('base64url');
+    const signature = this.signTokenPayload(payload);
+    return `${payload}.${signature}`;
+  }
+
+  async verifyAuthToken(token: string) {
+    try {
+      const [payload, signature] = token.split('.');
+      if (!payload || !signature) {
+        throw new UnauthorizedException('Invalid token');
+      }
+
+      const expectedSignature = this.signTokenPayload(payload);
+      const actualBuffer = Buffer.from(signature);
+      const expectedBuffer = Buffer.from(expectedSignature);
+      if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) {
+        throw new UnauthorizedException('Invalid token');
+      }
+
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { userId?: string; expiresAt?: number };
+      if (!parsed.userId || !parsed.expiresAt || parsed.expiresAt < Date.now()) {
+        throw new UnauthorizedException('Invalid token');
+      }
+
+      const user = await this.prisma.user.findUnique({ where: { id: parsed.userId } });
+      if (!user || !user.isActive) {
+        throw new UnauthorizedException('Invalid token');
+      }
+      return user;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
   async logAction(userId: string | null, action: string, module: string, targetId?: string, ip?: string, details?: string) {
     await this.prisma.rbacAuditLog.create({ data: { userId, action, module, targetId, ip: ip ?? null, details: details ?? null } });
   }
@@ -221,30 +265,51 @@ export class RbacService implements OnModuleInit {
     return this.prisma.role.findMany({ include: { rolePermissions: { include: { permission: true } } } });
   }
 
+  async listPermissions() {
+    return this.prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { key: 'asc' }] });
+  }
+
+  private async resolvePermissionIds(permissions: string[]) {
+    if (!permissions.length) return [];
+    const rows = await this.prisma.permission.findMany({
+      where: {
+        OR: [
+          { id: { in: permissions } },
+          { key: { in: permissions } },
+        ],
+      },
+    });
+    return rows.map((permission: { id: string }) => permission.id);
+  }
+
   async createRole(data: { name: string; code: string; description?: string; isSystem?: boolean; dataScope?: DataScopeType; dataScopeValue?: string; permissions?: string[] }) {
     const existing = await this.prisma.role.findFirst({ where: { OR: [{ code: data.code }, { name: data.name }] } });
     if (existing) throw new BadRequestException('Role already exists');
     const role = await this.prisma.role.create({ data: { name: data.name, code: data.code, description: data.description ?? null, isSystem: !!data.isSystem, dataScope: data.dataScope ?? DataScopeType.SELF, dataScopeValue: data.dataScopeValue ?? null } });
     if (data.permissions?.length) {
-      const permissions = await this.prisma.permission.findMany({ where: { key: { in: data.permissions } } });
-      await this.prisma.$transaction(permissions.map((permission: { id: string }) => this.prisma.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } })));
+      const permissionIds = await this.resolvePermissionIds(data.permissions);
+      await this.prisma.$transaction(permissionIds.map((permissionId: string) => this.prisma.rolePermission.create({ data: { roleId: role.id, permissionId } })));
     }
-    return role;
+    return this.prisma.role.findUnique({ where: { id: role.id }, include: { rolePermissions: { include: { permission: true } } } });
   }
 
-  async updateRole(id: string, data: { name?: string; description?: string; isActive?: boolean; dataScope?: DataScopeType; dataScopeValue?: string; permissions?: string[] }) {
+  async updateRole(id: string, data: { name?: string; code?: string; description?: string; isActive?: boolean; dataScope?: DataScopeType; dataScopeValue?: string; permissions?: string[] }) {
     const role = await this.prisma.role.findUnique({ where: { id } });
     if (!role) throw new BadRequestException('Role not found');
-    if (role.isSystem) {
-      if (data.name || data.description || data.dataScope || data.dataScopeValue || data.permissions) {
-        // allow status updates only for system roles
-      }
+    if (role.isSystem && data.code && data.code !== role.code) {
+      throw new BadRequestException('System role code cannot be changed');
     }
-    const updated = await this.prisma.role.update({ where: { id }, data: { name: data.name, description: data.description, isActive: data.isActive, dataScope: data.dataScope, dataScopeValue: data.dataScopeValue } });
+    if (data.code && data.code !== role.code) {
+      const existing = await this.prisma.role.findFirst({ where: { code: data.code, id: { not: id } } });
+      if (existing) throw new BadRequestException('Role code already exists');
+    }
+    const updated = await this.prisma.role.update({ where: { id }, data: { name: data.name, code: data.code, description: data.description, isActive: data.isActive, dataScope: data.dataScope, dataScopeValue: data.dataScopeValue } });
     if (data.permissions) {
       await this.prisma.rolePermission.deleteMany({ where: { roleId: id } });
-      const permissions = await this.prisma.permission.findMany({ where: { key: { in: data.permissions } } });
-      await this.prisma.$transaction(permissions.map((permission: { id: string }) => this.prisma.rolePermission.create({ data: { roleId: id, permissionId: permission.id } })));
+      const permissionIds = await this.resolvePermissionIds(data.permissions);
+      if (permissionIds.length) {
+        await this.prisma.$transaction(permissionIds.map((permissionId: string) => this.prisma.rolePermission.create({ data: { roleId: id, permissionId } })));
+      }
     }
     return updated;
   }
@@ -262,25 +327,49 @@ export class RbacService implements OnModuleInit {
     return this.prisma.user.findMany({ include: { userRoles: { include: { role: true } } }, orderBy: { createdAt: 'desc' } });
   }
 
-  async createUser(data: { username: string; email?: string | null; name: string; phone?: string | null; password: string; roles?: string[]; isActive?: boolean; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
+  async createUser(data: { username: string; email?: string | null; name: string; phone?: string | null; password: string; roles?: string[]; roleId?: string; isActive?: boolean; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ username: data.username }, ...(data.email ? [{ email: data.email }] : [])] } });
     if (existing) throw new BadRequestException('User already exists');
+    if (!data.password) throw new BadRequestException('Password is required');
     const passwordHash = await this.hashPassword(data.password);
-    const user = await this.prisma.user.create({ data: { username: data.username, email: data.email ?? 'placeholder@example.com', name: data.name, phone: data.phone ?? null, passwordHash, isActive: data.isActive ?? true, defaultDataScope: data.defaultDataScope ?? DataScopeType.SELF, defaultDataScopeValue: data.defaultDataScopeValue ?? null } });
+    const user = await this.prisma.user.create({ data: { username: data.username, email: data.email || null, name: data.name, phone: data.phone ?? null, passwordHash, isActive: data.isActive ?? true, defaultDataScope: data.defaultDataScope ?? DataScopeType.SELF, defaultDataScopeValue: data.defaultDataScopeValue ?? null } });
+    if (data.roleId) {
+      await this.prisma.userRole.create({ data: { userId: user.id, roleId: data.roleId } });
+    }
     if (data.roles?.length) {
       const roles = await this.prisma.role.findMany({ where: { code: { in: data.roles } } });
       await this.prisma.$transaction(roles.map((role: { id: string }) => this.prisma.userRole.create({ data: { userId: user.id, roleId: role.id } })));
     }
-    return user;
+    return this.prisma.user.findUnique({ where: { id: user.id }, include: { userRoles: { include: { role: true } } } });
   }
 
-  async updateUser(id: string, data: { name?: string; email?: string | null; phone?: string | null; isActive?: boolean; roleId?: string; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
+  async updateUser(id: string, data: { name?: string; email?: string | null; phone?: string | null; password?: string; isActive?: boolean; roleId?: string; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new BadRequestException('User not found');
-    const updated = await this.prisma.user.update({ where: { id }, data: { name: data.name, email: data.email ?? null, phone: data.phone ?? null, isActive: data.isActive, defaultDataScope: data.defaultDataScope, defaultDataScopeValue: data.defaultDataScopeValue } });
-    if (data.roleId) {
+    const passwordHash = data.password ? await this.hashPassword(data.password) : undefined;
+    const updateData: {
+      name?: string;
+      email?: string | null;
+      phone?: string | null;
+      passwordHash?: string;
+      isActive?: boolean;
+      defaultDataScope?: DataScopeType;
+      defaultDataScopeValue?: string | null;
+    } = {
+      name: data.name,
+      passwordHash,
+      isActive: data.isActive,
+      defaultDataScope: data.defaultDataScope,
+      defaultDataScopeValue: data.defaultDataScopeValue,
+    };
+    if (data.email !== undefined) updateData.email = data.email || null;
+    if (data.phone !== undefined) updateData.phone = data.phone || null;
+    const updated = await this.prisma.user.update({ where: { id }, data: updateData });
+    if (data.roleId !== undefined) {
       await this.prisma.userRole.deleteMany({ where: { userId: id } });
-      await this.prisma.userRole.create({ data: { userId: id, roleId: data.roleId } });
+      if (data.roleId) {
+        await this.prisma.userRole.create({ data: { userId: id, roleId: data.roleId } });
+      }
     }
     return updated;
   }
@@ -290,6 +379,7 @@ export class RbacService implements OnModuleInit {
     if (!user) throw new BadRequestException('User not found');
     if (user.username === 'admin') throw new BadRequestException('Cannot delete admin user');
     await this.prisma.userRole.deleteMany({ where: { userId: id } });
+    await this.prisma.passwordResetToken.deleteMany({ where: { userId: id } });
     await this.prisma.user.delete({ where: { id } });
     await this.logAction(null, 'delete', 'user', id, undefined, `User ${user.username} deleted`);
   }
@@ -310,7 +400,7 @@ export class RbacService implements OnModuleInit {
   async login(username: string, password: string) {
     const user = await this.validateCredentials(username, password);
     const userRoles = await this.prisma.userRole.findMany({ where: { userId: user.id }, include: { role: true } });
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = this.createAuthToken(user.id);
     return { 
       token, 
       user: { 

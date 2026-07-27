@@ -24,14 +24,6 @@ async function bootstrap() {
       timestamp: new Date().toISOString(),
     });
   });
-  app.use((req: any, _res: any, next: () => void) => {
-    const header = req.headers['x-user-id'];
-    const userId = Array.isArray(header) ? header[0] : header;
-    if (userId) {
-      req.user = { id: userId };
-    }
-    next();
-  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

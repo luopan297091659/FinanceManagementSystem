@@ -1,6 +1,6 @@
 <template>
   <!-- Login View -->
-  <LoginView v-if="!isAuthenticated" />
+  <LoginView v-if="!isAuthenticated" @authenticated="handleAuthenticated" />
 
   <!-- Main Application -->
   <div v-else class="app-shell" :style="shellStyle">
@@ -95,7 +95,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import LoginView from "./views/login.vue";
 import GisView from "./views/gis/index.vue";
 import ResourcesView from "./views/resources.vue";
@@ -157,28 +157,50 @@ const setTheme = (key) => {
   theme.value = key;
 };
 
-const checkAuth = async () => {
-  const token = localStorage.getItem('auth-token');
-  const user = localStorage.getItem('user');
-  if (token && user) {
-    try {
-      currentUser.value = JSON.parse(user);
-      isAuthenticated.value = true;
-    } catch (e) {
-      isAuthenticated.value = false;
-    }
-  }
-};
-
-const handleLogout = () => {
+const clearAuth = () => {
   localStorage.removeItem('auth-token');
   localStorage.removeItem('user');
   isAuthenticated.value = false;
   currentUser.value = null;
 };
 
+const checkAuth = async () => {
+  const token = localStorage.getItem('auth-token');
+  const user = localStorage.getItem('user');
+  if (!token) {
+    clearAuth();
+    return;
+  }
+
+  try {
+    const result = await api.getCurrentUser();
+    if (!result.user) {
+      clearAuth();
+      return;
+    }
+    currentUser.value = result.user || (user ? JSON.parse(user) : null);
+    isAuthenticated.value = true;
+  } catch (e) {
+    clearAuth();
+  }
+};
+
+const handleAuthenticated = (user) => {
+  currentUser.value = user;
+  isAuthenticated.value = true;
+};
+
+const handleLogout = () => {
+  clearAuth();
+};
+
 onMounted(() => {
+  window.addEventListener('auth-expired', clearAuth);
   checkAuth();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('auth-expired', clearAuth);
 });
 </script>
 

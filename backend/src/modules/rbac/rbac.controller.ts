@@ -29,6 +29,12 @@ export class RbacController {
     return this.rbacService.listRoles();
   }
 
+  @Get('permissions')
+  @RequirePermission('role:view')
+  async listPermissions() {
+    return this.rbacService.listPermissions();
+  }
+
   @Post('roles')
   @RequirePermission('role:create')
   async createRole(@Body() body: any) {

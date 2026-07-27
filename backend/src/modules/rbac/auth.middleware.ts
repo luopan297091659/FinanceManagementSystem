@@ -14,10 +14,8 @@ export class AuthMiddleware implements NestMiddleware {
 
     try {
       const token = authHeader.replace('Bearer ', '');
-      // TODO: In production, implement token verification and user lookup
-      // For now, we'll skip token verification as per the current implementation
-      // Store token in request for later use if needed
-      (req as any).authToken = token;
+      const user = await this.rbacService.verifyAuthToken(token);
+      (req as any).user = { id: user.id };
     } catch (error) {
       // Continue without authentication
     }
