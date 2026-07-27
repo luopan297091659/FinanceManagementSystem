@@ -162,9 +162,9 @@ const themes = [
 ];
 
 const palette = {
-  teal: { primary: "#0f766e", accent: "#14b8a6", surface: "#17212b" },
-  blue: { primary: "#2563eb", accent: "#38bdf8", surface: "#10233d" },
-  purple: { primary: "#7c3aed", accent: "#a78bfa", surface: "#20123f" },
+  teal: { primary: "#0f766e", accent: "#14b8a6", surface: "#f5fbfa" },
+  blue: { primary: "#2563eb", accent: "#38bdf8", surface: "#f5f9ff" },
+  purple: { primary: "#7c3aed", accent: "#a78bfa", surface: "#faf7ff" },
 };
 
 const shellStyle = computed(() => ({
@@ -657,10 +657,16 @@ onBeforeUnmount(() => {
 
 .app-shell {
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  --line: #d8e1ea;
+  --muted: #64748b;
+  --surface: #ffffff;
+  --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
   width: 100%;
   min-width: 0;
   height: 100dvh;
   overflow: hidden;
+  background: #edf2f6;
+  color: #1f2937;
 }
 
 .sidebar {
@@ -669,6 +675,9 @@ onBeforeUnmount(() => {
   padding: 16px 12px;
   overflow: hidden;
   gap: 14px;
+  border-right-color: #d8e1ea;
+  color: #1f2937;
+  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.04);
 }
 
 .sidebar-main {
@@ -689,6 +698,10 @@ onBeforeUnmount(() => {
   margin-bottom: 14px;
 }
 
+.brand strong {
+  color: #1f2937;
+}
+
 .brand-text,
 .nav-label,
 .sidebar-footer {
@@ -701,8 +714,8 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #e5eef7;
+  background: #ffffff;
+  color: #64748b;
   font-size: 18px;
 }
 
@@ -713,9 +726,21 @@ onBeforeUnmount(() => {
 .nav-item {
   width: 100%;
   min-height: 40px;
+  color: #475569;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.nav-item:hover {
+  background: #e8f7f4;
+  color: var(--primary);
+}
+
+.nav-item.active {
+  color: var(--primary);
+  border-left-color: var(--primary);
+  background: #dff4f1;
 }
 
 .sidebar-collapsed .brand-text,
@@ -742,6 +767,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 24px 28px;
+  background: #edf2f6;
 }
 
 .workspace > * {
@@ -753,6 +779,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 16px;
   padding: 20px 0;
+  border-bottom-color: #d8e1ea;
 }
 
 .topbar > div:first-child {
@@ -774,12 +801,13 @@ onBeforeUnmount(() => {
 
 .locale-button {
   background: transparent;
-  color: var(--muted);
+  color: #64748b;
 }
 
 .ghost-button {
-  background: rgba(255, 255, 255, 0.04);
-  color: #e5eef7;
+  border-color: #d8e1ea;
+  background: #ffffff;
+  color: #1f2937;
 }
 
 .topbar-user {
@@ -788,7 +816,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 40px;
   padding-left: 12px;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid #d8e1ea;
 }
 
 .topbar-user .user-info {
@@ -802,9 +830,36 @@ onBeforeUnmount(() => {
 .sidebar-card,
 .theme-card,
 .metric-card {
-  border-color: rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
+}
+
+.sidebar-card,
+.theme-card {
+  border-color: #d8e1ea;
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.sidebar-card p,
+.theme-card p {
+  color: #64748b;
+}
+
+.metric-card {
+  border-color: #d8e1ea;
+  background: #ffffff;
+  color: #1f2937;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.metric-card p,
+.metric-label,
+.subtle {
+  color: #64748b;
+}
+
+.topbar > div:first-child h1 {
+  color: #1f2937;
 }
 
 .overview-grid {

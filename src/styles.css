@@ -1233,14 +1233,14 @@ body,
 }
 
 :root {
-  color-scheme: dark;
-  --bg: #0f172a;
-  --surface: #151f2c;
-  --surface-2: #1b2836;
-  --text: #e5eef7;
-  --muted: #aab8c6;
-  --line: rgba(255, 255, 255, 0.1);
-  --shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+  color-scheme: light;
+  --bg: #edf2f6;
+  --surface: #ffffff;
+  --surface-2: #f3f7fa;
+  --text: #1f2937;
+  --muted: #64748b;
+  --line: #d8e1ea;
+  --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
 }
 
 .page-shell,
@@ -1305,13 +1305,13 @@ textarea,
 .search-input {
   min-width: 0;
   border-color: var(--line);
-  background: #0f172a;
+  background: #ffffff;
   color: var(--text);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #778699;
+  color: #94a3b8;
 }
 
 .primary-button,
@@ -1341,7 +1341,7 @@ textarea::placeholder {
 .ghost-button,
 .gis-tool-button {
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  background: #ffffff;
   color: var(--text);
 }
 
@@ -1403,13 +1403,13 @@ textarea::placeholder {
 .data-table tbody tr:hover,
 .gis-result-item:hover,
 .gis-result-item.selected {
-  background: #182635;
+  background: #eef8f6;
 }
 
 .column-panel,
 .upload-box {
   border-color: var(--line);
-  background: var(--surface-2);
+  background: #ffffff;
   color: var(--text);
 }
 
