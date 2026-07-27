@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { Request, Response } from 'express';
 import { join } from 'path';
 import { AppModule } from './app.module';
 
@@ -31,15 +32,29 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
-  app.useStaticAssets(join(projectRoot, 'dist'), { prefix: '/' });
+  app.useStaticAssets(join(projectRoot, 'dist', 'assets'), {
+    prefix: '/assets',
+    maxAge: '1y',
+    immutable: true,
+  });
+  app.useStaticAssets(join(projectRoot, 'dist'), {
+    prefix: '/',
+    index: false,
+    setHeaders: (response: Response, filePath: string) => {
+      if (filePath.endsWith('index.html')) {
+        response.setHeader('Cache-Control', 'no-store');
+      }
+    },
+  });
   app.useStaticAssets(join(projectRoot, 'src'), { prefix: '/src' });
 
-  const express = app.getHttpAdapter().getInstance() as {
-    get(path: string | RegExp, handler: (request: unknown, response: { sendFile(path: string): void }) => void): void;
-  };
-  express.get('/', (_request, response) => {
+  const express = app.getHttpAdapter().getInstance();
+  const sendIndex = (_request: Request, response: Response) => {
+    response.setHeader('Cache-Control', 'no-store');
     response.sendFile(join(projectRoot, 'dist/index.html'));
-  });
+  };
+  express.get('/', sendIndex);
+  express.get(/^\/(?!api\/v1\/|assets\/|src\/).*/, sendIndex);
 
   await app.listen(config.get<number>('PORT') ?? 8006);
 }

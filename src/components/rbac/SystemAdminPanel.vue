@@ -245,7 +245,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { locale, messages } from '../../i18n.js';
 import { api } from '../../services/api.js';
 
@@ -254,9 +254,13 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  initialTab: {
+    type: String,
+    default: 'users',
+  },
 });
 
-const activeTab = ref('users');
+const activeTab = ref(props.initialTab);
 const users = ref([]);
 const roles = ref([]);
 const logs = ref([]);
@@ -488,8 +492,16 @@ const sendTestEmail = async () => {
 };
 
 onMounted(() => {
-  if (tabs.value[0]) activeTab.value = tabs.value[0].key;
+  if (!tabs.value.some((tab) => tab.key === activeTab.value) && tabs.value[0]) {
+    activeTab.value = tabs.value[0].key;
+  }
   loadData();
+});
+
+watch(() => props.initialTab, (tab) => {
+  if (tabs.value.some((item) => item.key === tab)) {
+    activeTab.value = tab;
+  }
 });
 </script>
 

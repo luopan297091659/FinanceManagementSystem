@@ -17,9 +17,9 @@
           v-for="item in visibleNavItems"
           :key="item.key"
           class="nav-item"
-          :class="{ active: activeView === item.key }"
+          :class="{ active: activeNavKey === item.key }"
           type="button"
-          @click="activeView = item.key"
+          @click="setActiveNavItem(item)"
         >
           {{ item.label }}
         </button>
@@ -60,8 +60,8 @@
             <button class="locale-button" :class="{ active: locale === 'ja' }" type="button" @click="setLocale('ja')">日本語</button>
             <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">中文</button>
           </div>
-          <button class="ghost-button" type="button" @click="activeView = 'gis'">{{ dictionary.openGis }}</button>
-          <button class="primary-button" type="button" @click="activeView = 'overview'">{{ dictionary.overview }}</button>
+          <button class="ghost-button" type="button" @click="setActiveNavItem({ key: 'gis' })">{{ dictionary.openGis }}</button>
+          <button class="primary-button" type="button" @click="setActiveNavItem({ key: 'overview' })">{{ dictionary.overview }}</button>
         </div>
       </header>
 
@@ -89,7 +89,7 @@
       <FinanceView v-else-if="activeView === 'finance'" />
       <OcrView v-else-if="activeView === 'ocr'" />
       <KnowledgeView v-else-if="activeView === 'knowledge'" />
-      <SystemAdminPanel v-else-if="activeView === 'system'" :permissions="currentPermissions" />
+      <SystemAdminPanel v-else-if="activeView === 'system'" :permissions="currentPermissions" :initial-tab="activeSystemTab" />
     </main>
   </div>
 </template>
@@ -108,6 +108,8 @@ import { useI18n } from "./i18n";
 import { api } from "./services/api";
 
 const activeView = ref("gis");
+const activeNavKey = ref("gis");
+const activeSystemTab = ref("users");
 const theme = ref("teal");
 const isAuthenticated = ref(false);
 const currentUser = ref(null);
@@ -122,7 +124,10 @@ const navItems = computed(() => [
   { key: "finance", label: dictionary.value.finance },
   { key: "ocr", label: dictionary.value.ocr },
   { key: "knowledge", label: dictionary.value.knowledge },
-  { key: "system", label: dictionary.value.systemAdmin },
+  { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, permissions: ["user:view"] },
+  { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, permissions: ["role:view"] },
+  { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, permissions: ["audit_log:view"] },
+  { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, permissions: ["setting:email"] },
 ]);
 
 const hasAnyPermission = (permissions) => {
@@ -130,9 +135,17 @@ const hasAnyPermission = (permissions) => {
 };
 
 const visibleNavItems = computed(() => navItems.value.filter((item) => {
-  if (item.key !== "system") return true;
-  return hasAnyPermission(["user:view", "role:view", "audit_log:view"]);
+  if (!item.permissions) return true;
+  return hasAnyPermission(item.permissions);
 }));
+
+const setActiveNavItem = (item) => {
+  activeNavKey.value = item.key;
+  activeView.value = item.view || item.key;
+  if (item.tab) {
+    activeSystemTab.value = item.tab;
+  }
+};
 
 const themes = [
   { key: "teal", label: "青绿", color: "#0f766e" },
@@ -156,7 +169,8 @@ const sidebarStyle = computed(() => ({ background: palette[theme.value].surface 
 const brandStyle = computed(() => ({ background: palette[theme.value].primary }));
 
 const currentTitle = computed(() => {
-  return dictionary.value[activeView.value] || dictionary.value.overview;
+  const current = visibleNavItems.value.find((item) => item.key === activeNavKey.value);
+  return current?.label || dictionary.value[activeView.value] || dictionary.value.overview;
 });
 
 const currentSubtitle = computed(() => {
@@ -176,6 +190,7 @@ const clearAuth = () => {
   currentPermissions.value = [];
   if (activeView.value === "system") {
     activeView.value = "gis";
+    activeNavKey.value = "gis";
   }
 };
 

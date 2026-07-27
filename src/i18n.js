@@ -19,6 +19,10 @@ export const messages = {
     ocr: "AI 对账中心",
     knowledge: "AI ナレッジ",
     systemAdmin: "システム管理",
+    systemUsers: "ユーザー管理",
+    systemRoles: "権限管理",
+    systemLogs: "監査ログ",
+    systemEmail: "メール設定",
     subtitles: {
       overview: "主要な運営指標、入出金、異常状況をまとめて確認します。",
       gis: "地図、検索、レイヤー、リスク状態を統合して運営状況を可視化します。",
@@ -54,7 +58,7 @@ export const messages = {
       resetFailed: "リセットに失敗しました",
       resetError: "リセットエラーが発生しました",
     },
-    systemAdmin: {
+    system: {
       users: "ユーザー",
       roles: "ロール",
       auditLogs: "監査ログ",
@@ -157,6 +161,10 @@ export const messages = {
     ocr: "AI 对账中心",
     knowledge: "AI 知识库",
     systemAdmin: "系统管理",
+    systemUsers: "用户管理",
+    systemRoles: "权限管理",
+    systemLogs: "审计日志",
+    systemEmail: "邮箱配置",
     subtitles: {
       overview: "汇总经营指标、出入金与异常状态。",
       gis: "整合地图、搜索、图层与风险状态，提供运营视图。",
@@ -192,7 +200,7 @@ export const messages = {
       resetFailed: "重置失败",
       resetError: "重置出错",
     },
-    systemAdmin: {
+    system: {
       users: "用户",
       roles: "角色",
       auditLogs: "审计日志",

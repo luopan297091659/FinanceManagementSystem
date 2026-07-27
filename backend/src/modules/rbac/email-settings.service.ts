@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import * as nodemailer from 'nodemailer';
 
 const EMAIL_SETTINGS_KEY = 'email_settings';
 const MASKED_PASSWORD = '********';
+const nodemailer = require('nodemailer');
 
 type EmailSettings = {
   smtp_host: string;
