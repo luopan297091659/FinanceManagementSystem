@@ -20,6 +20,16 @@ async function request(path, { method = 'GET', body } = {}) {
   const response = await fetch(`${API_BASE}${path}`, options);
   if (!response.ok) {
     const text = await response.text();
+    let message = text || 'request failed';
+    try {
+      const payload = JSON.parse(text);
+      message = payload.message || payload.error || message;
+      if (Array.isArray(message)) {
+        message = message.join('; ');
+      }
+    } catch (e) {
+      // Keep the raw text when the server did not return JSON.
+    }
     if (response.status === 401) {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('auth-token');
@@ -29,7 +39,7 @@ async function request(path, { method = 'GET', body } = {}) {
         window.dispatchEvent(new Event('auth-expired'));
       }
     }
-    throw new Error(text || 'request failed');
+    throw new Error(message);
   }
 
   if (response.status === 204) return null;

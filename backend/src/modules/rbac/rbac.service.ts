@@ -390,6 +390,9 @@ export class RbacService implements OnModuleInit {
   }
 
   async validateCredentials(username: string, password: string) {
+    if (!username || !password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
     const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
     const passwordHash = await this.hashPassword(password);

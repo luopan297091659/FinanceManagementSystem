@@ -109,7 +109,7 @@ const handleLogin = async () => {
   error.value = '';
   loading.value = true;
   try {
-    const result = await api.login(form.username, form.password);
+    const result = await api.login(form.value.username.trim(), form.value.password);
     if (result.token) {
       localStorage.setItem('auth-token', result.token);
       localStorage.setItem('user', JSON.stringify(result.user));
@@ -158,7 +158,7 @@ watch(locale, (newVal) => {
   padding: 3rem;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  max-width: 400px;
+  max-width: 440px;
   width: 100%;
 }
 
@@ -184,7 +184,10 @@ watch(locale, (newVal) => {
 .login-header h1 {
   margin: 0.5rem 0;
   color: #333;
-  font-size: 24px;
+  font-size: 23px;
+  line-height: 1.35;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 
 .subtitle {
@@ -276,6 +279,8 @@ watch(locale, (newVal) => {
   font-size: 14px;
   margin-bottom: 1rem;
   border-left: 4px solid #c33;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .login-footer {
