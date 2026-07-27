@@ -16,7 +16,7 @@
     <div v-if="activeTab === 'users'" class="tab-content">
       <div class="content-header">
         <h3>{{ dict.users }}</h3>
-        <button @click="openNewUser" class="primary-button">{{ dict.newUser }}</button>
+        <button v-if="can('user:create')" @click="openNewUser" class="primary-button">{{ dict.newUser }}</button>
       </div>
       <div class="table-wrapper">
         <table class="data-table">
@@ -42,8 +42,8 @@
                 </span>
               </td>
               <td class="actions-cell">
-                <button @click="editUser(user)" class="action-button edit">{{ dict.edit }}</button>
-                <button @click="deleteUser(user.id)" class="action-button delete">{{ dict.delete }}</button>
+                <button v-if="can('user:update')" @click="editUser(user)" class="action-button edit">{{ dict.edit }}</button>
+                <button v-if="can('user:delete') && user.username !== 'admin'" @click="deleteUser(user.id)" class="action-button delete">{{ dict.delete }}</button>
               </td>
             </tr>
           </tbody>
@@ -55,7 +55,7 @@
     <div v-if="activeTab === 'roles'" class="tab-content">
       <div class="content-header">
         <h3>{{ dict.roles }}</h3>
-        <button @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
+        <button v-if="can('role:create')" @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
       </div>
       <div class="role-grid">
         <div v-for="role in roles" :key="role.id" class="role-card">
@@ -73,8 +73,8 @@
             </div>
           </div>
           <div class="role-actions">
-            <button @click="editRole(role)" class="action-button edit">{{ dict.edit }}</button>
-            <button v-if="!role.isSystem" @click="deleteRole(role.id)" class="action-button delete">
+            <button v-if="can('role:update')" @click="editRole(role)" class="action-button edit">{{ dict.edit }}</button>
+            <button v-if="can('role:delete') && !role.isSystem" @click="deleteRole(role.id)" class="action-button delete">
               {{ dict.delete }}
             </button>
           </div>
@@ -111,6 +111,60 @@
         </table>
       </div>
     </div>
+
+    <!-- Email Settings Tab -->
+    <div v-if="activeTab === 'email'" class="tab-content">
+      <div class="content-header">
+        <h3>{{ dict.emailSettings }}</h3>
+        <button @click="loadEmailSettings" class="secondary-button">{{ dict.refresh }}</button>
+      </div>
+      <div class="settings-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>{{ dict.smtpHost }}</label>
+            <input v-model="emailForm.smtp_host" type="text" placeholder="smtp.aliyun.com" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.smtpPort }}</label>
+            <input v-model.number="emailForm.smtp_port" type="number" min="1" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.smtpUser }}</label>
+            <input v-model="emailForm.smtp_user" type="text" placeholder="name@example.com" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.smtpPassword }}</label>
+            <input v-model="emailForm.smtp_pass" type="password" :placeholder="dict.leaveBlank" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.fromName }}</label>
+            <input v-model="emailForm.from_name" type="text" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.dailyLimit }}</label>
+            <input v-model.number="emailForm.daily_limit" type="number" min="1" />
+          </div>
+        </div>
+        <label class="status-checkbox">
+          <input v-model="emailForm.smtp_secure" type="checkbox" />
+          {{ dict.smtpSecure }}
+        </label>
+        <div class="email-stats">{{ dict.sentToday }}: {{ sentToday }}</div>
+        <div class="modal-actions">
+          <button @click="saveEmailSettings" class="modal-button primary">{{ dict.save }}</button>
+        </div>
+      </div>
+
+      <div class="settings-form test-form">
+        <div class="form-group">
+          <label>{{ dict.testEmail }}</label>
+          <input v-model="testEmail" type="email" placeholder="name@example.com" />
+        </div>
+        <button @click="sendTestEmail" class="secondary-button">{{ dict.sendTest }}</button>
+      </div>
+    </div>
+
+    <div v-if="notice" :class="['notice', notice.type]">{{ notice.message }}</div>
 
     <!-- User Modal -->
     <div v-if="showUserModal" class="modal-overlay" @click="closeUserModal">
@@ -195,11 +249,21 @@ import { ref, computed, onMounted } from 'vue';
 import { locale, messages } from '../../i18n.js';
 import { api } from '../../services/api.js';
 
+const props = defineProps({
+  permissions: {
+    type: Array,
+    default: () => [],
+  },
+});
+
 const activeTab = ref('users');
 const users = ref([]);
 const roles = ref([]);
 const logs = ref([]);
 const allPermissions = ref([]);
+const notice = ref(null);
+const sentToday = ref(0);
+const testEmail = ref('');
 
 const showUserModal = ref(false);
 const showRoleModal = ref(false);
@@ -208,46 +272,79 @@ const editingRole = ref(null);
 
 const userForm = ref({ username: '', name: '', email: '', password: '', roleId: '', isActive: true });
 const roleForm = ref({ name: '', code: '', description: '', permissions: [] });
+const emailForm = ref({
+  smtp_host: '',
+  smtp_port: 465,
+  smtp_user: '',
+  smtp_pass: '',
+  smtp_secure: true,
+  from_name: '',
+  daily_limit: 200,
+});
 
 const dict = computed(() => messages[locale.value].system || messages[locale.value].systemAdmin);
 
+const can = (permission) => props.permissions.includes(permission);
+
 const tabs = computed(() => [
-  { key: 'users', label: dict.value.users },
-  { key: 'roles', label: dict.value.roles },
-  { key: 'logs', label: dict.value.auditLogs },
-]);
+  { key: 'users', label: dict.value.users, permission: 'user:view' },
+  { key: 'roles', label: dict.value.roles, permission: 'role:view' },
+  { key: 'logs', label: dict.value.auditLogs, permission: 'audit_log:view' },
+  { key: 'email', label: dict.value.emailSettings, permission: 'setting:email' },
+].filter((tab) => can(tab.permission)));
+
+const showNotice = (message, type = 'error') => {
+  notice.value = { message, type };
+};
 
 const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'ja-JP');
 };
 
 const loadUsers = async () => {
+  if (!can('user:view')) return;
   try {
     users.value = await api.listUsers();
   } catch (e) {
-    console.error('Failed to load users:', e);
+    showNotice(e.message || 'Failed to load users');
   }
 };
 
 const loadRoles = async () => {
+  if (!can('role:view')) return;
   try {
     roles.value = await api.listRoles();
     allPermissions.value = await api.listPermissions();
   } catch (e) {
-    console.error('Failed to load roles:', e);
+    showNotice(e.message || 'Failed to load roles');
   }
 };
 
 const loadLogs = async () => {
+  if (!can('audit_log:view')) return;
   try {
     logs.value = await api.listAuditLogs();
   } catch (e) {
-    console.error('Failed to load logs:', e);
+    showNotice(e.message || 'Failed to load logs');
+  }
+};
+
+const loadEmailSettings = async () => {
+  if (!can('setting:email')) return;
+  try {
+    const result = await api.getEmailSettings();
+    emailForm.value = {
+      ...emailForm.value,
+      ...(result.email_settings || {}),
+    };
+    sentToday.value = result.sent_today || 0;
+  } catch (e) {
+    showNotice(e.message || 'Failed to load email settings');
   }
 };
 
 const loadData = async () => {
-  await Promise.all([loadUsers(), loadRoles(), loadLogs()]);
+  await Promise.all([loadUsers(), loadRoles(), loadLogs(), loadEmailSettings()]);
 };
 
 const resetUserForm = () => {
@@ -302,8 +399,9 @@ const saveUser = async () => {
     }
     closeUserModal();
     await loadUsers();
+    showNotice(dict.value.saveSuccess || 'Saved', 'success');
   } catch (e) {
-    console.error('Failed to save user:', e);
+    showNotice(e.message || 'Failed to save user');
   }
 };
 
@@ -312,8 +410,9 @@ const deleteUser = async (id) => {
     try {
       await api.deleteUser(id);
       await loadUsers();
+      showNotice(dict.value.deleteSuccess || 'Deleted', 'success');
     } catch (e) {
-      console.error('Failed to delete user:', e);
+      showNotice(e.message || 'Failed to delete user');
     }
   }
 };
@@ -338,8 +437,9 @@ const saveRole = async () => {
     }
     closeRoleModal();
     await loadRoles();
+    showNotice(dict.value.saveSuccess || 'Saved', 'success');
   } catch (e) {
-    console.error('Failed to save role:', e);
+    showNotice(e.message || 'Failed to save role');
   }
 };
 
@@ -348,8 +448,9 @@ const deleteRole = async (id) => {
     try {
       await api.deleteRole(id);
       await loadRoles();
+      showNotice(dict.value.deleteSuccess || 'Deleted', 'success');
     } catch (e) {
-      console.error('Failed to delete role:', e);
+      showNotice(e.message || 'Failed to delete role');
     }
   }
 };
@@ -364,7 +465,32 @@ const togglePermission = (permId, checked) => {
   }
 };
 
-onMounted(loadData);
+const saveEmailSettings = async () => {
+  try {
+    const result = await api.saveEmailSettings(emailForm.value);
+    emailForm.value = {
+      ...emailForm.value,
+      ...(result.email_settings || {}),
+    };
+    showNotice(dict.value.saveSuccess || 'Saved', 'success');
+  } catch (e) {
+    showNotice(e.message || 'Failed to save email settings');
+  }
+};
+
+const sendTestEmail = async () => {
+  try {
+    await api.testEmailSettings(testEmail.value);
+    showNotice(dict.value.testSent || 'Test email sent', 'success');
+  } catch (e) {
+    showNotice(e.message || 'Failed to send test email');
+  }
+};
+
+onMounted(() => {
+  if (tabs.value[0]) activeTab.value = tabs.value[0].key;
+  loadData();
+});
 </script>
 
 <style scoped>
@@ -416,6 +542,52 @@ onMounted(loadData);
 .content-header h3 {
   margin: 0;
   font-size: 16px;
+}
+
+.notice {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.notice.success {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border-color: #a5d6a7;
+}
+
+.notice.error {
+  background: #ffebee;
+  color: #b71c1c;
+  border-color: #ef9a9a;
+}
+
+.settings-form {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.email-stats {
+  margin-top: 12px;
+  color: #666;
+  font-size: 13px;
+}
+
+.test-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
 }
 
 .table-wrapper {
@@ -740,6 +912,11 @@ onMounted(loadData);
   }
   
   .permissions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid,
+  .test-form {
     grid-template-columns: 1fr;
   }
 }

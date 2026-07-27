@@ -14,7 +14,7 @@
 
       <nav class="nav" :aria-label="dictionary.appName">
         <button
-          v-for="item in navItems"
+          v-for="item in visibleNavItems"
           :key="item.key"
           class="nav-item"
           :class="{ active: activeView === item.key }"
@@ -89,7 +89,7 @@
       <FinanceView v-else-if="activeView === 'finance'" />
       <OcrView v-else-if="activeView === 'ocr'" />
       <KnowledgeView v-else-if="activeView === 'knowledge'" />
-      <SystemAdminPanel v-else-if="activeView === 'system'" />
+      <SystemAdminPanel v-else-if="activeView === 'system'" :permissions="currentPermissions" />
     </main>
   </div>
 </template>
@@ -111,6 +111,7 @@ const activeView = ref("gis");
 const theme = ref("teal");
 const isAuthenticated = ref(false);
 const currentUser = ref(null);
+const currentPermissions = ref([]);
 const { locale, dictionary, setLocale } = useI18n();
 
 const navItems = computed(() => [
@@ -123,6 +124,15 @@ const navItems = computed(() => [
   { key: "knowledge", label: dictionary.value.knowledge },
   { key: "system", label: dictionary.value.systemAdmin },
 ]);
+
+const hasAnyPermission = (permissions) => {
+  return permissions.some((permission) => currentPermissions.value.includes(permission));
+};
+
+const visibleNavItems = computed(() => navItems.value.filter((item) => {
+  if (item.key !== "system") return true;
+  return hasAnyPermission(["user:view", "role:view", "audit_log:view"]);
+}));
 
 const themes = [
   { key: "teal", label: "青绿", color: "#0f766e" },
@@ -160,8 +170,13 @@ const setTheme = (key) => {
 const clearAuth = () => {
   localStorage.removeItem('auth-token');
   localStorage.removeItem('user');
+  localStorage.removeItem('permissions');
   isAuthenticated.value = false;
   currentUser.value = null;
+  currentPermissions.value = [];
+  if (activeView.value === "system") {
+    activeView.value = "gis";
+  }
 };
 
 const checkAuth = async () => {
@@ -179,14 +194,19 @@ const checkAuth = async () => {
       return;
     }
     currentUser.value = result.user || (user ? JSON.parse(user) : null);
+    currentPermissions.value = result.permissions || [];
     isAuthenticated.value = true;
+    localStorage.setItem('permissions', JSON.stringify(currentPermissions.value));
   } catch (e) {
     clearAuth();
   }
 };
 
-const handleAuthenticated = (user) => {
+const handleAuthenticated = (payload) => {
+  const user = payload?.user || payload;
   currentUser.value = user;
+  currentPermissions.value = payload?.permissions || [];
+  localStorage.setItem('permissions', JSON.stringify(currentPermissions.value));
   isAuthenticated.value = true;
 };
 

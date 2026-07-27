@@ -107,6 +107,18 @@ export const api = {
     return request('/rbac/audit-logs');
   },
 
+  async getEmailSettings() {
+    return request('/rbac/email-settings');
+  },
+
+  async saveEmailSettings(payload) {
+    return request('/rbac/email-settings', { method: 'PUT', body: payload });
+  },
+
+  async testEmailSettings(to) {
+    return request('/rbac/email-settings/test', { method: 'POST', body: { to } });
+  },
+
   // Existing APIs
   async bootstrap() {
     return request('/bootstrap');

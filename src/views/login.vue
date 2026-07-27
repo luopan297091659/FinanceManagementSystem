@@ -118,7 +118,8 @@ const handleLogin = async () => {
     if (result.token) {
       localStorage.setItem('auth-token', result.token);
       localStorage.setItem('user', JSON.stringify(result.user));
-      emit('authenticated', result.user);
+      localStorage.setItem('permissions', JSON.stringify(result.permissions || []));
+      emit('authenticated', { user: result.user, permissions: result.permissions || [] });
     } else {
       error.value = dict.value.loginFailed;
     }

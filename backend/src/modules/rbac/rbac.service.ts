@@ -132,6 +132,7 @@ export class RbacService implements OnModuleInit {
       { key: 'reconciliation:confirm', module: 'reconciliation', description: '确认对账' },
       { key: 'ocr:execute', module: 'ocr', description: '执行OCR' },
       { key: 'audit_log:view', module: 'audit', description: '查看日志' },
+      { key: 'setting:email', module: 'setting', description: '管理邮件配置' },
     ];
     for (const permission of permissions) {
       await this.prisma.permission.upsert({
@@ -329,7 +330,7 @@ export class RbacService implements OnModuleInit {
       const existing = await this.prisma.role.findFirst({ where: { code: data.code, id: { not: id } } });
       if (existing) throw new BadRequestException('Role code already exists');
     }
-    const updated = await this.prisma.role.update({ where: { id }, data: { name: data.name, code: data.code, description: data.description, isActive: data.isActive, dataScope: data.dataScope, dataScopeValue: data.dataScopeValue } });
+    await this.prisma.role.update({ where: { id }, data: { name: data.name, code: data.code, description: data.description, isActive: data.isActive, dataScope: data.dataScope, dataScopeValue: data.dataScopeValue } });
     if (data.permissions) {
       await this.prisma.rolePermission.deleteMany({ where: { roleId: id } });
       const permissionIds = await this.resolvePermissionIds(data.permissions);
@@ -337,7 +338,7 @@ export class RbacService implements OnModuleInit {
         await this.prisma.$transaction(permissionIds.map((permissionId: string) => this.prisma.rolePermission.create({ data: { roleId: id, permissionId } })));
       }
     }
-    return updated;
+    return this.prisma.role.findUnique({ where: { id }, include: { rolePermissions: { include: { permission: true } } } });
   }
 
   async deleteRole(id: string) {
@@ -390,24 +391,25 @@ export class RbacService implements OnModuleInit {
     };
     if (data.email !== undefined) updateData.email = data.email || null;
     if (data.phone !== undefined) updateData.phone = data.phone || null;
-    const updated = await this.prisma.user.update({ where: { id }, data: updateData });
+    await this.prisma.user.update({ where: { id }, data: updateData });
     if (data.roleId !== undefined) {
       await this.prisma.userRole.deleteMany({ where: { userId: id } });
       if (data.roleId) {
         await this.prisma.userRole.create({ data: { userId: id, roleId: data.roleId } });
       }
     }
-    return updated;
+    return this.prisma.user.findUnique({ where: { id }, include: { userRoles: { include: { role: true } } } });
   }
 
-  async deleteUser(id: string) {
+  async deleteUser(id: string, actorUserId?: string | null, ip?: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new BadRequestException('User not found');
     if (user.username === 'admin') throw new BadRequestException('Cannot delete admin user');
+    if (actorUserId === id) throw new BadRequestException('Cannot delete yourself');
     await this.prisma.userRole.deleteMany({ where: { userId: id } });
     await this.prisma.passwordResetToken.deleteMany({ where: { userId: id } });
     await this.prisma.user.delete({ where: { id } });
-    await this.logAction(null, 'delete', 'user', id, undefined, `User ${user.username} deleted`);
+    await this.logAction(actorUserId ?? null, 'delete', 'user', id, ip, `User ${user.username} deleted`);
   }
 
   async resetPassword(userId: string, newPassword: string) {
