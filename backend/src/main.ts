@@ -16,6 +16,14 @@ async function bootstrap() {
     credentials: true,
   });
   app.setGlobalPrefix('api/v1');
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('/api/v1/health', (_req: any, res: any) => {
+    res.json({
+      status: 'ok',
+      service: 'finance-management-backend',
+      timestamp: new Date().toISOString(),
+    });
+  });
   app.use((req: any, _res: any, next: () => void) => {
     const header = req.headers['x-user-id'];
     const userId = Array.isArray(header) ? header[0] : header;

@@ -8,7 +8,11 @@ export class RbacService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
-    await this.initializeDefaults();
+    try {
+      await this.initializeDefaults();
+    } catch (error) {
+      console.warn('[RbacService] Failed to initialize defaults:', error);
+    }
   }
 
   async getCurrentUser(userId: string) {
@@ -69,6 +73,10 @@ export class RbacService implements OnModuleInit {
   }
 
   async initializeDefaults() {
+    if (!process.env.DATABASE_URL) {
+      return;
+    }
+
     const existing = await this.prisma.role.findMany({});
     const roles = await this.getDefaultRoles();
     const createList = [] as Array<{ name: string; code: string; description?: string | null; isSystem: boolean; dataScope: DataScopeType }>;
