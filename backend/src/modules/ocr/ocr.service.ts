@@ -55,7 +55,7 @@ export class OcrService {
     }
 
     const state = payload?.status === 'SUCCESS' ? 'COMPLETED' : payload?.status === 'FAILED' ? 'FAILED' : 'PROCESSING';
-    const reviewStatus = payload?.results?.some((item) => item.review_status === '需人工确认' || item.reviewStatus === 'REVIEW_REQUIRED')
+    const reviewStatus = payload?.results?.some((item: any) => item.review_status === '需人工确认' || item.reviewStatus === 'REVIEW_REQUIRED')
       ? 'REVIEW_REQUIRED'
       : 'COMPLETED';
 

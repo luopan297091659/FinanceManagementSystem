@@ -75,6 +75,7 @@
       <FinanceView v-else-if="activeView === 'finance'" />
       <OcrView v-else-if="activeView === 'ocr'" />
       <KnowledgeView v-else-if="activeView === 'knowledge'" />
+      <SystemAdminPanel v-else-if="activeView === 'system'" />
     </main>
   </div>
 </template>
@@ -87,6 +88,7 @@ import CustomersView from "./views/customers.vue";
 import FinanceView from "./views/finance.vue";
 import OcrView from "./views/ocr.vue";
 import KnowledgeView from "./views/knowledge.vue";
+import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
 import { useI18n } from "./i18n";
 
 const activeView = ref("gis");
@@ -100,6 +102,7 @@ const navItems = computed(() => [
   { key: "finance", label: dictionary.value.finance },
   { key: "ocr", label: dictionary.value.ocr },
   { key: "knowledge", label: dictionary.value.knowledge },
+  { key: "system", label: "系统管理" },
 ]);
 const themes = [
   { key: "teal", label: "青绿", color: "#0f766e" },

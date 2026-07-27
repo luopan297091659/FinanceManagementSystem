@@ -3,18 +3,18 @@ import { ArrayNotEmpty, IsArray, IsNotEmpty, IsString, IsUrl } from 'class-valid
 export class CreateOcrTaskDto {
   @IsString()
   @IsNotEmpty()
-  taskName: string;
+  taskName!: string;
 
   @IsUrl()
   @IsNotEmpty()
-  webhookUrl: string;
+  webhookUrl!: string;
 
   @IsUrl()
   @IsNotEmpty()
-  callbackUrl: string;
+  callbackUrl!: string;
 
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
-  fileNames: string[];
+  fileNames!: string[];
 }

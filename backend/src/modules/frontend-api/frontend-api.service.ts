@@ -236,7 +236,7 @@ export class FrontendApiService {
         confirmationStatus: transaction.confirmationStatus,
         totalAmount: decimalToString(transaction.totalAmount),
         note: transaction.note,
-        details: transaction.details.map((detail) => ({
+        details: transaction.details.map((detail: any) => ({
           feeItemId: detail.feeItemId,
           value:
             decimalToString(detail.valueMoney) ??

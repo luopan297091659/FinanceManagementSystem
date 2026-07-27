@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { RequirePermission } from '../rbac/permissions.decorator';
 import { CreateBindingDto } from './dto/create-binding.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
@@ -22,16 +23,19 @@ export class FrontendApiController {
   }
 
   @Post('rooms')
+  @RequirePermission('property:create')
   createRoom(@Body() dto: CreateRoomDto) {
     return this.frontendApi.createRoom(dto);
   }
 
   @Put('rooms/:id')
+  @RequirePermission('property:update')
   updateRoom(@Param('id') id: string, @Body() dto: CreateRoomDto) {
     return this.frontendApi.updateRoom(id, dto);
   }
 
   @Delete('rooms/:id')
+  @RequirePermission('property:delete')
   deleteRoom(@Param('id') id: string) {
     return this.frontendApi.deleteRoom(id);
   }
@@ -67,16 +71,19 @@ export class FrontendApiController {
   }
 
   @Post('transactions')
+  @RequirePermission('payment:create')
   createTransaction(@Body() dto: CreateTransactionDto) {
     return this.frontendApi.createTransaction(dto);
   }
 
   @Put('transactions/:id')
+  @RequirePermission('payment:update')
   updateTransaction(@Param('id') id: string, @Body() dto: CreateTransactionDto) {
     return this.frontendApi.updateTransaction(id, dto);
   }
 
   @Delete('transactions/:id')
+  @RequirePermission('payment:delete')
   deleteTransaction(@Param('id') id: string) {
     return this.frontendApi.deleteTransaction(id);
   }
