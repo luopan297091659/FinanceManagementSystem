@@ -5,6 +5,10 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class RbacService implements OnModuleInit {
+  private readonly defaultAdminUsername = 'admin';
+  private readonly defaultAdminPassword = 'admin123';
+  private readonly legacyAdminPasswordHash = '240be518fabd2724d2f79524080cb2c5d563550a03d4f62d4898e71b0a39fef7';
+
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
@@ -166,11 +170,15 @@ export class RbacService implements OnModuleInit {
     }
   }
 
+  private getDefaultAdminPasswordHash() {
+    return crypto.createHash('sha256').update(this.defaultAdminPassword).digest('hex');
+  }
+
   async seedAdminUser() {
     const superRole = await this.prisma.role.findUnique({ where: { code: 'SUPER_ADMIN' } });
     if (!superRole) return;
 
-    const passwordHash = crypto.createHash('sha256').update('admin123').digest('hex');
+    const passwordHash = this.getDefaultAdminPasswordHash();
     const admin = await this.prisma.user.upsert({
       where: { username: 'admin' },
       update: {
@@ -419,8 +427,19 @@ export class RbacService implements OnModuleInit {
     }
     const user = await this.prisma.user.findUnique({ where: { username: normalizedUsername } });
     if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
-    const passwordHash = await this.hashPassword(normalizedPassword);
-    if (passwordHash !== user.passwordHash) throw new UnauthorizedException('Invalid credentials');
+
+    const currentPasswordHash = await this.hashPassword(normalizedPassword);
+    const isLegacyAdminHash = normalizedUsername === this.defaultAdminUsername && normalizedPassword === this.defaultAdminPassword && user.passwordHash === this.legacyAdminPasswordHash;
+    const isValid = currentPasswordHash === user.passwordHash || isLegacyAdminHash;
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.passwordHash !== currentPasswordHash) {
+      await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: currentPasswordHash } });
+    }
+
     return user;
   }
 

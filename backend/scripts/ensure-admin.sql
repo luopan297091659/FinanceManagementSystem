@@ -70,7 +70,7 @@ BEGIN
   UPDATE "User"
   SET
     "name" = COALESCE(NULLIF("name", ''), "username"),
-    "passwordHash" = COALESCE(NULLIF("passwordHash", ''), '240be518fabd2724d2f79524080cb2c5d563550a03d4f62d4898e71b0a39fef7'),
+    "passwordHash" = COALESCE(NULLIF("passwordHash", ''), '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'),
     "role" = COALESCE(NULLIF("role", ''), 'operator'),
     "defaultDataScope" = COALESCE("defaultDataScope", 'SELF');
 
@@ -114,7 +114,7 @@ BEGIN
     'admin',
     'luo97091659@gmail.com',
     'System Admin',
-    '240be518fabd2724d2f79524080cb2c5d563550a03d4f62d4898e71b0a39fef7',
+    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
     'SUPER_ADMIN',
     true,
     'ALL',
@@ -124,7 +124,7 @@ BEGIN
   )
   ON CONFLICT ("username") DO UPDATE SET
     "name" = 'System Admin',
-    "passwordHash" = '240be518fabd2724d2f79524080cb2c5d563550a03d4f62d4898e71b0a39fef7',
+    "passwordHash" = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
     "role" = 'SUPER_ADMIN',
     "isActive" = true,
     "defaultDataScope" = 'ALL',
