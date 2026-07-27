@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Post, Put, Req, UnauthorizedException } from '@nestjs/common';
 import { RbacService } from './rbac.service';
 import { Request } from 'express';
 import { RequirePermission } from './permissions.decorator';
@@ -12,6 +12,8 @@ type LoginBody = {
 
 @Controller('rbac')
 export class RbacController {
+  private readonly logger = new Logger(RbacController.name);
+
   constructor(private readonly rbacService: RbacService) {}
 
   @Get('me')
@@ -24,7 +26,8 @@ export class RbacController {
   }
 
   @Post('login')
-  async login(@Body() body: LoginBody = {}) {
+  async login(@Body() body: LoginBody = {}, @Req() req: Request) {
+    this.logger.debug(`Login request body keys: ${Object.keys(body).join(',') || '(empty)'}; content-type: ${req.headers['content-type'] || '(empty)'}`);
     const username = this.normalizeString(body.username ?? body.userName ?? body.account);
     const password = this.normalizeString(body.password);
     if (!username || !password) {

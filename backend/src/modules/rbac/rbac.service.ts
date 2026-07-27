@@ -389,18 +389,24 @@ export class RbacService implements OnModuleInit {
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
   }
 
-  async validateCredentials(username: string, password: string) {
-    if (!username || !password) {
+  private normalizeCredential(value: unknown) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  async validateCredentials(username: unknown, password: unknown) {
+    const normalizedUsername = this.normalizeCredential(username);
+    const normalizedPassword = this.normalizeCredential(password);
+    if (!normalizedUsername || !normalizedPassword) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    const user = await this.prisma.user.findUnique({ where: { username } });
+    const user = await this.prisma.user.findUnique({ where: { username: normalizedUsername } });
     if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
-    const passwordHash = await this.hashPassword(password);
+    const passwordHash = await this.hashPassword(normalizedPassword);
     if (passwordHash !== user.passwordHash) throw new UnauthorizedException('Invalid credentials');
     return user;
   }
 
-  async login(username: string, password: string) {
+  async login(username: unknown, password: unknown) {
     const user = await this.validateCredentials(username, password);
     const userRoles = await this.prisma.userRole.findMany({ where: { userId: user.id }, include: { role: true } });
     const token = this.createAuthToken(user.id);
