@@ -167,23 +167,41 @@ export class RbacService implements OnModuleInit {
   }
 
   async seedAdminUser() {
-    const admin = await this.prisma.user.findFirst({ where: { username: 'admin' } });
-    if (!admin) {
-      const superRole = await this.prisma.role.findUnique({ where: { code: 'SUPER_ADMIN' } });
-      if (!superRole) return;
-      const passwordHash = crypto.createHash('sha256').update('admin123').digest('hex');
-      const created = await this.prisma.user.create({
-        data: {
-          username: 'admin',
-          email: 'admin@example.com',
-          name: 'System Admin',
-          passwordHash,
-          role: 'SUPER_ADMIN',
-        },
-      });
-      await this.prisma.userRole.create({ data: { userId: created.id, roleId: superRole.id } });
-      await this.prisma.rbacAuditLog.create({ data: { action: 'seed', module: 'auth', userId: created.id, details: 'Initial super admin created' } });
-    }
+    const superRole = await this.prisma.role.findUnique({ where: { code: 'SUPER_ADMIN' } });
+    if (!superRole) return;
+
+    const passwordHash = crypto.createHash('sha256').update('admin123').digest('hex');
+    const admin = await this.prisma.user.upsert({
+      where: { username: 'admin' },
+      update: {
+        name: 'System Admin',
+        passwordHash,
+        role: 'SUPER_ADMIN',
+        isActive: true,
+        defaultDataScope: DataScopeType.ALL,
+        defaultDataScopeValue: null,
+      },
+      create: {
+        username: 'admin',
+        email: null,
+        name: 'System Admin',
+        passwordHash,
+        role: 'SUPER_ADMIN',
+        isActive: true,
+        defaultDataScope: DataScopeType.ALL,
+        defaultDataScopeValue: null,
+      },
+    });
+
+    await this.prisma.userRole.upsert({
+      where: { userId_roleId: { userId: admin.id, roleId: superRole.id } },
+      update: {},
+      create: { userId: admin.id, roleId: superRole.id },
+    });
+
+    await this.prisma.rbacAuditLog.create({
+      data: { action: 'seed', module: 'auth', userId: admin.id, details: 'Super admin account ensured' },
+    });
   }
 
   async createPasswordResetToken(userId: string) {
