@@ -18,6 +18,8 @@
         <button class="primary-button" type="button" :disabled="!selectedFiles.length || loading" @click="uploadRows">{{ t.action.createBatch }}</button>
         <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="runMatch">{{ t.action.match }}</button>
         <button class="primary-button" type="button" :disabled="!activeBatchId || loading" @click="submitBatch">{{ t.action.submit }}</button>
+        <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="exportFinalResult">{{ t.action.exportExcel }}</button>
+        <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="exportUnmatchedJson">{{ t.action.exportJson }}</button>
       </div>
 
       <div class="rule-panel">
@@ -140,13 +142,13 @@
 import { computed, onMounted, ref } from "vue";
 import { locale } from "../i18n";
 import { api } from "../services/api";
-import { parseTableFile } from "../utils/tableFiles";
+import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const translations = {
   ja: {
     menu: { aiReconciliation: "AI 照合センター", bankReconciliation: "銀行明細照合" },
     help: { subtitle: "銀行入金を物件、部屋、契約、支払名義へ紐付け、明示的な提出まで保持します。" },
-    action: { upload: "ファイル選択", addFiles: "ファイル追加", createBatch: "バッチ作成", match: "照合実行", submit: "提出", refresh: "更新", search: "摘要、契約、部屋を検索", manualMatch: "手動確定", unmatch: "未照合へ戻す" },
+    action: { upload: "ファイル選択", addFiles: "ファイル追加", createBatch: "バッチ作成", match: "照合実行", submit: "提出", refresh: "更新", search: "摘要、契約、部屋を検索", manualMatch: "手動確定", unmatch: "未照合へ戻す", exportExcel: "Excel出力", exportJson: "未照合JSON" },
     matching: { title: "照合条件", summary: "銀行摘要名", amount: "銀行入金額", date: "入金日", month: "入金月", property: "物件", room: "部屋番号", contract: "契約ID" },
     table: { source: "原始ファイル", date: "入金日", summary: "銀行摘要", amount: "入金額", contract: "部屋 / 契約", status: "結果", remark: "備考", actions: "操作" },
     history: { title: "履歴バッチ", noFile: "ファイルなし" },
@@ -156,7 +158,7 @@ const translations = {
   zh: {
     menu: { aiReconciliation: "AI 对账中心", bankReconciliation: "银行账单对账" },
     help: { subtitle: "将银行入金追溯到物件、房间、契约书与支付名义，提交前保存在对账主表中。" },
-    action: { upload: "选择文件", addFiles: "继续添加", createBatch: "创建批次", match: "执行匹配", submit: "提交", refresh: "刷新", search: "搜索摘要、契约、房间", manualMatch: "手工确认", unmatch: "退回未匹配" },
+    action: { upload: "选择文件", addFiles: "继续添加", createBatch: "创建批次", match: "执行匹配", submit: "提交", refresh: "刷新", search: "搜索摘要、契约、房间", manualMatch: "手工确认", unmatch: "退回未匹配", exportExcel: "导出 Excel", exportJson: "未匹配 JSON" },
     matching: { title: "匹配条件", summary: "银行摘要名", amount: "银行入金金额", date: "入金日期", month: "入金月份", property: "物件", room: "部屋番号", contract: "契约书ID" },
     table: { source: "原始文件", date: "入金日期", summary: "银行摘要", amount: "入金金额", contract: "房间 / 契约", status: "结果", remark: "备注", actions: "操作" },
     history: { title: "历史批次", noFile: "无文件" },
@@ -166,7 +168,7 @@ const translations = {
   en: {
     menu: { aiReconciliation: "AI Reconciliation Center", bankReconciliation: "Bank Statement Reconciliation" },
     help: { subtitle: "Trace bank deposits to property, room, contract, and payment alias before explicit submission." },
-    action: { upload: "Choose Files", addFiles: "Add Files", createBatch: "Create Batch", match: "Run Match", submit: "Submit", refresh: "Refresh", search: "Search summary, contract, room", manualMatch: "Manual Match", unmatch: "Unmatch" },
+    action: { upload: "Choose Files", addFiles: "Add Files", createBatch: "Create Batch", match: "Run Match", submit: "Submit", refresh: "Refresh", search: "Search summary, contract, room", manualMatch: "Manual Match", unmatch: "Unmatch", exportExcel: "Export Excel", exportJson: "Unmatched JSON" },
     matching: { title: "Matching Conditions", summary: "Bank Summary", amount: "Deposit Amount", date: "Deposit Date", month: "Deposit Month", property: "Property", room: "Room", contract: "Contract ID" },
     table: { source: "Source", date: "Deposit Date", summary: "Bank Summary", amount: "Amount", contract: "Room / Contract", status: "Result", remark: "Remark", actions: "Actions" },
     history: { title: "Batch History", noFile: "No file" },
@@ -289,6 +291,40 @@ const submitBatch = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const exportFinalResult = async () => {
+  const rows = await api.exportReconciliationExcel(activeBatchId.value);
+  exportTableXls(`bank-reconciliation-${activeBatch.value?.batchNo || activeBatchId.value}.xls`, [
+    { key: "propertyName", label: t.value.table.property || "Property Name" },
+    { key: "roomNumber", label: t.value.matching.room },
+    { key: "contractId", label: t.value.matching.contract },
+    { key: "contractorName", label: "Contractor" },
+    { key: "payerName", label: "Payer" },
+    { key: "originalBankSummary", label: t.value.table.summary },
+    { key: "depositAmount", label: t.value.table.amount },
+    { key: "paymentMonth", label: t.value.matching.month },
+    { key: "transactionDate", label: t.value.table.date },
+    { key: "matchStatus", label: t.value.table.status },
+    { key: "matchMode", label: "Match Method" },
+    { key: "bankTransactionId", label: "Bank Transaction ID" },
+    { key: "targetRecordId", label: "Linked Database Record ID" },
+    { key: "feeType", label: "Fee Type" },
+    { key: "remark", label: t.value.table.remark },
+  ], rows);
+};
+
+const exportUnmatchedJson = async () => {
+  const rows = await api.exportReconciliationUnmatchedJson(activeBatchId.value);
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `bank-reconciliation-unmatched-${activeBatch.value?.batchNo || activeBatchId.value}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 const saveRecord = async (record) => {

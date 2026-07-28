@@ -194,6 +194,7 @@ const navItems = computed(() => [
   { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, permissions: ["role:view"] },
   { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, permissions: ["audit_log:view"] },
   { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, permissions: ["setting:email"] },
+  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations || "Translation Management", permissions: ["i18n.translation.view"] },
 ]);
 
 const aiMenuTitle = computed(() => ({

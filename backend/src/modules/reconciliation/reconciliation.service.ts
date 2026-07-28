@@ -130,6 +130,7 @@ export class ReconciliationService {
 
         for (const [index, row] of file.rows.entries()) {
           const normalized = this.normalizeRow(row, fileHash, index + 1);
+          const relations = await this.resolveExistingRecordRelations(tx, normalized);
           await tx.reconciliationRecord.create({
             data: {
               batchId: createdBatch.id,
@@ -141,9 +142,9 @@ export class ReconciliationService {
               depositAmount: normalized.depositAmount,
               originalBankSummary: normalized.originalBankSummary,
               normalizedBankSummary: normalized.normalizedBankSummary,
-              propertyId: normalized.propertyId,
-              roomId: normalized.roomId,
-              contractId: normalized.contractId,
+              propertyId: relations.propertyId,
+              roomId: relations.roomId,
+              contractId: relations.contractId,
               contractorName: normalized.contractorName,
               payerName: normalized.payerName,
               paymentMonth: normalized.paymentMonth,
@@ -703,6 +704,19 @@ export class ReconciliationService {
       paymentMonth: this.pick(row, ['paymentMonth', 'month', '月份']),
       remark: this.pick(row, ['remark', 'Remark', '备注']),
       recordHash,
+    };
+  }
+
+  private async resolveExistingRecordRelations(tx: Prisma.TransactionClient, normalized: { propertyId?: string; roomId?: string; contractId?: string }) {
+    const [property, room, contract] = await Promise.all([
+      normalized.propertyId ? tx.property.findUnique({ where: { id: normalized.propertyId }, select: { id: true } }) : null,
+      normalized.roomId ? tx.room.findUnique({ where: { id: normalized.roomId }, select: { id: true } }) : null,
+      normalized.contractId ? tx.contract.findUnique({ where: { id: normalized.contractId }, select: { id: true } }) : null,
+    ]);
+    return {
+      propertyId: property?.id,
+      roomId: room?.id,
+      contractId: contract?.id,
     };
   }
 

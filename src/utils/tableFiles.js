@@ -33,11 +33,37 @@ export const exportTableTemplate = (filename, columns) => {
   exportTableXls(filename, columns, []);
 };
 
+const detectDelimiter = (line) => {
+  const candidates = [",", "\t", ";"];
+  return candidates
+    .map((delimiter) => ({ delimiter, count: line.split(delimiter).length }))
+    .sort((a, b) => b.count - a.count)[0]?.delimiter || ",";
+};
+
+const decodeTableText = async (file) => {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const startsWithZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  if (startsWithZip || /\.(xlsx|xlsm)$/i.test(file.name)) {
+    throw new Error("Binary XLSX parsing requires the xlsx package; please export as CSV or Excel HTML for this build.");
+  }
+
+  const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+  if (!utf8.includes("\uFFFD")) return utf8;
+
+  try {
+    return new TextDecoder("shift-jis", { fatal: false }).decode(buffer);
+  } catch {
+    return utf8;
+  }
+};
+
 const parseDelimited = (text) => {
   const rows = [];
   let row = [];
   let cell = "";
   let quoted = false;
+  const delimiter = detectDelimiter(text.split(/\r?\n/).find((line) => line.trim()) || "");
 
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
@@ -49,7 +75,7 @@ const parseDelimited = (text) => {
       } else {
         quoted = !quoted;
       }
-    } else if ((char === "," || char === "\t") && !quoted) {
+    } else if (char === delimiter && !quoted) {
       row.push(cell.trim());
       cell = "";
     } else if ((char === "\n" || char === "\r") && !quoted) {
@@ -69,7 +95,7 @@ const parseDelimited = (text) => {
 };
 
 export const parseTableFile = async (file) => {
-  const text = await file.text();
+  const text = await decodeTableText(file);
   if (/<table[\s>]/i.test(text)) {
     const doc = new DOMParser().parseFromString(text, "text/html");
     return [...doc.querySelectorAll("tr")].map((tr) => [...tr.children].map((cell) => cell.textContent.trim())).filter((row) => row.some(Boolean));

@@ -201,6 +201,14 @@ export const api = {
     return request(`/reconciliation/bank/batches/${batchId}/submit`, { method: 'POST', body: {} });
   },
 
+  async exportReconciliationExcel(batchId) {
+    return request(`/reconciliation/bank/batches/${batchId}/export-excel`);
+  },
+
+  async exportReconciliationUnmatchedJson(batchId) {
+    return request(`/reconciliation/bank/batches/${batchId}/unmatched-json`);
+  },
+
   async updateReconciliationRecord(recordId, payload) {
     return request(`/reconciliation/bank/records/${recordId}`, { method: 'PATCH', body: payload });
   },
@@ -240,5 +248,39 @@ export const api = {
 
   async syncReconciliationMasterData(rows) {
     return request('/reconciliation/bank/master-data/sync', { method: 'POST', body: { rows } });
+  },
+
+  async listAdminTranslations(params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/admin/i18n/translations${query ? `?${query}` : ''}`);
+  },
+
+  async createAdminTranslation(payload) {
+    return request('/admin/i18n/translations', { method: 'POST', body: payload });
+  },
+
+  async updateAdminTranslation(id, payload) {
+    return request(`/admin/i18n/translations/${id}`, { method: 'PATCH', body: payload });
+  },
+
+  async importAdminTranslations(rows, options = {}) {
+    return request('/admin/i18n/import', { method: 'POST', body: { rows, ...options } });
+  },
+
+  async exportAdminTranslations(params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/admin/i18n/export${query ? `?${query}` : ''}`);
+  },
+
+  async publishAdminTranslations(version) {
+    return request('/admin/i18n/publish', { method: 'POST', body: { version } });
+  },
+
+  async listTranslationVersions() {
+    return request('/admin/i18n/versions');
+  },
+
+  async rollbackTranslationVersion(version) {
+    return request(`/admin/i18n/versions/${encodeURIComponent(version)}/rollback`, { method: 'POST', body: {} });
   },
 };

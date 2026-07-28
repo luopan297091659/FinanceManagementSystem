@@ -34,6 +34,12 @@ CREATE TYPE "ContractPartyType" AS ENUM (
   'GUARANTOR'
 );
 
+CREATE TYPE "TranslationStatus" AS ENUM (
+  'DRAFT',
+  'PUBLISHED',
+  'DISABLED'
+);
+
 CREATE TABLE "ContractPaymentAlias" (
   "id" TEXT NOT NULL,
   "contractId" TEXT NOT NULL,
@@ -139,6 +145,23 @@ CREATE TABLE "ReconciliationRecord" (
   CONSTRAINT "ReconciliationRecord_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE "TranslationEntry" (
+  "id" TEXT NOT NULL,
+  "key" TEXT NOT NULL,
+  "module" TEXT NOT NULL,
+  "locale" TEXT NOT NULL,
+  "value" TEXT NOT NULL,
+  "description" TEXT,
+  "version" TEXT NOT NULL,
+  "status" "TranslationStatus" NOT NULL DEFAULT 'DRAFT',
+  "enabled" BOOLEAN NOT NULL DEFAULT true,
+  "createdBy" TEXT,
+  "updatedBy" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "TranslationEntry_pkey" PRIMARY KEY ("id")
+);
+
 CREATE UNIQUE INDEX "ReconciliationBatch_batchNo_key" ON "ReconciliationBatch"("batchNo");
 CREATE INDEX "ContractPaymentAlias_contractId_idx" ON "ContractPaymentAlias"("contractId");
 CREATE INDEX "ContractPaymentAlias_normalizedBankSummary_idx" ON "ContractPaymentAlias"("normalizedBankSummary");
@@ -156,6 +179,10 @@ CREATE INDEX "ReconciliationRecord_recordHash_idx" ON "ReconciliationRecord"("re
 CREATE INDEX "ReconciliationRecord_targetTable_targetRecordId_idx" ON "ReconciliationRecord"("targetTable", "targetRecordId");
 CREATE INDEX "ReconciliationRecord_propertyId_roomId_idx" ON "ReconciliationRecord"("propertyId", "roomId");
 CREATE INDEX "ReconciliationRecord_contractId_idx" ON "ReconciliationRecord"("contractId");
+CREATE UNIQUE INDEX "TranslationEntry_key_locale_version_key" ON "TranslationEntry"("key", "locale", "version");
+CREATE INDEX "TranslationEntry_module_idx" ON "TranslationEntry"("module");
+CREATE INDEX "TranslationEntry_locale_idx" ON "TranslationEntry"("locale");
+CREATE INDEX "TranslationEntry_status_idx" ON "TranslationEntry"("status");
 
 ALTER TABLE "ContractPaymentAlias" ADD CONSTRAINT "ContractPaymentAlias_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ContractPartyHistory" ADD CONSTRAINT "ContractPartyHistory_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "Contract"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -179,7 +206,12 @@ VALUES
   ('perm_reconciliation_bank_export', 'reconciliation.bank.export', 'reconciliation', 'Export bank reconciliation results', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('perm_reconciliation_bank_history', 'reconciliation.bank.history', 'reconciliation', 'View bank reconciliation history', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('perm_reconciliation_bank_master_data_sync', 'reconciliation.bank.master-data.sync', 'reconciliation', 'Sync bank reconciliation master data', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('perm_reconciliation_ocr_view', 'reconciliation.ocr.view', 'reconciliation', 'View OCR reconciliation', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ('perm_reconciliation_ocr_view', 'reconciliation.ocr.view', 'reconciliation', 'View OCR reconciliation', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('perm_i18n_translation_view', 'i18n.translation.view', 'i18n', 'View translation entries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('perm_i18n_translation_edit', 'i18n.translation.edit', 'i18n', 'Edit translation entries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('perm_i18n_translation_import', 'i18n.translation.import', 'i18n', 'Import translation entries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('perm_i18n_translation_export', 'i18n.translation.export', 'i18n', 'Export translation entries', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('perm_i18n_translation_publish', 'i18n.translation.publish', 'i18n', 'Publish translation versions', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT ("key") DO NOTHING;
 
 INSERT INTO "RolePermission" ("id", "roleId", "permissionId", "createdAt")
@@ -198,6 +230,11 @@ WHERE r."code" IN ('SUPER_ADMIN', 'ADMIN', 'FINANCE')
     'reconciliation.bank.export',
     'reconciliation.bank.history',
     'reconciliation.bank.master-data.sync',
-    'reconciliation.ocr.view'
+    'reconciliation.ocr.view',
+    'i18n.translation.view',
+    'i18n.translation.edit',
+    'i18n.translation.import',
+    'i18n.translation.export',
+    'i18n.translation.publish'
   )
 ON CONFLICT ("roleId", "permissionId") DO NOTHING;

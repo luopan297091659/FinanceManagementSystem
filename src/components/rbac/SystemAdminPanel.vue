@@ -164,6 +164,104 @@
       </div>
     </div>
 
+    <!-- Translation Management Tab -->
+    <div v-if="activeTab === 'translations'" class="tab-content">
+      <div class="content-header">
+        <h3>{{ dict.translationManagement || 'Translation Management' }}</h3>
+        <div class="header-actions">
+          <button @click="loadTranslations" class="secondary-button">{{ dict.refresh }}</button>
+          <button @click="openNewTranslation" class="primary-button">{{ dict.newTranslation || 'New Translation' }}</button>
+        </div>
+      </div>
+
+      <div class="settings-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>{{ dict.key || 'Key' }}</label>
+            <input v-model="translationFilters.key" type="search" placeholder="menu.bankReconciliation" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.module }}</label>
+            <input v-model="translationFilters.module" type="search" placeholder="menu" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.locale || 'Locale' }}</label>
+            <select v-model="translationFilters.locale">
+              <option value="">All</option>
+              <option value="ja-JP">ja-JP</option>
+              <option value="zh-CN">zh-CN</option>
+              <option value="en-US">en-US</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ dict.status }}</label>
+            <select v-model="translationFilters.status">
+              <option value="">All</option>
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="DISABLED">DISABLED</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button @click="loadTranslations" class="secondary-button">{{ dict.refresh }}</button>
+          <button @click="exportTranslations" class="secondary-button">{{ dict.export || 'Export' }}</button>
+          <button @click="triggerTranslationImport" class="secondary-button">{{ dict.import || 'Import' }}</button>
+          <input ref="translationFileInput" class="hidden-file-input" type="file" accept=".json,.csv,.tsv,.html,.xls,.xlsx" @change="importTranslations" />
+        </div>
+      </div>
+
+      <div class="settings-form publish-form">
+        <div class="form-group">
+          <label>{{ dict.version || 'Version' }}</label>
+          <input v-model="translationVersion" type="text" placeholder="2026.07.28.1" />
+        </div>
+        <button @click="publishTranslations" class="primary-button">{{ dict.publish || 'Publish' }}</button>
+      </div>
+
+      <div v-if="translationImportPreview" class="settings-form">
+        <h4>{{ dict.importPreview || 'Import Preview' }}</h4>
+        <p>{{ translationImportPreview.validCount }} valid, {{ translationImportPreview.failedCount }} failed, {{ translationImportPreview.duplicateCount }} duplicates</p>
+        <div class="modal-actions">
+          <select v-model="translationImportMode">
+            <option value="skip">Skip existing</option>
+            <option value="overwrite">Overwrite existing</option>
+            <option value="create">Create only</option>
+          </select>
+          <button @click="commitTranslationImport" class="primary-button">{{ dict.save }}</button>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>{{ dict.key || 'Key' }}</th>
+              <th>{{ dict.module }}</th>
+              <th>{{ dict.locale || 'Locale' }}</th>
+              <th>{{ dict.version || 'Version' }}</th>
+              <th>{{ dict.status }}</th>
+              <th>{{ dict.details }}</th>
+              <th>{{ dict.actions }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="entry in translations" :key="entry.id">
+              <td>{{ entry.key }}</td>
+              <td>{{ entry.module }}</td>
+              <td>{{ entry.locale }}</td>
+              <td>{{ entry.version }}</td>
+              <td>{{ entry.status }}</td>
+              <td class="translation-value">{{ entry.value }}</td>
+              <td class="actions-cell">
+                <button @click="editTranslation(entry)" class="action-button edit">{{ dict.edit }}</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div v-if="notice" :class="['notice', notice.type]">{{ notice.message }}</div>
 
     <!-- User Modal -->
@@ -241,6 +339,51 @@
         </div>
       </div>
     </div>
+
+    <!-- Translation Modal -->
+    <div v-if="showTranslationModal" class="modal-overlay" @click="closeTranslationModal">
+      <div class="modal-card wide" @click.stop>
+        <h2>{{ editingTranslation ? (dict.editTranslation || 'Edit Translation') : (dict.newTranslation || 'New Translation') }}</h2>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>{{ dict.key || 'Key' }}</label>
+            <input v-model="translationForm.key" type="text" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.module }}</label>
+            <input v-model="translationForm.module" type="text" />
+          </div>
+          <div class="form-group">
+            <label>{{ dict.locale || 'Locale' }}</label>
+            <select v-model="translationForm.locale">
+              <option value="ja-JP">ja-JP</option>
+              <option value="zh-CN">zh-CN</option>
+              <option value="en-US">en-US</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>{{ dict.version || 'Version' }}</label>
+            <input v-model="translationForm.version" type="text" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>{{ dict.details }}</label>
+          <textarea v-model="translationForm.value" rows="4"></textarea>
+        </div>
+        <div class="form-group">
+          <label>{{ dict.description }}</label>
+          <textarea v-model="translationForm.description" rows="2"></textarea>
+        </div>
+        <label class="status-checkbox">
+          <input v-model="translationForm.enabled" type="checkbox" />
+          {{ dict.active }}
+        </label>
+        <div class="modal-actions">
+          <button @click="saveTranslation" class="modal-button primary">{{ dict.save }}</button>
+          <button @click="closeTranslationModal" class="modal-button">{{ dict.cancel }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -248,6 +391,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { locale, messages } from '../../i18n.js';
 import { api } from '../../services/api.js';
+import { exportTableXls, parseTableFile } from '../../utils/tableFiles.js';
 
 const props = defineProps({
   permissions: {
@@ -268,6 +412,13 @@ const allPermissions = ref([]);
 const notice = ref(null);
 const sentToday = ref(0);
 const testEmail = ref('');
+const translations = ref([]);
+const translationVersions = ref([]);
+const translationFileInput = ref(null);
+const translationImportRows = ref([]);
+const translationImportPreview = ref(null);
+const translationImportMode = ref('skip');
+const translationVersion = ref(new Date().toISOString().slice(0, 10).replaceAll('-', '.') + '.1');
 
 const showUserModal = ref(false);
 const showRoleModal = ref(false);
@@ -285,6 +436,18 @@ const emailForm = ref({
   from_name: '',
   daily_limit: 200,
 });
+const translationFilters = ref({ key: '', module: '', locale: '', status: '' });
+const showTranslationModal = ref(false);
+const editingTranslation = ref(null);
+const translationForm = ref({
+  key: '',
+  module: '',
+  locale: 'ja-JP',
+  value: '',
+  description: '',
+  version: translationVersion.value,
+  enabled: true,
+});
 
 const dict = computed(() => messages[locale.value].system || messages[locale.value].systemAdmin);
 
@@ -295,6 +458,7 @@ const tabs = computed(() => [
   { key: 'roles', label: dict.value.roles, permission: 'role:view' },
   { key: 'logs', label: dict.value.auditLogs, permission: 'audit_log:view' },
   { key: 'email', label: dict.value.emailSettings, permission: 'setting:email' },
+  { key: 'translations', label: dict.value.translationManagement || 'Translation Management', permission: 'i18n.translation.view' },
 ].filter((tab) => can(tab.permission)));
 
 const showNotice = (message, type = 'error') => {
@@ -347,8 +511,18 @@ const loadEmailSettings = async () => {
   }
 };
 
+const loadTranslations = async () => {
+  if (!can('i18n.translation.view')) return;
+  try {
+    translations.value = await api.listAdminTranslations(translationFilters.value);
+    translationVersions.value = await api.listTranslationVersions();
+  } catch (e) {
+    showNotice(e.message || 'Failed to load translations');
+  }
+};
+
 const loadData = async () => {
-  await Promise.all([loadUsers(), loadRoles(), loadLogs(), loadEmailSettings()]);
+  await Promise.all([loadUsers(), loadRoles(), loadLogs(), loadEmailSettings(), loadTranslations()]);
 };
 
 const resetUserForm = () => {
@@ -491,6 +665,112 @@ const sendTestEmail = async () => {
   }
 };
 
+const resetTranslationForm = () => {
+  editingTranslation.value = null;
+  translationForm.value = {
+    key: '',
+    module: '',
+    locale: 'ja-JP',
+    value: '',
+    description: '',
+    version: translationVersion.value,
+    enabled: true,
+  };
+};
+
+const openNewTranslation = () => {
+  resetTranslationForm();
+  showTranslationModal.value = true;
+};
+
+const closeTranslationModal = () => {
+  showTranslationModal.value = false;
+  resetTranslationForm();
+};
+
+const editTranslation = (entry) => {
+  editingTranslation.value = entry;
+  translationForm.value = { ...entry };
+  showTranslationModal.value = true;
+};
+
+const saveTranslation = async () => {
+  try {
+    if (editingTranslation.value) await api.updateAdminTranslation(editingTranslation.value.id, translationForm.value);
+    else await api.createAdminTranslation(translationForm.value);
+    closeTranslationModal();
+    await loadTranslations();
+    showNotice(dict.value.saveSuccess || 'Saved', 'success');
+  } catch (e) {
+    showNotice(e.message || 'Failed to save translation');
+  }
+};
+
+const triggerTranslationImport = () => {
+  translationFileInput.value?.click();
+};
+
+const importTranslations = async (event) => {
+  const [file] = event.target.files || [];
+  if (!file) return;
+  try {
+    if (file.name.toLowerCase().endsWith('.json')) {
+      const payload = JSON.parse(await file.text());
+      translationImportRows.value = payload.translations || [];
+      translationVersion.value = payload.version || translationVersion.value;
+    } else {
+      const rows = await parseTableFile(file);
+      const [header = [], ...dataRows] = rows;
+      translationImportRows.value = dataRows.map((row) => Object.fromEntries(header.map((key, index) => [key, row[index] ?? ''])));
+    }
+    translationImportPreview.value = await api.importAdminTranslations(translationImportRows.value, { preview: true, version: translationVersion.value });
+  } catch (e) {
+    showNotice(e.message || 'Failed to preview translation import');
+  } finally {
+    event.target.value = '';
+  }
+};
+
+const commitTranslationImport = async () => {
+  try {
+    await api.importAdminTranslations(translationImportRows.value, { version: translationVersion.value, mode: translationImportMode.value });
+    translationImportPreview.value = null;
+    translationImportRows.value = [];
+    await loadTranslations();
+    showNotice(dict.value.saveSuccess || 'Imported', 'success');
+  } catch (e) {
+    showNotice(e.message || 'Failed to import translations');
+  }
+};
+
+const exportTranslations = async () => {
+  try {
+    const rows = await api.exportAdminTranslations(translationFilters.value);
+    exportTableXls('translations.xls', [
+      { key: 'key', label: 'key' },
+      { key: 'module', label: 'module' },
+      { key: 'locale', label: 'locale' },
+      { key: 'value', label: 'value' },
+      { key: 'version', label: 'version' },
+      { key: 'status', label: 'status' },
+      { key: 'description', label: 'description' },
+      { key: 'enabled', label: 'enabled' },
+    ], rows);
+  } catch (e) {
+    showNotice(e.message || 'Failed to export translations');
+  }
+};
+
+const publishTranslations = async () => {
+  try {
+    await api.publishAdminTranslations(translationVersion.value);
+    await loadTranslations();
+    showNotice(dict.value.saveSuccess || 'Published', 'success');
+  } catch (e) {
+    showNotice(e.message || 'Failed to publish translations');
+  }
+};
+
 onMounted(() => {
   if (!tabs.value.some((tab) => tab.key === activeTab.value) && tabs.value[0]) {
     activeTab.value = tabs.value[0].key;
@@ -556,6 +836,12 @@ watch(() => props.initialTab, (tab) => {
   font-size: 16px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .notice {
   padding: 10px 12px;
   border-radius: 6px;
@@ -600,6 +886,22 @@ watch(() => props.initialTab, (tab) => {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 12px;
+}
+
+.publish-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.translation-value {
+  max-width: 360px;
+  white-space: normal;
 }
 
 .table-wrapper {

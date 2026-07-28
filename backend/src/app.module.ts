@@ -19,6 +19,7 @@ import { OcrModule } from './modules/ocr/ocr.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { FrontendApiModule } from './modules/frontend-api/frontend-api.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { I18nModule } from './modules/i18n/i18n.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
     AuditModule,
     FrontendApiModule,
     RbacModule,
+    I18nModule,
   ],
 })
 export class AppModule {}
