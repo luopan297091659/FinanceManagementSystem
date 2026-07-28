@@ -42,12 +42,6 @@ const detectDelimiter = (line) => {
 
 const decodeTableText = async (file) => {
   const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const startsWithZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
-  if (startsWithZip || /\.(xlsx|xlsm)$/i.test(file.name)) {
-    throw new Error("Binary XLSX parsing requires the xlsx package; please export as CSV or Excel HTML for this build.");
-  }
-
   const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
   if (!utf8.includes("\uFFFD")) return utf8;
 
@@ -94,7 +88,43 @@ const parseDelimited = (text) => {
   return rows;
 };
 
+const parseWorkbookFile = async (file) => {
+  let XLSX;
+  try {
+    XLSX = await import("xlsx");
+  } catch {
+    throw new Error("XLSX parser dependency is missing. Run npm install in the project root, then rebuild the frontend.");
+  }
+
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, {
+    type: "array",
+    cellDates: true,
+    dense: false,
+  });
+
+  const rows = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const sheetRows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+      blankrows: false,
+    });
+    for (const row of sheetRows) {
+      const normalizedRow = row.map((cell) => String(cell ?? "").trim());
+      if (normalizedRow.some(Boolean)) rows.push(normalizedRow);
+    }
+  }
+  return rows;
+};
+
 export const parseTableFile = async (file) => {
+  if (/\.(xlsx|xlsm|xls)$/i.test(file.name)) {
+    return parseWorkbookFile(file);
+  }
+
   const text = await decodeTableText(file);
   if (/<table[\s>]/i.test(text)) {
     const doc = new DOMParser().parseFromString(text, "text/html");
