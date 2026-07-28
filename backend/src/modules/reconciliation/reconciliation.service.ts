@@ -95,11 +95,12 @@ export class ReconciliationService {
   }
 
   async uploadBankRows(dto: BankUploadDto, actorUserId?: string) {
-    if (!dto.files?.length) throw new BadRequestException('At least one file is required');
-    const emptyFile = dto.files.find((file) => !file.rows?.length);
+    const sanitizedDto = this.sanitizeBankUploadDto(dto);
+    if (!sanitizedDto.files?.length) throw new BadRequestException('At least one file is required');
+    const emptyFile = sanitizedDto.files.find((file) => !file.rows?.length);
     if (emptyFile) throw new BadRequestException(`File has no rows: ${emptyFile.fileName}`);
 
-    const matchingRules = dto.matchingRules?.length ? dto.matchingRules : DEFAULT_MATCHING_RULES;
+    const matchingRules = sanitizedDto.matchingRules?.length ? sanitizedDto.matchingRules : DEFAULT_MATCHING_RULES;
     const batchNo = this.createBatchNo();
 
     const batch = await this.prisma.$transaction(async (tx) => {
@@ -108,12 +109,12 @@ export class ReconciliationService {
           batchNo,
           status: 'UPLOADED',
           matchingRulesJson: matchingRules,
-          uploadedBy: actorUserId ?? dto.uploadedBy,
-          remark: dto.remark,
+          uploadedBy: actorUserId ?? sanitizedDto.uploadedBy,
+          remark: sanitizedDto.remark,
         },
       });
 
-      for (const file of dto.files) {
+      for (const file of sanitizedDto.files) {
         const fileHash = this.hashJson({ fileName: file.fileName, rows: file.rows });
         const createdFile = await tx.reconciliationSourceFile.create({
           data: {
@@ -122,7 +123,7 @@ export class ReconciliationService {
             fileType: file.fileType ?? this.fileType(file.fileName),
             fileSize: file.fileSize,
             fileHash,
-            uploadedBy: actorUserId ?? dto.uploadedBy,
+            uploadedBy: actorUserId ?? sanitizedDto.uploadedBy,
             rawMetadata: { rowCount: file.rows.length },
           },
         });
@@ -770,9 +771,46 @@ export class ReconciliationService {
   private pick(row: BankUploadRow, keys: string[]) {
     for (const key of keys) {
       const value = row[key];
-      if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+      const cleaned = this.sanitizeText(value);
+      if (cleaned !== '') return cleaned;
     }
     return '';
+  }
+
+  private sanitizeBankUploadDto(dto: BankUploadDto): BankUploadDto {
+    return {
+      ...dto,
+      uploadedBy: this.sanitizeOptionalText(dto.uploadedBy),
+      remark: this.sanitizeOptionalText(dto.remark),
+      matchingRules: dto.matchingRules?.map((rule) => this.sanitizeText(rule)).filter(Boolean),
+      files: (dto.files ?? []).map((file) => ({
+        ...file,
+        fileName: this.sanitizeText(file.fileName),
+        fileType: this.sanitizeOptionalText(file.fileType),
+        rows: (file.rows ?? []).map((row) => this.sanitizeJson(row) as BankUploadRow),
+      })),
+    };
+  }
+
+  private sanitizeJson(value: unknown): unknown {
+    if (typeof value === 'string') return this.sanitizeText(value);
+    if (Array.isArray(value)) return value.map((item) => this.sanitizeJson(item));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [this.sanitizeText(key), this.sanitizeJson(item)]),
+      );
+    }
+    return value;
+  }
+
+  private sanitizeOptionalText(value?: unknown) {
+    const cleaned = this.sanitizeText(value);
+    return cleaned || undefined;
+  }
+
+  private sanitizeText(value?: unknown) {
+    if (value === undefined || value === null) return '';
+    return String(value).replace(/\u0000/g, '').trim();
   }
 
   private parseAmount(value?: string) {
