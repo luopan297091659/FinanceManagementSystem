@@ -281,8 +281,8 @@ export const messages = {
   zh: {
     appName: "房产管理平台",
     company: "日本房产管理公司",
-    progressTitle: "Vue 3 / Nest / Prisma 迁移中",
-    progressBody: "正在围绕 GIS、房源、客户、财务模块整理核心业务。",
+    // progressTitle: "Vue 3 / Nest / Prisma 迁移中",
+    // progressBody: "正在围绕 GIS、房源、客户、财务模块整理核心业务。",
     theme: "主题",
     themeTeal: "青绿色",
     themeBlue: "深蓝",

@@ -13,8 +13,9 @@
           </div>
         </div>
 
-        <button class="sidebar-toggle" type="button" :title="sidebarToggleLabel" @click="toggleSidebar">
-          {{ isSidebarCollapsed ? "›" : "‹" }}
+        <button class="sidebar-toggle" type="button" :title="sidebarToggleLabel" :aria-label="sidebarToggleLabel" @click="toggleSidebar">
+          <ChevronRight v-if="isSidebarCollapsed" :size="18" />
+          <ChevronLeft v-else :size="18" />
         </button>
 
       <nav class="nav" :aria-label="dictionary.appName">
@@ -27,7 +28,8 @@
           type="button"
           @click="setActiveNavItem(item)"
         >
-          <span class="nav-label">{{ isSidebarCollapsed ? item.label.slice(0, 1) : item.label }}</span>
+          <component :is="item.icon" class="nav-icon" :size="19" aria-hidden="true" />
+          <span class="nav-label">{{ item.label }}</span>
         </button>
 
         <div v-if="aiNavItems.length" class="nav-group" :class="{ open: isAiAnalysisExpanded, active: isAiAnalysisActive }">
@@ -39,8 +41,9 @@
             :aria-expanded="isAiAnalysisExpanded"
             @click="toggleAiAnalysis"
           >
-            <span class="nav-label">{{ isSidebarCollapsed ? aiMenuTitle.slice(0, 1) : aiMenuTitle }}</span>
-            <span class="nav-chevron" aria-hidden="true">›</span>
+            <BrainCircuit class="nav-icon" :size="19" aria-hidden="true" />
+            <span class="nav-label">{{ aiMenuTitle }}</span>
+            <ChevronRight class="nav-chevron" :size="16" aria-hidden="true" />
           </button>
 
           <div v-show="isAiAnalysisExpanded" class="nav-children">
@@ -53,26 +56,14 @@
               type="button"
               @click="setActiveNavItem(item)"
             >
-              <span class="nav-label">{{ isSidebarCollapsed ? item.label.slice(0, 1) : item.label }}</span>
+              <component :is="item.icon" class="nav-icon" :size="18" aria-hidden="true" />
+              <span class="nav-label">{{ item.label }}</span>
             </button>
           </div>
         </div>
       </nav>
       </div>
 
-      <div class="sidebar-footer">
-        <div class="sidebar-card">
-          <p class="eyebrow">{{ dictionary.progressTitle }}</p>
-          <p>{{ dictionary.progressBody }}</p>
-        </div>
-
-        <div class="theme-card">
-          <p class="eyebrow">{{ dictionary.theme }}</p>
-          <div class="theme-swatches">
-            <button v-for="theme in themes" :key="theme.key" class="swatch" :aria-label="dictionary[theme.labelKey]" :style="{ background: theme.color }" type="button" @click="setTheme(theme.key)" />
-          </div>
-        </div>
-      </div>
     </aside>
 
     <main class="workspace">
@@ -88,15 +79,38 @@
             <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">中文</button>
           </div>
           <button class="ghost-button" type="button" @click="setActiveNavItem({ key: 'gis' })">{{ dictionary.openGis }}</button>
+          <div class="settings-menu" @click.stop>
+            <button class="icon-button" type="button" :title="dictionary.theme" :aria-label="dictionary.theme" :aria-expanded="isSettingsOpen" @click="isSettingsOpen = !isSettingsOpen">
+              <Settings :size="18" />
+            </button>
+            <div v-if="isSettingsOpen" class="settings-popover">
+              <p class="settings-title">{{ dictionary.theme }}</p>
+              <div class="theme-options">
+                <button
+                  v-for="themeOption in themes"
+                  :key="themeOption.key"
+                  class="theme-option"
+                  :class="{ active: theme === themeOption.key }"
+                  type="button"
+                  @click="setTheme(themeOption.key)"
+                >
+                  <span class="theme-color" :style="{ background: themeOption.color }" />
+                  <span>{{ dictionary[themeOption.labelKey] }}</span>
+                  <Check v-if="theme === themeOption.key" :size="16" />
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="topbar-user">
+            <span class="user-avatar" :style="brandStyle">{{ userInitial }}</span>
             <div class="user-info">
               <p class="user-name">{{ currentUser?.name || dictionary.userFallback }}</p>
               <p class="user-role">{{ currentUser?.userRoles?.[0]?.role?.name || dictionary.userFallback }}</p>
             </div>
-            <button class="logout-button" type="button" @click="handleLogout" :title="dictionary.logout">
-              →
-            </button>
           </div>
+          <button class="logout-button" type="button" @click="handleLogout" :title="dictionary.logout" :aria-label="dictionary.logout">
+            <LogOut :size="18" />
+          </button>
         </div>
       </header>
 
@@ -143,6 +157,25 @@ import KnowledgeView from "./views/knowledge.vue";
 import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
 import { useI18n } from "./i18n";
 import { api } from "./services/api";
+import {
+  BrainCircuit,
+  Building2,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  FileSearch,
+  Languages,
+  LayoutDashboard,
+  LogOut,
+  Mail,
+  Map,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  UserCog,
+  Users,
+} from "@lucide/vue";
 
 const activeView = ref("gis");
 const activeNavKey = ref("gis");
@@ -150,6 +183,7 @@ const activeSystemTab = ref("users");
 const theme = ref("teal");
 const isSidebarCollapsed = ref(false);
 const isAiAnalysisExpanded = ref(true);
+const isSettingsOpen = ref(false);
 const isAuthenticated = ref(false);
 const currentUser = ref(null);
 const currentPermissions = ref([]);
@@ -182,19 +216,19 @@ const reconciliationMenuLabels = computed(() => ({
 }));
 
 const navItems = computed(() => [
-  { key: "overview", label: dictionary.value.overview },
-  { key: "gis", label: dictionary.value.gis },
-  { key: "resources", label: dictionary.value.resources },
-  { key: "customers", label: dictionary.value.customers },
-  { key: "finance", label: dictionary.value.finance },
-  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, permissions: ["reconciliation.bank.view"] },
-  { key: "ocr", label: reconciliationMenuLabels.value.ocr, permissions: ["reconciliation.ocr.view", "ocr:execute"] },
-  { key: "knowledge", label: dictionary.value.knowledge },
-  { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, permissions: ["user:view"] },
-  { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, permissions: ["role:view"] },
-  { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, permissions: ["audit_log:view"] },
-  { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, permissions: ["setting:email"] },
-  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations || "Translation Management", permissions: ["i18n.translation.view"] },
+  { key: "overview", label: dictionary.value.overview, icon: LayoutDashboard },
+  { key: "gis", label: dictionary.value.gis, icon: Map },
+  { key: "resources", label: dictionary.value.resources, icon: Building2 },
+  { key: "customers", label: dictionary.value.customers, icon: Users },
+  { key: "finance", label: dictionary.value.finance, icon: CircleDollarSign },
+  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: CircleDollarSign, permissions: ["reconciliation.bank.view"] },
+  { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: FileSearch, permissions: ["reconciliation.ocr.view", "ocr:execute"] },
+  { key: "knowledge", label: dictionary.value.knowledge, icon: BrainCircuit },
+  { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, icon: UserCog, permissions: ["user:view"] },
+  { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, icon: ShieldCheck, permissions: ["role:view"] },
+  { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, icon: ScrollText, permissions: ["audit_log:view"] },
+  { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, icon: Mail, permissions: ["setting:email"] },
+  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations || "Translation Management", icon: Languages, permissions: ["i18n.translation.view"] },
 ]);
 
 const aiMenuTitle = computed(() => ({
@@ -222,6 +256,7 @@ const aiNavItems = computed(() => visibleNavItems.value
       : reconciliationMenuLabels.value.ocr.replace(/^AI\s*\/\s*/, ""),
   })));
 const isAiAnalysisActive = computed(() => ["bank-reconciliation", "ocr"].includes(activeNavKey.value));
+const userInitial = computed(() => (currentUser.value?.name || dictionary.value.userFallback || "U").trim().slice(0, 1).toUpperCase());
 
 const toggleAiAnalysis = () => {
   isAiAnalysisExpanded.value = !isAiAnalysisExpanded.value;
@@ -296,6 +331,11 @@ const currentSubtitle = computed(() => {
 
 const setTheme = (key) => {
   theme.value = key;
+  isSettingsOpen.value = false;
+};
+
+const closeSettings = () => {
+  isSettingsOpen.value = false;
 };
 
 const toggleSidebar = () => {
@@ -351,6 +391,7 @@ const handleLogout = () => {
 };
 
 onMounted(() => {
+  document.addEventListener('click', closeSettings);
   window.addEventListener('auth-expired', clearAuth);
   window.addEventListener('popstate', applyRouteFromLocation);
   applyRouteFromLocation();
@@ -358,6 +399,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener('click', closeSettings);
   window.removeEventListener('auth-expired', clearAuth);
   window.removeEventListener('popstate', applyRouteFromLocation);
 });
@@ -1100,6 +1142,246 @@ onBeforeUnmount(() => {
 
   .overview-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Navigation and topbar refinements */
+.sidebar {
+  position: relative;
+  overflow: visible;
+  transition: width 0.2s ease;
+}
+
+.sidebar-main {
+  height: 100%;
+  padding-right: 0;
+}
+
+.brand {
+  padding-inline: 0;
+}
+
+.brand-mark {
+  flex: 0 0 40px;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 22px;
+  right: -14px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  color: #475569;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.sidebar-toggle:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: #f8fffd;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+}
+
+.nav-icon {
+  flex: 0 0 19px;
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-parent .nav-chevron {
+  margin-left: auto;
+}
+
+.sidebar-collapsed .brand {
+  justify-content: center;
+}
+
+.sidebar-collapsed .brand-text,
+.sidebar-collapsed .nav-label {
+  display: none;
+}
+
+.sidebar-collapsed .nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  margin-inline: auto;
+  padding: 0;
+  border-left: 0;
+}
+
+.sidebar-collapsed .nav-item.active {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.sidebar-collapsed .nav-children {
+  gap: 4px;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.icon-button,
+.logout-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #d8e1ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.icon-button:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--sidebar-bg);
+}
+
+.settings-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 180px;
+  padding: 8px;
+  border: 1px solid #d8e1ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+}
+
+.settings-title {
+  margin: 0;
+  padding: 6px 8px 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.theme-options {
+  display: grid;
+  gap: 2px;
+}
+
+.theme-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+}
+
+.theme-option:hover,
+.theme-option.active {
+  background: #f1f5f9;
+}
+
+.theme-option.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.theme-color {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #cbd5e1;
+}
+
+.topbar-actions {
+  gap: 10px;
+}
+
+.locale-switch,
+.locale-button,
+.ghost-button {
+  height: 40px;
+}
+
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.topbar-user {
+  min-height: 40px;
+  height: 40px;
+  padding-left: 10px;
+}
+
+.user-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.topbar-user .user-info {
+  min-width: 0;
+}
+
+.topbar-user .user-name {
+  color: #1f2937;
+  line-height: 1.25;
+}
+
+.topbar-user .user-role {
+  color: #64748b;
+  line-height: 1.25;
+}
+
+@media (max-width: 1080px) {
+  .sidebar {
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar-user {
+    width: auto;
+    padding: 0 0 0 10px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
   }
 }
 </style>
