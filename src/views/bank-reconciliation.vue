@@ -11,15 +11,22 @@
 
     <div class="panel-card">
       <div class="toolbar">
-        <label class="file-button">
-          {{ selectedFiles.length ? t.action.addFiles : t.action.upload }}
-          <input ref="fileInput" type="file" multiple accept=".csv,.tsv,.txt,.html,.xls,.xlsx" @change="selectFiles" />
-        </label>
-        <button class="primary-button" type="button" :disabled="!selectedFiles.length || loading" @click="uploadRows">{{ t.action.createBatch }}</button>
-        <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="runMatch">{{ t.action.match }}</button>
-        <button class="primary-button" type="button" :disabled="!activeBatchId || loading" @click="submitBatch">{{ t.action.submit }}</button>
-        <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="exportFinalResult">{{ t.action.exportExcel }}</button>
-        <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="exportUnmatchedJson">{{ t.action.exportJson }}</button>
+        <div class="workflow-actions">
+          <label class="file-button step-button">
+            {{ selectedFiles.length ? t.action.addFiles : t.action.upload }}
+            <input ref="fileInput" type="file" multiple accept=".csv,.tsv,.txt,.html,.xls,.xlsx" @change="selectFiles" />
+          </label>
+          <span class="step-arrow" aria-hidden="true">→</span>
+          <button class="primary-button step-button" type="button" :disabled="!selectedFiles.length || loading" @click="uploadRows">{{ t.action.createBatch }}</button>
+          <span class="step-arrow" aria-hidden="true">→</span>
+          <button class="primary-button step-button" type="button" :disabled="!activeBatchId || loading" @click="runMatch">{{ t.action.match }}</button>
+          <span class="step-arrow" aria-hidden="true">→</span>
+          <button class="primary-button step-button" type="button" :disabled="!activeBatchId || loading" @click="submitBatch">{{ t.action.submit }}</button>
+        </div>
+        <div class="toolbar-exports">
+          <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="exportFinalResult">{{ t.action.exportExcel }}</button>
+          <button class="secondary-button" type="button" :disabled="!activeBatchId || loading" @click="exportUnmatchedJson">{{ t.action.exportJson }}</button>
+        </div>
       </div>
 
       <div class="rule-panel">
@@ -58,18 +65,21 @@
           <strong>{{ t.history.title }}</strong>
           <span>{{ batches.length }}</span>
         </div>
-        <button
+        <div
           v-for="batch in batches"
           :key="batch.id"
           class="batch-row"
           :class="{ active: activeBatchId === batch.id }"
-          type="button"
-          @click="selectBatch(batch.id)"
         >
-          <strong>{{ batch.batchNo }}</strong>
-          <span>{{ statusLabel(batch.status) }}</span>
-          <small>{{ batch.sourceFiles?.[0]?.fileName || t.history.noFile }}</small>
-        </button>
+          <button class="batch-select" type="button" @click="selectBatch(batch.id)">
+            <strong>{{ batch.batchNo }}</strong>
+            <span>{{ statusLabel(batch.status) }}</span>
+            <small>{{ batch.sourceFiles?.[0]?.fileName || t.history.noFile }}</small>
+          </button>
+          <button class="danger-button mini batch-delete" type="button" :disabled="loading" @click="deleteBatch(batch.id)">
+            删除
+          </button>
+        </div>
       </aside>
 
       <section class="panel-card records-panel">
@@ -90,7 +100,8 @@
                 <th>{{ t.table.date }}</th>
                 <th>{{ t.table.summary }}</th>
                 <th>{{ t.table.amount }}</th>
-                <th>{{ t.table.contract }}</th>
+                <th>{{ roomColumnLabel }}</th>
+                <th>{{ contractColumnLabel }}</th>
                 <th>{{ t.table.status }}</th>
                 <th>{{ t.table.remark }}</th>
                 <th>{{ t.table.actions }}</th>
@@ -110,10 +121,12 @@
                     <option value="">{{ t.common.select }}</option>
                     <option v-for="room in rooms" :key="room.id" :value="room.id">{{ room.property?.name || room.propertyName || "-" }} / {{ room.roomNumber }}</option>
                   </select>
+                </td>
+                <td>
                   <select v-model="record.contractId" @change="manualMatch(record)">
                     <option value="">{{ t.common.select }}</option>
                     <option v-for="contract in contractsByRecord[record.id] || []" :key="contract.id" :value="contract.id">
-                      {{ contract.contractNo || contract.id }} / {{ contract.contractorName }} / {{ contract.startDate }} - {{ contract.endDate || "-" }}
+                      {{ contract.contractNo || contract.id }} / {{ contractorLabel }}: {{ contract.contractorName || "-" }} / {{ payerLabel }}: {{ contract.payerName || "-" }}
                     </option>
                   </select>
                 </td>
@@ -128,7 +141,7 @@
                 </td>
               </tr>
               <tr v-if="!filteredRecords.length">
-                <td colspan="8" class="empty-state">{{ t.common.noData }}</td>
+                <td colspan="9" class="empty-state">{{ t.common.noData }}</td>
               </tr>
             </tbody>
           </table>
@@ -189,6 +202,12 @@ const searchQuery = ref("");
 const errorMessage = ref("");
 const loading = ref(false);
 const matchingRules = ref(["normalizedBankSummary", "depositAmount"]);
+const isZh = computed(() => locale.value === "zh");
+const roomColumnLabel = computed(() => isZh.value ? "房间" : t.value.matching.room);
+const contractColumnLabel = computed(() => isZh.value ? "契约者 / 契约支付者" : t.value.table.contract);
+const contractPartyLabel = computed(() => isZh.value ? "契约者 / 契约支付者" : "Contractor / Payer");
+const contractorLabel = computed(() => isZh.value ? "契约者" : "Contractor");
+const payerLabel = computed(() => isZh.value ? "契约支付者" : "Payer");
 
 const ruleOptions = computed(() => [
   { key: "normalizedBankSummary", label: t.value.matching.summary },
@@ -197,7 +216,7 @@ const ruleOptions = computed(() => [
   { key: "paymentMonth", label: t.value.matching.month },
   { key: "propertyId", label: t.value.matching.property },
   { key: "roomId", label: t.value.matching.room },
-  { key: "contractId", label: t.value.matching.contract },
+  { key: "contractParty", label: contractPartyLabel.value },
 ]);
 
 const tabs = computed(() => [
@@ -216,7 +235,6 @@ const stats = computed(() => [
   { key: "unmatched", label: t.value.status.UNMATCHED, value: activeBatch.value?.unmatchedCount || 0 },
   { key: "submitted", label: t.value.status.SUBMITTED, value: activeBatch.value?.submittedCount || 0 },
 ]);
-
 const filteredRecords = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
   return records.value.filter((record) => {
@@ -288,6 +306,21 @@ const submitBatch = async () => {
     await api.submitReconciliationBatch(activeBatchId.value);
     await loadBatches();
     await selectBatch(activeBatchId.value);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const deleteBatch = async (batchId) => {
+  if (!batchId || !window.confirm("确认删除该批次及其对账记录？")) return;
+  loading.value = true;
+  try {
+    await api.deleteReconciliationBatch(batchId);
+    if (activeBatchId.value === batchId) {
+      activeBatchId.value = "";
+      records.value = [];
+    }
+    await loadBatches();
   } finally {
     loading.value = false;
   }
@@ -416,10 +449,38 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
+.toolbar {
+  align-items: flex-start;
+}
+
+.workflow-actions,
+.toolbar-exports {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-exports {
+  margin-left: auto;
+}
+
+.step-button {
+  min-width: 86px;
+  justify-content: center;
+}
+
+.step-arrow {
+  color: var(--primary);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .file-button {
   position: relative;
   display: inline-flex;
-  min-height: 40px;
+  min-height: 36px;
   align-items: center;
   padding: 0 14px;
   border-radius: 8px;
@@ -595,7 +656,9 @@ onMounted(async () => {
 .batch-row {
   width: 100%;
   display: grid;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
   margin-top: 8px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -607,6 +670,22 @@ onMounted(async () => {
 .batch-row.active {
   border-color: var(--primary);
   background: #eefaf8;
+}
+
+.batch-select {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.batch-delete {
+  align-self: center;
+  white-space: nowrap;
 }
 
 .tabs {
@@ -643,7 +722,7 @@ textarea {
 
 table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1240px;
   border-collapse: collapse;
 }
 
@@ -699,6 +778,16 @@ td small {
   .stats-grid,
   .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .toolbar,
+  .toolbar-exports {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .toolbar-exports {
+    margin-left: 0;
   }
 }
 </style>

@@ -184,6 +184,10 @@ export const api = {
     return request(`/reconciliation/bank/batches/${id}`);
   },
 
+  async deleteReconciliationBatch(id) {
+    return request(`/reconciliation/bank/batches/${id}`, { method: 'DELETE' });
+  },
+
   async listReconciliationRecords(batchId, status) {
     const query = status ? `?status=${encodeURIComponent(status)}` : '';
     return request(`/reconciliation/bank/batches/${batchId}/records${query}`);

@@ -80,6 +80,36 @@ export class ReconciliationService {
     return batch;
   }
 
+  async deleteBatch(batchId: string, actorUserId?: string) {
+    const batch = await this.prisma.reconciliationBatch.findUnique({
+      where: { id: batchId },
+      include: { sourceFiles: true },
+    });
+    if (!batch) throw new NotFoundException('Reconciliation batch not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.bank.batch.delete',
+          entityType: 'ReconciliationBatch',
+          entityId: batchId,
+          before: {
+            batchNo: batch.batchNo,
+            status: batch.status,
+            totalRecords: batch.totalRecords,
+            sourceFiles: batch.sourceFiles.map((file) => file.fileName),
+          },
+        },
+      });
+      await tx.reconciliationRecord.deleteMany({ where: { batchId } });
+      await tx.reconciliationSourceFile.deleteMany({ where: { batchId } });
+      await tx.reconciliationBatch.delete({ where: { id: batchId } });
+    });
+
+    return { ok: true };
+  }
+
   async getRecords(batchId: string, status?: ReconciliationRecordMatchStatus) {
     const records = await this.prisma.reconciliationRecord.findMany({
       where: { batchId, matchStatus: status },
@@ -590,17 +620,41 @@ export class ReconciliationService {
     }
 
     const aliases = await this.prisma.contractPaymentAlias.findMany({
-      where: { normalizedBankSummary: record.normalizedBankSummary, isActive: true },
+      where: { isActive: true },
       include: { contract: { include: { room: { include: { property: true } }, tenant: true } } },
     });
-    const validAliases = aliases.filter((alias) => this.isContractValid(alias.contract, record.transactionDate));
-    if (validAliases.length !== 1) {
-      await this.markManualReview(record.id, validAliases.length ? 'Multiple valid contract candidates' : 'No valid contract candidate', matchingRules);
+    const validAliases = aliases.filter(
+      (alias) =>
+        this.isContractValid(alias.contract, record.transactionDate) &&
+        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.payerName, alias.contract.tenant.name]),
+    );
+
+    const validCandidates = validAliases.length
+      ? validAliases
+      : (await this.prisma.contract.findMany({
+          where: { status: 'ACTIVE' },
+          include: { room: { include: { property: true } }, tenant: true },
+        }))
+          .filter(
+            (contract) =>
+              this.isContractValid(contract, record.transactionDate) &&
+              this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.tenant.name]),
+          )
+          .map((contract) => ({
+            contractId: contract.id,
+            originalBankSummary: record.originalBankSummary,
+            normalizedBankSummary: record.normalizedBankSummary,
+            payerName: contract.tenant.name,
+            contract,
+          }));
+
+    if (validCandidates.length !== 1) {
+      await this.markManualReview(record.id, validCandidates.length ? 'Multiple valid contract candidates' : 'No valid contract candidate', matchingRules);
       return;
     }
 
-    const alias = validAliases[0];
-    const amountMatches = new Prisma.Decimal(record.depositAmount).equals(alias.contract.monthlyRent);
+    const candidate = validCandidates[0];
+    const amountMatches = new Prisma.Decimal(record.depositAmount).equals(candidate.contract.monthlyRent);
     const duplicate = await this.prisma.reconciliationRecord.findFirst({
       where: { recordHash: record.recordHash, submittedAt: { not: null }, NOT: { id: record.id } },
     });
@@ -612,18 +666,18 @@ export class ReconciliationService {
     await this.prisma.reconciliationRecord.update({
       where: { id: record.id },
       data: {
-        propertyId: alias.contract.room.propertyId,
-        roomId: alias.contract.roomId,
-        contractId: alias.contractId,
-        contractorId: alias.contract.tenantId,
-        contractorName: alias.contract.tenant.name,
-        payerId: alias.contract.tenantId,
-        payerName: alias.payerName || alias.contract.tenant.name,
-        registeredBankSummaryName: alias.originalBankSummary,
+        propertyId: candidate.contract.room.propertyId,
+        roomId: candidate.contract.roomId,
+        contractId: candidate.contractId,
+        contractorId: candidate.contract.tenantId,
+        contractorName: candidate.contract.tenant.name,
+        payerId: candidate.contract.tenantId,
+        payerName: candidate.payerName || candidate.contract.tenant.name,
+        registeredBankSummaryName: candidate.originalBankSummary,
         matchMode: 'AUTO',
         matchScore: 100,
         matchStatus: 'AUTO_MATCHED',
-        matchReason: 'Exact alias, amount, and contract-period match',
+        matchReason: 'Contractor or contract payer, amount, and contract-period match',
         matchingRulesJson: matchingRules,
       },
     });
@@ -780,6 +834,15 @@ export class ReconciliationService {
     if (!transactionDate) return false;
     const time = transactionDate.getTime();
     return contract.startDate.getTime() <= time && (!contract.endDate || contract.endDate.getTime() >= time);
+  }
+
+  private summaryMatchesAnyContractParty(summary: string | null | undefined, names: Array<string | null | undefined>) {
+    const normalizedSummary = normalizeBankSummary(summary);
+    if (!normalizedSummary) return false;
+    return names.some((name) => {
+      const normalizedName = normalizeBankSummary(name);
+      return normalizedName && (normalizedSummary === normalizedName || normalizedSummary.includes(normalizedName) || normalizedName.includes(normalizedSummary));
+    });
   }
 
   private pick(row: BankUploadRow, keys: string[]) {

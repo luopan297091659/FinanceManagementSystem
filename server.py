@@ -353,6 +353,10 @@ def refresh_batch_counts(batch, records):
     return batch
 
 
+def normalize_match_text(value):
+    return "".join(str(value or "").lower().split())
+
+
 def reconciliation_rooms():
     data = bootstrap()
     rooms = []
@@ -370,6 +374,85 @@ def reconciliation_rooms():
     return rooms
 
 
+def reconciliation_contracts(room_id=None):
+    data = bootstrap()
+    rooms_by_id = {item["id"]: item for item in reconciliation_rooms()}
+    tenant_by_room = {}
+    owner_by_room = {}
+    tenants = {item["id"]: item for item in data["tenants"]}
+    owners = {item["id"]: item for item in data["owners"]}
+    for binding in data["roomTenants"]:
+        if binding.get("status") == "ACTIVE" and binding.get("roomId") not in tenant_by_room:
+            tenant_by_room[binding.get("roomId")] = tenants.get(binding.get("tenantId"), {})
+    for binding in data["roomOwners"]:
+        if binding.get("status") == "ACTIVE" and binding.get("roomId") not in owner_by_room:
+            owner_by_room[binding.get("roomId")] = owners.get(binding.get("ownerId"), {})
+
+    contracts = []
+    for room in rooms_by_id.values():
+        if room_id and room["id"] != room_id:
+            continue
+        contractor = tenant_by_room.get(room["id"], {})
+        payer = owner_by_room.get(room["id"], {}) or contractor
+        contracts.append({
+            "id": f"contract-{room['id']}",
+            "contractNo": room.get("roomNumber"),
+            "roomId": room["id"],
+            "roomNumber": room.get("roomNumber"),
+            "propertyId": room.get("propertyId"),
+            "propertyName": room.get("propertyName"),
+            "contractorId": contractor.get("id"),
+            "contractorName": contractor.get("name") or "",
+            "payerId": payer.get("id"),
+            "payerName": payer.get("name") or "",
+            "startDate": "",
+            "endDate": "",
+        })
+    return contracts
+
+
+def match_reconciliation_record(record):
+    summary = normalize_match_text(record.get("normalizedBankSummary") or record.get("originalBankSummary"))
+    amount = str(record.get("depositAmount") or "").replace(",", "").strip()
+    if not summary or not amount:
+        record["matchStatus"] = "MANUAL_REVIEW"
+        record["matchReason"] = "Missing summary, date, or amount"
+        return
+
+    candidates = []
+    with connect() as conn:
+        for income in rows(conn, "SELECT id, room_id AS roomId, payer, total_amount AS totalAmount FROM income"):
+            names = [income.get("payer")]
+            contracts = reconciliation_contracts(income.get("roomId"))
+            for contract in contracts:
+                names.extend([contract.get("contractorName"), contract.get("payerName")])
+            name_matched = any(name and normalize_match_text(name) in summary for name in names)
+            amount_matched = str(income.get("totalAmount") or "").replace(".0", "") == amount.replace(".0", "")
+            if name_matched and amount_matched and contracts:
+                candidates.append((income, contracts[0]))
+
+    if len(candidates) != 1:
+        record["matchStatus"] = "MANUAL_REVIEW"
+        record["matchReason"] = "Multiple valid contract candidates" if candidates else "No valid contract candidate"
+        return
+
+    income, contract = candidates[0]
+    record.update({
+        "roomId": income.get("roomId"),
+        "roomNumber": contract.get("roomNumber"),
+        "contractId": contract.get("id"),
+        "contractNo": contract.get("contractNo"),
+        "contractorId": contract.get("contractorId"),
+        "contractorName": contract.get("contractorName"),
+        "payerId": contract.get("payerId"),
+        "payerName": contract.get("payerName"),
+        "matchMode": "AUTO",
+        "matchScore": 100,
+        "matchStatus": "AUTO_MATCHED",
+        "matchReason": "Matched by contractor or contract payer and amount",
+    })
+
+
 def handle_reconciliation_get(path, query):
     store = read_reconciliation_store()
     base = "/api/v1/reconciliation/bank"
@@ -384,7 +467,10 @@ def handle_reconciliation_get(path, query):
     if path == f"{base}/options/rooms":
         return reconciliation_rooms()
     if path == f"{base}/options/contracts":
-        return []
+        room_id = ""
+        if "roomId=" in query:
+            room_id = query.split("roomId=", 1)[1].split("&", 1)[0]
+        return reconciliation_contracts(room_id)
     raise ValueError("Unknown API path")
 
 
@@ -426,8 +512,7 @@ def handle_reconciliation_post(path, payload):
         batch_id = path[len(f"{base}/batches/") : -len("/match")]
         for record in store["records"]:
             if record.get("batchId") == batch_id and record.get("matchStatus") == "UNMATCHED":
-                record["matchStatus"] = "MANUAL_REVIEW"
-                record["matchReason"] = "待人工复核"
+                match_reconciliation_record(record)
         for batch in store["batches"]:
             if batch["id"] == batch_id:
                 refresh_batch_counts(batch, store["records"])
@@ -473,6 +558,21 @@ def handle_reconciliation_post(path, payload):
                 return record
         raise ValueError("记录不存在")
     raise ValueError("Unknown API path")
+
+
+def handle_reconciliation_delete(path):
+    store = read_reconciliation_store()
+    base = "/api/v1/reconciliation/bank/batches"
+    batch_id = resource_id(path, base)
+    if not batch_id:
+        raise ValueError("Unknown API path")
+    before_count = len(store["batches"])
+    store["batches"] = [batch for batch in store["batches"] if batch.get("id") != batch_id]
+    if len(store["batches"]) == before_count:
+        raise ValueError("批次不存在")
+    store["records"] = [record for record in store["records"] if record.get("batchId") != batch_id]
+    write_reconciliation_store(store)
+    return {"ok": True}
 
 
 def handle_reconciliation_patch(path, payload):
@@ -796,7 +896,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         path = urlparse(self.path).path
         try:
-            self.send_json(200, handle_delete(path))
+            if path.startswith("/api/v1/reconciliation/bank"):
+                self.send_json(200, handle_reconciliation_delete(path))
+            else:
+                self.send_json(200, handle_delete(path))
         except Exception as exc:
             self.send_json(400, {"error": str(exc)})
 

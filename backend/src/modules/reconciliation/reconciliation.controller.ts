@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ReconciliationRecordMatchStatus } from '@prisma/client';
 import { Request } from 'express';
 import { RequirePermission } from '../rbac/permissions.decorator';
@@ -48,6 +48,12 @@ export class ReconciliationController {
   @RequirePermission('reconciliation.bank.view')
   batch(@Param('batchId') batchId: string) {
     return this.reconciliation.getBatch(batchId);
+  }
+
+  @Delete('batches/:batchId')
+  @RequirePermission('reconciliation.bank.history')
+  deleteBatch(@Param('batchId') batchId: string, @Req() request: Request) {
+    return this.reconciliation.deleteBatch(batchId, this.actorUserId(request));
   }
 
   @Get('batches/:batchId/records')
