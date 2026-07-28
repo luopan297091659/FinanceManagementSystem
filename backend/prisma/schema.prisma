@@ -45,6 +45,7 @@ enum ContractStatus {
   ACTIVE
   EXPIRED
   TERMINATED
+  FUTURE
 }
 
 enum TransactionType {
@@ -120,6 +121,40 @@ enum DataScopeType {
   PROPERTY
   SELF
   READ_ONLY
+}
+
+enum ReconciliationBatchStatus {
+  PENDING
+  UPLOADED
+  PARSING
+  PARSED
+  MATCHING
+  MANUAL_REVIEW
+  PARTIAL_COMPLETED
+  COMPLETED
+  FAILED
+}
+
+enum ReconciliationRecordMatchMode {
+  AUTO
+  MANUAL
+  UNMATCHED
+}
+
+enum ReconciliationRecordMatchStatus {
+  AUTO_MATCHED
+  MANUAL_MATCHED
+  MANUAL_REVIEW
+  UNMATCHED
+  SUBMITTED
+  FAILED
+}
+
+enum ContractPartyType {
+  CONTRACTOR
+  PAYER
+  TENANT
+  GUARANTOR
 }
 
 model ManagementCompany {
@@ -272,6 +307,7 @@ model Property {
   rooms       Room[]
   documents   Document[]
   anomalyAlerts AnomalyAlert[]
+  reconciliationRecords ReconciliationRecord[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
@@ -304,6 +340,7 @@ model Room {
   transactions      Transaction[]
   documents         Document[]
   anomalyAlerts     AnomalyAlert[]
+  reconciliationRecords ReconciliationRecord[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -415,12 +452,54 @@ model Contract {
   feeBearer          FeeBearer     @default(OWNER)
   status          ContractStatus @default(ACTIVE)
   anomalyAlerts   AnomalyAlert[]
+  paymentAliases  ContractPaymentAlias[]
+  partyHistories  ContractPartyHistory[]
+  reconciliationRecords ReconciliationRecord[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   @@index([roomId, status])
   @@index([tenantId])
   @@index([nextDueDate])
+}
+
+model ContractPaymentAlias {
+  id                    String   @id @default(cuid())
+  contractId            String
+  contract              Contract @relation(fields: [contractId], references: [id])
+  payerName             String?
+  originalBankSummary   String?
+  normalizedBankSummary String
+  validFrom             DateTime?
+  validTo               DateTime?
+  isActive              Boolean  @default(true)
+  confirmedCount        Int      @default(0)
+  lastConfirmedAt       DateTime?
+  remark                String?
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([normalizedBankSummary])
+}
+
+model ContractPartyHistory {
+  id           String            @id @default(cuid())
+  contractId   String
+  contract     Contract          @relation(fields: [contractId], references: [id])
+  partyType    ContractPartyType
+  partyId      String?
+  partyName    String
+  validFrom    DateTime?
+  validTo      DateTime?
+  changeReason String?
+  createdBy    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([contractId, partyType])
+  @@index([partyId])
 }
 
 model FeeItem {
@@ -493,12 +572,107 @@ model BankTransaction {
   rawPayload       Json?
   reconciliationStatus ReconciliationStatus @default(UNMATCHED)
   matches         ReconciliationMatch[]
+  reconciliationRecords ReconciliationRecord[]
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
   @@index([bookedAt])
   @@index([direction, amount])
   @@index([reconciliationStatus])
+}
+
+model ReconciliationBatch {
+  id                String                    @id @default(cuid())
+  batchNo           String                    @unique
+  status            ReconciliationBatchStatus @default(PENDING)
+  matchingRulesJson Json?
+  totalRecords      Int                       @default(0)
+  autoMatchedCount  Int                       @default(0)
+  manualMatchedCount Int                      @default(0)
+  unmatchedCount    Int                       @default(0)
+  submittedCount    Int                       @default(0)
+  failedCount       Int                       @default(0)
+  uploadedBy        String?
+  remark            String?
+  sourceFiles       ReconciliationSourceFile[]
+  records           ReconciliationRecord[]
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model ReconciliationSourceFile {
+  id           String                 @id @default(cuid())
+  batchId      String
+  batch        ReconciliationBatch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileType     String?
+  fileSize     Int?
+  fileHash     String
+  storageKey   String?
+  rawMetadata   Json?
+  uploadedBy   String?
+  records      ReconciliationRecord[]
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@index([batchId])
+  @@index([fileHash])
+}
+
+model ReconciliationRecord {
+  id                    String                          @id @default(cuid())
+  batchId               String
+  batch                 ReconciliationBatch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sourceFileId          String?
+  sourceFile            ReconciliationSourceFile?       @relation(fields: [sourceFileId], references: [id])
+  sourcePage            Int?
+  sourceRow             Int?
+  sourceDataJson        Json
+  transactionDate       DateTime?
+  depositAmount         Decimal?                        @db.Decimal(18, 2)
+  originalBankSummary   String?
+  normalizedBankSummary String?
+  registeredBankSummaryName String?
+  propertyId            String?
+  property              Property?                       @relation(fields: [propertyId], references: [id])
+  roomId                String?
+  room                  Room?                           @relation(fields: [roomId], references: [id])
+  contractId            String?
+  contract              Contract?                       @relation(fields: [contractId], references: [id])
+  contractorId          String?
+  contractorName        String?
+  payerId               String?
+  payerName             String?
+  paymentMonth          String?
+  matchMode             ReconciliationRecordMatchMode    @default(UNMATCHED)
+  matchScore            Int?
+  matchStatus           ReconciliationRecordMatchStatus  @default(UNMATCHED)
+  matchReason           String?
+  matchingRulesJson     Json?
+  targetTable           String?
+  targetRecordId        String?
+  bankTransactionId     String?
+  bankTransaction       BankTransaction?                 @relation(fields: [bankTransactionId], references: [id])
+  transactionCategory   String?
+  feeType               String?
+  remark                String?
+  recordHash            String
+  submittedAt           DateTime?
+  submittedBy           String?
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+
+  @@index([batchId])
+  @@index([sourceFileId])
+  @@index([matchStatus])
+  @@index([normalizedBankSummary])
+  @@index([transactionDate])
+  @@index([recordHash])
+  @@index([targetTable, targetRecordId])
+  @@index([propertyId, roomId])
+  @@index([contractId])
 }
 
 model BankNameAlias {

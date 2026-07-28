@@ -95,6 +95,7 @@
       <CustomersView v-else-if="activeView === 'customers'" />
       <FinanceView v-else-if="activeView === 'finance'" />
       <OcrView v-else-if="activeView === 'ocr'" />
+      <BankReconciliationView v-else-if="activeView === 'bank-reconciliation'" />
       <KnowledgeView v-else-if="activeView === 'knowledge'" />
       <SystemAdminPanel v-else-if="activeView === 'system'" :permissions="currentPermissions" :initial-tab="activeSystemTab" />
     </main>
@@ -109,6 +110,7 @@ import ResourcesView from "./views/resources.vue";
 import CustomersView from "./views/customers.vue";
 import FinanceView from "./views/finance.vue";
 import OcrView from "./views/ocr.vue";
+import BankReconciliationView from "./views/bank-reconciliation.vue";
 import KnowledgeView from "./views/knowledge.vue";
 import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
 import { useI18n } from "./i18n";
@@ -124,13 +126,40 @@ const currentUser = ref(null);
 const currentPermissions = ref([]);
 const { locale, dictionary, setLocale } = useI18n();
 
+const reconciliationMenuLabels = computed(() => ({
+  ja: {
+    bank: "AI / 銀行明細照合",
+    ocr: "AI / OCR 照合",
+    bankSubtitle: "銀行入金を契約単位で照合し、手動確認と提出まで管理します。",
+    ocrSubtitle: dictionary.value.subtitles.ocr,
+  },
+  zh: {
+    bank: "AI / 银行账单对账",
+    ocr: "AI / OCR 对账",
+    bankSubtitle: "按契约书维度处理银行入金，支持人工复核与正式提交。",
+    ocrSubtitle: dictionary.value.subtitles.ocr,
+  },
+  en: {
+    bank: "AI / Bank Reconciliation",
+    ocr: "AI / OCR Reconciliation",
+    bankSubtitle: "Match bank deposits at contract level, then review and submit explicitly.",
+    ocrSubtitle: "Existing OCR reconciliation workspace.",
+  },
+}[locale.value] || {
+  bank: "AI / 銀行明細照合",
+  ocr: "AI / OCR 照合",
+  bankSubtitle: "銀行入金を契約単位で照合し、手動確認と提出まで管理します。",
+  ocrSubtitle: dictionary.value.subtitles.ocr,
+}));
+
 const navItems = computed(() => [
   { key: "overview", label: dictionary.value.overview },
   { key: "gis", label: dictionary.value.gis },
   { key: "resources", label: dictionary.value.resources },
   { key: "customers", label: dictionary.value.customers },
   { key: "finance", label: dictionary.value.finance },
-  { key: "ocr", label: dictionary.value.ocr },
+  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, permissions: ["reconciliation.bank.view"] },
+  { key: "ocr", label: reconciliationMenuLabels.value.ocr, permissions: ["reconciliation.ocr.view", "ocr:execute"] },
   { key: "knowledge", label: dictionary.value.knowledge },
   { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, permissions: ["user:view"] },
   { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, permissions: ["role:view"] },
@@ -152,6 +181,26 @@ const setActiveNavItem = (item) => {
   activeView.value = item.view || item.key;
   if (item.tab) {
     activeSystemTab.value = item.tab;
+  }
+  if (item.key === "bank-reconciliation") {
+    window.history.pushState({}, "", "/ai-reconciliation/bank");
+  } else if (item.key === "ocr") {
+    window.history.pushState({}, "", "/ai-reconciliation/ocr");
+  }
+};
+
+const applyRouteFromLocation = () => {
+  const path = window.location.pathname;
+  if (path === "/ai-reconciliation" || path === "/ai-reconciliation/") {
+    window.history.replaceState({}, "", "/ai-reconciliation/ocr");
+    activeNavKey.value = "ocr";
+    activeView.value = "ocr";
+  } else if (path.startsWith("/ai-reconciliation/bank")) {
+    activeNavKey.value = "bank-reconciliation";
+    activeView.value = "bank-reconciliation";
+  } else if (path.startsWith("/ai-reconciliation/ocr")) {
+    activeNavKey.value = "ocr";
+    activeView.value = "ocr";
   }
 };
 
@@ -184,6 +233,8 @@ const currentTitle = computed(() => {
 });
 
 const currentSubtitle = computed(() => {
+  if (activeView.value === "bank-reconciliation") return reconciliationMenuLabels.value.bankSubtitle;
+  if (activeView.value === "ocr") return reconciliationMenuLabels.value.ocrSubtitle;
   return dictionary.value.subtitles[activeView.value] || "";
 });
 
@@ -245,11 +296,14 @@ const handleLogout = () => {
 
 onMounted(() => {
   window.addEventListener('auth-expired', clearAuth);
+  window.addEventListener('popstate', applyRouteFromLocation);
+  applyRouteFromLocation();
   checkAuth();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('auth-expired', clearAuth);
+  window.removeEventListener('popstate', applyRouteFromLocation);
 });
 </script>
 

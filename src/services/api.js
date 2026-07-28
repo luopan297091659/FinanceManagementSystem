@@ -171,4 +171,74 @@ export const api = {
   async createFeeItem(payload) {
     return request('/fee-items', { method: 'POST', body: payload });
   },
+
+  async uploadBankReconciliation(payload) {
+    return request('/reconciliation/bank/upload', { method: 'POST', body: payload });
+  },
+
+  async listReconciliationBatches() {
+    return request('/reconciliation/bank/batches');
+  },
+
+  async getReconciliationBatch(id) {
+    return request(`/reconciliation/bank/batches/${id}`);
+  },
+
+  async listReconciliationRecords(batchId, status) {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request(`/reconciliation/bank/batches/${batchId}/records${query}`);
+  },
+
+  async parseReconciliationBatch(batchId) {
+    return request(`/reconciliation/bank/batches/${batchId}/parse`, { method: 'POST', body: {} });
+  },
+
+  async matchReconciliationBatch(batchId, matchingRules) {
+    return request(`/reconciliation/bank/batches/${batchId}/match`, { method: 'POST', body: { matchingRules } });
+  },
+
+  async submitReconciliationBatch(batchId) {
+    return request(`/reconciliation/bank/batches/${batchId}/submit`, { method: 'POST', body: {} });
+  },
+
+  async updateReconciliationRecord(recordId, payload) {
+    return request(`/reconciliation/bank/records/${recordId}`, { method: 'PATCH', body: payload });
+  },
+
+  async manualMatchReconciliationRecord(recordId, payload) {
+    return request(`/reconciliation/bank/records/${recordId}/manual-match`, { method: 'POST', body: payload });
+  },
+
+  async unmatchReconciliationRecord(recordId) {
+    return request(`/reconciliation/bank/records/${recordId}/unmatch`, { method: 'POST', body: {} });
+  },
+
+  async getReconciliationCandidates(recordId) {
+    return request(`/reconciliation/bank/records/${recordId}/candidates`);
+  },
+
+  async reconciliationProperties(search = '') {
+    const query = search ? `?search=${encodeURIComponent(search)}` : '';
+    return request(`/reconciliation/bank/options/properties${query}`);
+  },
+
+  async reconciliationRooms(propertyId = '', search = '') {
+    const params = new URLSearchParams();
+    if (propertyId) params.set('propertyId', propertyId);
+    if (search) params.set('search', search);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request(`/reconciliation/bank/options/rooms${query}`);
+  },
+
+  async reconciliationContracts(roomId = '', transactionDate = '') {
+    const params = new URLSearchParams();
+    if (roomId) params.set('roomId', roomId);
+    if (transactionDate) params.set('transactionDate', transactionDate);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request(`/reconciliation/bank/options/contracts${query}`);
+  },
+
+  async syncReconciliationMasterData(rows) {
+    return request('/reconciliation/bank/master-data/sync', { method: 'POST', body: { rows } });
+  },
 };
