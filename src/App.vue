@@ -19,7 +19,7 @@
 
       <nav class="nav" :aria-label="dictionary.appName">
         <button
-          v-for="item in visibleNavItems"
+          v-for="item in regularNavItems"
           :key="item.key"
           class="nav-item"
           :class="{ active: activeNavKey === item.key }"
@@ -29,6 +29,34 @@
         >
           <span class="nav-label">{{ isSidebarCollapsed ? item.label.slice(0, 1) : item.label }}</span>
         </button>
+
+        <div v-if="aiNavItems.length" class="nav-group" :class="{ open: isAiAnalysisExpanded, active: isAiAnalysisActive }">
+          <button
+            class="nav-item nav-parent"
+            :class="{ active: isAiAnalysisActive }"
+            :title="aiMenuTitle"
+            type="button"
+            :aria-expanded="isAiAnalysisExpanded"
+            @click="toggleAiAnalysis"
+          >
+            <span class="nav-label">{{ isSidebarCollapsed ? aiMenuTitle.slice(0, 1) : aiMenuTitle }}</span>
+            <span class="nav-chevron" aria-hidden="true">›</span>
+          </button>
+
+          <div v-show="isAiAnalysisExpanded" class="nav-children">
+            <button
+              v-for="item in aiNavItems"
+              :key="item.key"
+              class="nav-item nav-child"
+              :class="{ active: activeNavKey === item.key }"
+              :title="item.label"
+              type="button"
+              @click="setActiveNavItem(item)"
+            >
+              <span class="nav-label">{{ isSidebarCollapsed ? item.label.slice(0, 1) : item.label }}</span>
+            </button>
+          </div>
+        </div>
       </nav>
       </div>
 
@@ -121,6 +149,7 @@ const activeNavKey = ref("gis");
 const activeSystemTab = ref("users");
 const theme = ref("teal");
 const isSidebarCollapsed = ref(false);
+const isAiAnalysisExpanded = ref(true);
 const isAuthenticated = ref(false);
 const currentUser = ref(null);
 const currentPermissions = ref([]);
@@ -167,6 +196,12 @@ const navItems = computed(() => [
   { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, permissions: ["setting:email"] },
 ]);
 
+const aiMenuTitle = computed(() => ({
+  ja: "AI分析",
+  zh: "AI分析",
+  en: "AI Analysis",
+}[locale.value] || "AI分析"));
+
 const hasAnyPermission = (permissions) => {
   return permissions.some((permission) => currentPermissions.value.includes(permission));
 };
@@ -176,9 +211,27 @@ const visibleNavItems = computed(() => navItems.value.filter((item) => {
   return hasAnyPermission(item.permissions);
 }));
 
+const regularNavItems = computed(() => visibleNavItems.value.filter((item) => !["bank-reconciliation", "ocr"].includes(item.key)));
+const aiNavItems = computed(() => visibleNavItems.value
+  .filter((item) => ["bank-reconciliation", "ocr"].includes(item.key))
+  .map((item) => ({
+    ...item,
+    label: item.key === "bank-reconciliation"
+      ? reconciliationMenuLabels.value.bank.replace(/^AI\s*\/\s*/, "")
+      : reconciliationMenuLabels.value.ocr.replace(/^AI\s*\/\s*/, ""),
+  })));
+const isAiAnalysisActive = computed(() => ["bank-reconciliation", "ocr"].includes(activeNavKey.value));
+
+const toggleAiAnalysis = () => {
+  isAiAnalysisExpanded.value = !isAiAnalysisExpanded.value;
+};
+
 const setActiveNavItem = (item) => {
   activeNavKey.value = item.key;
   activeView.value = item.view || item.key;
+  if (["bank-reconciliation", "ocr"].includes(item.key)) {
+    isAiAnalysisExpanded.value = true;
+  }
   if (item.tab) {
     activeSystemTab.value = item.tab;
   }
@@ -198,9 +251,11 @@ const applyRouteFromLocation = () => {
   } else if (path.startsWith("/ai-reconciliation/bank")) {
     activeNavKey.value = "bank-reconciliation";
     activeView.value = "bank-reconciliation";
+    isAiAnalysisExpanded.value = true;
   } else if (path.startsWith("/ai-reconciliation/ocr")) {
     activeNavKey.value = "ocr";
     activeView.value = "ocr";
+    isAiAnalysisExpanded.value = true;
   }
 };
 
@@ -797,6 +852,57 @@ onBeforeUnmount(() => {
   background: #dff4f1;
 }
 
+.nav-group {
+  display: grid;
+  gap: 4px;
+}
+
+.nav-parent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.nav-group.active .nav-parent {
+  color: var(--primary);
+  background: #edf8f6;
+}
+
+.nav-chevron {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.nav-group.open .nav-chevron {
+  color: var(--primary);
+  transform: rotate(90deg);
+}
+
+.nav-children {
+  display: grid;
+  gap: 4px;
+  margin-left: 14px;
+  padding-left: 10px;
+  border-left: 1px solid #d8e1ea;
+}
+
+.nav-child {
+  min-height: 36px;
+  padding-left: 12px;
+  border-left-width: 2px;
+  font-size: 13px;
+}
+
+.nav-child.active {
+  background: #dff4f1;
+  color: var(--primary);
+}
+
 .sidebar-collapsed .brand-text,
 .sidebar-collapsed .nav-label,
 .sidebar-collapsed .sidebar-footer {
@@ -808,6 +914,20 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding-inline: 0;
+}
+
+.sidebar-collapsed .nav-parent {
+  justify-content: center;
+}
+
+.sidebar-collapsed .nav-chevron {
+  display: none;
+}
+
+.sidebar-collapsed .nav-children {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
 }
 
 .sidebar-collapsed .nav-label {

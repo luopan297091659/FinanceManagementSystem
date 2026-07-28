@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parent
 DB_DIR = ROOT / "data"
 DB_PATH = DB_DIR / "app.db"
+RECONCILIATION_PATH = DB_DIR / "reconciliation.json"
 SCHEMA_PATH = ROOT / "docs" / "schema.sql"
 
 
@@ -27,7 +28,19 @@ def connect():
 
 
 def execute_schema(conn):
-    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
+    deferred_indexes = (
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_room_house_number_unique ON room(house_number) WHERE house_number IS NOT NULL AND house_number <> '';",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_customer_code_unique ON tenant(customer_code) WHERE customer_code IS NOT NULL AND customer_code <> '';",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_customer_code_unique ON owner(customer_code) WHERE customer_code IS NOT NULL AND customer_code <> '';",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_phone_unique ON tenant(phone) WHERE phone IS NOT NULL AND phone <> '';",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_phone_unique ON owner(phone) WHERE phone IS NOT NULL AND phone <> '';",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_email_unique ON tenant(email) WHERE email IS NOT NULL AND email <> '';",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_email_unique ON owner(email) WHERE email IS NOT NULL AND email <> '';",
+    )
+    for statement in deferred_indexes:
+        schema_sql = schema_sql.replace(statement, "")
+    conn.executescript(schema_sql)
     ensure_column(conn, "building", "latitude", "REAL")
     ensure_column(conn, "building", "longitude", "REAL")
     ensure_column(conn, "room", "house_number", "TEXT")
@@ -35,13 +48,11 @@ def execute_schema(conn):
     ensure_column(conn, "room", "longitude", "REAL")
     ensure_column(conn, "tenant", "customer_code", "TEXT")
     ensure_column(conn, "owner", "customer_code", "TEXT")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_room_house_number_unique ON room(house_number) WHERE house_number IS NOT NULL AND house_number <> ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_customer_code_unique ON tenant(customer_code) WHERE customer_code IS NOT NULL AND customer_code <> ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_customer_code_unique ON owner(customer_code) WHERE customer_code IS NOT NULL AND customer_code <> ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_phone_unique ON tenant(phone) WHERE phone IS NOT NULL AND phone <> ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_phone_unique ON owner(phone) WHERE phone IS NOT NULL AND phone <> ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_email_unique ON tenant(email) WHERE email IS NOT NULL AND email <> ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_email_unique ON owner(email) WHERE email IS NOT NULL AND email <> ''")
+    for statement in deferred_indexes:
+        try:
+            conn.execute(statement)
+        except sqlite3.IntegrityError:
+            pass
 
 
 def ensure_column(conn, table, column, definition):
@@ -267,6 +278,217 @@ def bootstrap():
         "documents": documents,
         "knowledgeDocuments": knowledge_documents,
     }
+
+
+def read_reconciliation_store():
+    DB_DIR.mkdir(exist_ok=True)
+    if not RECONCILIATION_PATH.exists():
+        return {"batches": [], "records": []}
+    try:
+        return json.loads(RECONCILIATION_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"batches": [], "records": []}
+
+
+def write_reconciliation_store(store):
+    DB_DIR.mkdir(exist_ok=True)
+    RECONCILIATION_PATH.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def first_value(row, candidates):
+    normalized = {str(key).strip().lower(): value for key, value in row.items()}
+    for key in candidates:
+        if key.lower() in normalized and normalized[key.lower()] not in (None, ""):
+            return normalized[key.lower()]
+    return ""
+
+
+def row_to_reconciliation_record(batch_id, source_file, row, index):
+    summary = first_value(row, ("normalizedBankSummary", "originalBankSummary", "银行摘要", "摘要", "摘要名", "description", "summary"))
+    amount = first_value(row, ("depositAmount", "入金金额", "入金金額", "金额", "金額", "amount"))
+    transaction_date = first_value(row, ("transactionDate", "入金日期", "入金日", "交易日期", "date"))
+    payment_month = first_value(row, ("paymentMonth", "入金月份", "入金月", "月份", "month"))
+    room_number = first_value(row, ("roomNumber", "房间", "房间号", "部屋番号", "room"))
+    contract_no = first_value(row, ("contractNo", "contractId", "契约书ID", "契約ID", "合同编号", "contract"))
+    payer_name = first_value(row, ("payerName", "付款名义", "支付名义", "payer"))
+    return {
+        "id": new_id("recon-record"),
+        "batchId": batch_id,
+        "sourceFileId": source_file["id"],
+        "sourceFileName": source_file["fileName"],
+        "sourcePage": "",
+        "sourceRow": index + 1,
+        "originalBankSummary": summary,
+        "normalizedBankSummary": summary,
+        "depositAmount": str(amount or ""),
+        "transactionDate": str(transaction_date or ""),
+        "paymentMonth": str(payment_month or ""),
+        "roomId": "",
+        "roomNumber": room_number,
+        "contractId": "",
+        "contractNo": contract_no,
+        "payerName": payer_name,
+        "matchMode": "UNMATCHED",
+        "matchScore": None,
+        "matchStatus": "UNMATCHED",
+        "matchReason": "",
+        "remark": "",
+    }
+
+
+def refresh_batch_counts(batch, records):
+    batch_records = [record for record in records if record.get("batchId") == batch["id"]]
+    batch["totalRecords"] = len(batch_records)
+    batch["autoMatchedCount"] = len([record for record in batch_records if record.get("matchStatus") == "AUTO_MATCHED"])
+    batch["manualMatchedCount"] = len([record for record in batch_records if record.get("matchStatus") == "MANUAL_MATCHED"])
+    batch["submittedCount"] = len([record for record in batch_records if record.get("matchStatus") == "SUBMITTED"])
+    batch["failedCount"] = len([record for record in batch_records if record.get("matchStatus") == "FAILED"])
+    batch["unmatchedCount"] = len([record for record in batch_records if record.get("matchStatus") in ("UNMATCHED", "MANUAL_REVIEW")])
+    if batch["submittedCount"] and batch["submittedCount"] == batch["totalRecords"]:
+        batch["status"] = "COMPLETED"
+    elif batch["autoMatchedCount"] or batch["manualMatchedCount"]:
+        batch["status"] = "MATCHED"
+    elif batch["totalRecords"]:
+        batch["status"] = "UPLOADED"
+    return batch
+
+
+def reconciliation_rooms():
+    data = bootstrap()
+    rooms = []
+    projects = {item["id"]: item for item in data["projects"]}
+    buildings = {item["id"]: item for item in data["buildings"]}
+    for room in data["rooms"]:
+        building = buildings.get(room.get("buildingId"), {})
+        project = projects.get(building.get("projectId"), {})
+        rooms.append({
+            "id": room["id"],
+            "roomNumber": room.get("number") or room.get("roomNumber") or "",
+            "propertyName": project.get("name") or building.get("name") or "",
+            "property": {"name": project.get("name") or building.get("name") or ""},
+        })
+    return rooms
+
+
+def handle_reconciliation_get(path, query):
+    store = read_reconciliation_store()
+    base = "/api/v1/reconciliation/bank"
+    if path == f"{base}/batches":
+        for batch in store["batches"]:
+            refresh_batch_counts(batch, store["records"])
+        write_reconciliation_store(store)
+        return sorted(store["batches"], key=lambda item: item.get("createdAt", ""), reverse=True)
+    if path.startswith(f"{base}/batches/") and path.endswith("/records"):
+        batch_id = path[len(f"{base}/batches/") : -len("/records")]
+        return [record for record in store["records"] if record.get("batchId") == batch_id]
+    if path == f"{base}/options/rooms":
+        return reconciliation_rooms()
+    if path == f"{base}/options/contracts":
+        return []
+    raise ValueError("Unknown API path")
+
+
+def handle_reconciliation_post(path, payload):
+    store = read_reconciliation_store()
+    base = "/api/v1/reconciliation/bank"
+    if path == f"{base}/upload":
+        batch_id = new_id("recon-batch")
+        created_at = datetime.utcnow().isoformat()
+        files = payload.get("files") or []
+        source_files = []
+        records = []
+        for file_index, file_payload in enumerate(files):
+            source_file = {
+                "id": new_id("recon-file"),
+                "batchId": batch_id,
+                "fileName": file_payload.get("fileName") or f"文件{file_index + 1}",
+                "fileType": file_payload.get("fileType") or "",
+                "fileSize": file_payload.get("fileSize") or 0,
+            }
+            source_files.append(source_file)
+            for row_index, row in enumerate(file_payload.get("rows") or []):
+                records.append(row_to_reconciliation_record(batch_id, source_file, row, row_index))
+        batch = {
+            "id": batch_id,
+            "batchNo": f"BR-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "status": "UPLOADED",
+            "matchingRulesJson": payload.get("matchingRules") or [],
+            "sourceFiles": source_files,
+            "createdAt": created_at,
+            "uploadedBy": payload.get("uploadedBy"),
+        }
+        refresh_batch_counts(batch, records)
+        store["batches"].insert(0, batch)
+        store["records"].extend(records)
+        write_reconciliation_store(store)
+        return batch
+    if path.startswith(f"{base}/batches/") and path.endswith("/match"):
+        batch_id = path[len(f"{base}/batches/") : -len("/match")]
+        for record in store["records"]:
+            if record.get("batchId") == batch_id and record.get("matchStatus") == "UNMATCHED":
+                record["matchStatus"] = "MANUAL_REVIEW"
+                record["matchReason"] = "待人工复核"
+        for batch in store["batches"]:
+            if batch["id"] == batch_id:
+                refresh_batch_counts(batch, store["records"])
+                result = batch
+                break
+        else:
+            raise ValueError("批次不存在")
+        write_reconciliation_store(store)
+        return result
+    if path.startswith(f"{base}/batches/") and path.endswith("/submit"):
+        batch_id = path[len(f"{base}/batches/") : -len("/submit")]
+        for record in store["records"]:
+            if record.get("batchId") == batch_id and record.get("matchStatus") in ("AUTO_MATCHED", "MANUAL_MATCHED", "MANUAL_REVIEW"):
+                record["matchStatus"] = "SUBMITTED"
+        for batch in store["batches"]:
+            if batch["id"] == batch_id:
+                refresh_batch_counts(batch, store["records"])
+                result = batch
+                break
+        else:
+            raise ValueError("批次不存在")
+        write_reconciliation_store(store)
+        return result
+    if path.startswith(f"{base}/records/") and path.endswith("/manual-match"):
+        record_id = path[len(f"{base}/records/") : -len("/manual-match")]
+        for record in store["records"]:
+            if record["id"] == record_id:
+                record.update(payload)
+                record["matchMode"] = "MANUAL"
+                record["matchStatus"] = "MANUAL_MATCHED"
+                record["matchReason"] = payload.get("reason") or "手工确认"
+                write_reconciliation_store(store)
+                return record
+        raise ValueError("记录不存在")
+    if path.startswith(f"{base}/records/") and path.endswith("/unmatch"):
+        record_id = path[len(f"{base}/records/") : -len("/unmatch")]
+        for record in store["records"]:
+            if record["id"] == record_id:
+                record["matchMode"] = "UNMATCHED"
+                record["matchStatus"] = "UNMATCHED"
+                record["matchReason"] = "已退回未匹配"
+                write_reconciliation_store(store)
+                return record
+        raise ValueError("记录不存在")
+    raise ValueError("Unknown API path")
+
+
+def handle_reconciliation_patch(path, payload):
+    store = read_reconciliation_store()
+    base = "/api/v1/reconciliation/bank/records/"
+    record_id = resource_id(path, base.rstrip("/"))
+    if not record_id:
+        raise ValueError("Unknown API path")
+    for record in store["records"]:
+        if record["id"] == record_id:
+            for key in ("transactionDate", "depositAmount", "normalizedBankSummary", "paymentMonth", "remark"):
+                if key in payload:
+                    record[key] = payload[key]
+            write_reconciliation_store(store)
+            return record
+    raise ValueError("记录不存在")
 
 
 def upsert_project(conn, name):
@@ -525,9 +747,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        path = urlparse(self.path).path
-        if path == "/api/bootstrap":
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path in ("/api/bootstrap", "/api/v1/bootstrap"):
             self.send_json(200, bootstrap())
+            return
+        if path.startswith("/api/v1/reconciliation/bank"):
+            try:
+                self.send_json(200, handle_reconciliation_get(path, parsed.query))
+            except Exception as exc:
+                self.send_json(400, {"error": str(exc)})
             return
         self.serve_static(path)
 
@@ -536,7 +765,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
-            self.send_json(200, handle_post(path, payload))
+            if path.startswith("/api/v1/reconciliation/bank"):
+                self.send_json(200, handle_reconciliation_post(path, payload))
+            else:
+                self.send_json(200, handle_post(path, payload))
         except Exception as exc:
             self.send_json(400, {"error": str(exc)})
 
@@ -546,6 +778,18 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self.send_json(200, handle_put(path, payload))
+        except Exception as exc:
+            self.send_json(400, {"error": str(exc)})
+
+    def do_PATCH(self):
+        path = urlparse(self.path).path
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            if path.startswith("/api/v1/reconciliation/bank"):
+                self.send_json(200, handle_reconciliation_patch(path, payload))
+            else:
+                self.send_json(400, {"error": "Unknown API path"})
         except Exception as exc:
             self.send_json(400, {"error": str(exc)})
 

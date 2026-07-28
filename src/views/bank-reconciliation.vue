@@ -22,10 +22,18 @@
 
       <div class="rule-panel">
         <strong>{{ t.matching.title }}</strong>
-        <label v-for="rule in ruleOptions" :key="rule.key">
-          <input v-model="matchingRules" type="checkbox" :value="rule.key" />
-          {{ rule.label }}
-        </label>
+        <div class="rule-options">
+          <label
+            v-for="rule in ruleOptions"
+            :key="rule.key"
+            class="rule-option"
+            :class="{ checked: matchingRules.includes(rule.key) }"
+          >
+            <input v-model="matchingRules" type="checkbox" :value="rule.key" />
+            <span class="rule-check" aria-hidden="true"></span>
+            <span class="rule-label">{{ rule.label }}</span>
+          </label>
+        </div>
       </div>
 
       <div v-if="selectedFiles.length" class="file-list">
@@ -368,7 +376,6 @@ onMounted(async () => {
 }
 
 .toolbar,
-.rule-panel,
 .file-list {
   flex-wrap: wrap;
 }
@@ -418,11 +425,100 @@ onMounted(async () => {
   font-size: 12px;
 }
 
-.rule-panel,
 .file-list {
   display: flex;
   gap: 12px;
   margin-top: 14px;
+}
+
+.rule-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 16px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.rule-panel > strong {
+  white-space: nowrap;
+}
+
+.rule-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.rule-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #d8e1ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
+
+.rule-option:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, #d8e1ea);
+  background: #f2fbf9;
+}
+
+.rule-option.checked {
+  border-color: var(--primary);
+  background: #eefaf8;
+  color: #0f766e;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.rule-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rule-check {
+  position: relative;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #b8c5d4;
+  border-radius: 5px;
+  background: #fff;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.rule-option.checked .rule-check {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.rule-option.checked .rule-check::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.rule-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-list span,
