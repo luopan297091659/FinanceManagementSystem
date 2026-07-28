@@ -1,4 +1,25 @@
-ALTER TYPE "ContractStatus" ADD VALUE IF NOT EXISTS 'FUTURE';
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'ContractStatus'
+      AND typnamespace = current_schema()::regnamespace
+  ) THEN
+    CREATE TYPE "ContractStatus" AS ENUM ('DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'ContractStatus'
+      AND t.typnamespace = current_schema()::regnamespace
+      AND e.enumlabel = 'FUTURE'
+  ) THEN
+    ALTER TYPE "ContractStatus" ADD VALUE 'FUTURE';
+  END IF;
+END $$;
 
 CREATE TYPE "ReconciliationBatchStatus" AS ENUM (
   'PENDING',
