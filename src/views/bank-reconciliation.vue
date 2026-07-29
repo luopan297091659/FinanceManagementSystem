@@ -109,7 +109,7 @@
           </div>
         </div>
 
-        <div class="table-wrapper">
+        <DualScrollTable wrapper-class="table-wrapper">
           <table>
             <thead>
               <tr>
@@ -162,7 +162,7 @@
               </tr>
             </tbody>
           </table>
-        </div>
+        </DualScrollTable>
         <DataPagination
           v-model:page="recordPage"
           v-model:page-size="recordPageSize"
@@ -177,6 +177,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import DataPagination from "../components/DataPagination.vue";
+import DualScrollTable from "../components/DualScrollTable.vue";
 import { locale } from "../i18n";
 import { api } from "../services/api";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";

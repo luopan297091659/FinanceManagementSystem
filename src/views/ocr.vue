@@ -177,7 +177,7 @@
             />
           </div>
 
-          <div v-if="results.length" class="table-wrapper">
+          <DualScrollTable v-if="results.length" wrapper-class="table-wrapper">
             <table>
               <thead>
                 <tr>
@@ -202,7 +202,7 @@
                 </tr>
               </tbody>
             </table>
-          </div>
+          </DualScrollTable>
           <div v-else class="empty-state">尚无识别结果，上传文件后开始对账即可。</div>
 
           <div v-if="activeTask && manualReviewMode" class="manual-review">
@@ -270,6 +270,7 @@
 
 <script setup>
 import { computed, ref } from 'vue';
+import DualScrollTable from '../components/DualScrollTable.vue';
 
 const DEFAULT_WEBHOOK_URL = 'https://hook.eu1.make.com/saj12egei1j9ox8jzipmdwa621umqeo6';
 

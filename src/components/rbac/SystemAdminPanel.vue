@@ -6,7 +6,7 @@
         <h3>{{ dict.users }}</h3>
         <button v-if="can('user:create')" @click="openNewUser" class="primary-button">{{ dict.newUser }}</button>
       </div>
-      <div class="table-wrapper">
+      <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
@@ -36,7 +36,7 @@
             </tr>
           </tbody>
         </table>
-      </div>
+      </DualScrollTable>
     </div>
 
     <!-- Roles Tab -->
@@ -45,7 +45,7 @@
         <h3>{{ dict.roles }}</h3>
         <button v-if="can('role:create')" @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
       </div>
-      <div class="table-wrapper">
+      <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table role-table">
           <thead>
             <tr>
@@ -79,7 +79,7 @@
             </tr>
           </tbody>
         </table>
-      </div>
+      </DualScrollTable>
     </div>
 
     <!-- Audit Logs Tab -->
@@ -88,7 +88,7 @@
         <h3>{{ dict.auditLogs }}</h3>
         <button @click="loadLogs" class="secondary-button">{{ dict.refresh }}</button>
       </div>
-      <div class="table-wrapper">
+      <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
@@ -109,7 +109,7 @@
             </tr>
           </tbody>
         </table>
-      </div>
+      </DualScrollTable>
     </div>
 
     <!-- Email Settings Tab -->
@@ -232,7 +232,7 @@
         </div>
       </div>
 
-      <div class="table-wrapper">
+      <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
@@ -259,7 +259,7 @@
             </tr>
           </tbody>
         </table>
-      </div>
+      </DualScrollTable>
     </div>
 
     <div v-if="notice" :class="['notice', notice.type]">{{ notice.message }}</div>
@@ -411,6 +411,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { locale, messages } from '../../i18n.js';
 import { api } from '../../services/api.js';
 import { exportTableXls, parseTableFile } from '../../utils/tableFiles.js';
+import DualScrollTable from '../DualScrollTable.vue';
 
 const props = defineProps({
   permissions: {

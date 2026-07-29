@@ -27,7 +27,7 @@
       </div>
       <div class="table-card data-table-card">
         <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ contractTotal }} {{ common.records }}</span></div>
-        <div class="data-table-wrap">
+        <DualScrollTable>
           <table class="data-table contract-table">
             <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th>{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">{{ labels[column.labelKey] }}</th><th>{{ common.actions }}</th></tr></thead>
             <tbody>
@@ -39,7 +39,7 @@
               </tr>
             </tbody>
           </table>
-        </div>
+        </DualScrollTable>
       </div>
       <DataPagination v-model:page="page" v-model:page-size="pageSize" :total="contractTotal" :labels="common" />
     </div>
@@ -143,6 +143,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import DataPagination from "../components/DataPagination.vue";
+import DualScrollTable from "../components/DualScrollTable.vue";
 import { useI18n } from "../i18n";
 import { api } from "../services/api";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";

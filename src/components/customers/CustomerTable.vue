@@ -4,7 +4,7 @@
       <strong>{{ labels.customerList }}</strong>
       <span>{{ total ?? items.length }} {{ common.records }}</span>
     </div>
-    <div class="data-table-wrap">
+    <DualScrollTable>
       <table class="data-table">
         <thead>
           <tr>
@@ -63,12 +63,13 @@
           </tr>
         </tbody>
       </table>
-    </div>
+    </DualScrollTable>
   </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
+import DualScrollTable from "../DualScrollTable.vue";
 
 const props = defineProps({
   items: {
