@@ -512,7 +512,7 @@ const syncFeatureStats = () => {
 
 const loadAssetData = async () => {
   try {
-    const payload = await api.bootstrap();
+    const payload = await api.bootstrap('gis');
     featureCollection = buildBackendFeatureCollection(payload);
   } catch (error) {
     featureCollection = buildFeatureCollection();

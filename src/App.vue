@@ -1,6 +1,11 @@
 <template>
+  <div v-if="!authChecked" class="auth-checking" role="status" aria-live="polite">
+    <span class="auth-checking-spinner" />
+    <span>{{ dictionary.common?.loading }}</span>
+  </div>
+
   <!-- Login View -->
-  <LoginView v-if="!isAuthenticated" @authenticated="handleAuthenticated" />
+  <LoginView v-else-if="!isAuthenticated" @authenticated="handleAuthenticated" />
 
   <!-- Main Application -->
   <div v-else class="app-shell" :class="{ 'sidebar-collapsed': isSidebarCollapsed }" :style="shellStyle">
@@ -166,6 +171,7 @@ const theme = ref("teal");
 const isSidebarCollapsed = ref(false);
 const isAiAnalysisExpanded = ref(true);
 const isSettingsOpen = ref(false);
+const authChecked = ref(false);
 const isAuthenticated = ref(false);
 const currentUser = ref(null);
 const currentPermissions = ref([]);
@@ -342,6 +348,7 @@ const clearAuth = () => {
   isAuthenticated.value = false;
   currentUser.value = null;
   currentPermissions.value = [];
+  authChecked.value = true;
   if (activeView.value === "system") {
     activeView.value = "gis";
     activeNavKey.value = "gis";
@@ -368,6 +375,8 @@ const checkAuth = async () => {
     localStorage.setItem('permissions', JSON.stringify(currentPermissions.value));
   } catch (e) {
     clearAuth();
+  } finally {
+    authChecked.value = true;
   }
 };
 
@@ -377,6 +386,7 @@ const handleAuthenticated = (payload) => {
   currentPermissions.value = payload?.permissions || [];
   localStorage.setItem('permissions', JSON.stringify(currentPermissions.value));
   isAuthenticated.value = true;
+  authChecked.value = true;
 };
 
 const handleLogout = () => {
@@ -399,6 +409,30 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.auth-checking {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: #f4f8fb;
+  color: #526579;
+  font-weight: 700;
+}
+
+.auth-checking-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #cfe1df;
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: auth-spin 0.75s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
 .app-shell {
   --line: rgba(255, 255, 255, 0.06);
   --muted: #b7c2ce;

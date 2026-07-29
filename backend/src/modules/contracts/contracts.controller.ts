@@ -9,8 +9,8 @@ export class ContractsController {
 
   @Get()
   @RequirePermission('contract.view')
-  list(@Query('search') search?: string) {
-    return this.contracts.list(search);
+  list(@Query() query: any) {
+    return this.contracts.list(query);
   }
 
   @Post()

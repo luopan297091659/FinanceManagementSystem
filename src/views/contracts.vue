@@ -26,7 +26,7 @@
         </div>
       </div>
       <div class="table-card data-table-card">
-        <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ filteredContracts.length }} {{ common.records }}</span></div>
+        <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ contractTotal }} {{ common.records }}</span></div>
         <div class="data-table-wrap">
           <table class="data-table contract-table">
             <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th>{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">{{ labels[column.labelKey] }}</th><th>{{ common.actions }}</th></tr></thead>
@@ -41,7 +41,7 @@
           </table>
         </div>
       </div>
-      <DataPagination v-model:page="page" v-model:page-size="pageSize" :total="filteredContracts.length" :labels="common" />
+      <DataPagination v-model:page="page" v-model:page-size="pageSize" :total="contractTotal" :labels="common" />
     </div>
 
     <div v-if="detail" class="modal-overlay" @click.self="detail = null">
@@ -151,6 +151,7 @@ const { dictionary } = useI18n();
 const labels = computed(() => dictionary.value.contractsLabels);
 const common = computed(() => dictionary.value.common);
 const contracts = ref([]);
+const contractTotal = ref(0);
 const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
@@ -212,16 +213,26 @@ const filteredRoomOptions = computed(() => {
   const current = roomOptions.value.find((option) => option.id === editForm.value?.roomId);
   return current && !options.some((option) => option.id === current.id) ? [current, ...options] : options;
 });
-const filteredContracts = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase();
-  if (!query) return contracts.value;
-  return contracts.value.filter((item) => [item.propertyName, item.roomNumber, item.contractNumber, item.contractorName, item.payerNameKana, item.bankSummaryName, item.status].some((value) => String(value || "").toLowerCase().includes(query)));
-});
-const paginatedContracts = computed(() => filteredContracts.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
+const paginatedContracts = computed(() => contracts.value);
 const pageContractIds = computed(() => paginatedContracts.value.map((contract) => contract.id));
 const allPageSelected = computed(() => pageContractIds.value.length > 0 && pageContractIds.value.every((id) => selectedIds.value.includes(id)));
 const readyCount = computed(() => Math.max(0, (importResult.value?.batch?.totalRows || 0) - (importResult.value?.batch?.successRows || 0) - (importResult.value?.batch?.skippedRows || 0) - (importResult.value?.batch?.failedRows || 0) - (importResult.value?.batch?.conflictRows || 0)));
-watch(searchQuery, () => { page.value = 1; });
+let contractSearchTimer;
+let roomSearchTimer;
+let contractRequestId = 0;
+watch(searchQuery, () => {
+  page.value = 1;
+  clearTimeout(contractSearchTimer);
+  contractSearchTimer = setTimeout(loadContracts, 300);
+});
+watch([page, pageSize], ([nextPage, nextPageSize], [previousPage, previousPageSize]) => {
+  if (nextPage !== previousPage || nextPageSize !== previousPageSize) loadContracts();
+});
+watch(roomSearch, () => {
+  if (!isCreating.value) return;
+  clearTimeout(roomSearchTimer);
+  roomSearchTimer = setTimeout(loadRoomOptions, 250);
+});
 
 const editableContractFields = ["id", "roomId", "contractNumber", "contractorName", "contractorNameKana", "contractorType", "payerName", "payerNameKana", "bankSummaryName", "status", "startDate", "endDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "paymentMethod", "paymentMonthType", "guaranteeDeposit", "guaranteeCompanyName", "guaranteeCompanyNameKana", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceName", "insuranceFee", "insurancePeriod", "insuranceStartDate", "insuranceEndDate", "collectionAccount", "managementContractType", "remark"];
 const blankContractForm = () => Object.fromEntries(editableContractFields.map((key) => [key, key === "status" ? "DRAFT" : ""]));
@@ -240,21 +251,16 @@ function resetContractColumns() {
 }
 
 async function loadRoomOptions() {
-  const payload = await api.bootstrap();
-  roomOptions.value = (payload.rooms || []).map((room) => {
-    const building = (payload.buildings || []).find((item) => item.id === room.buildingId);
-    const project = (payload.projects || []).find((item) => item.id === room.projectId);
-    const label = [project?.name, building?.name, room.number || room.displayName, building?.propertyCode, room.roomCode].filter(Boolean).join(" / ");
-    return { id: room.id, label, searchText: label.toLowerCase() };
-  });
+  const rows = await api.searchRoomOptions(roomSearch.value.trim());
+  roomOptions.value = rows.map((room) => ({ ...room, searchText: room.label.toLowerCase() }));
 }
 
-async function loadContracts() { loading.value = true; errorMessage.value = ""; try { contracts.value = await api.listContracts(); const existing = new Set(contracts.value.map((contract) => contract.id)); selectedIds.value = selectedIds.value.filter((id) => existing.has(id)); } catch (error) { errorMessage.value = error.message || labels.value.loadFailed; } finally { loading.value = false; } }
+async function loadContracts() { const requestId = ++contractRequestId; loading.value = true; errorMessage.value = ""; try { const result = await api.listContracts({ search: searchQuery.value.trim(), page: page.value, pageSize: pageSize.value }); if (requestId !== contractRequestId) return; const totalPages = result.pagination?.totalPages || 1; if (page.value > totalPages) { page.value = totalPages; return; } contracts.value = result.items || []; contractTotal.value = result.pagination?.total || 0; const existing = new Set(contracts.value.map((contract) => contract.id)); selectedIds.value = selectedIds.value.filter((id) => existing.has(id)); } catch (error) { if (requestId === contractRequestId) errorMessage.value = error.message || labels.value.loadFailed; } finally { if (requestId === contractRequestId) loading.value = false; } }
 async function openDetail(id) { try { detail.value = await api.getContract(id); } catch (error) { errorMessage.value = error.message || labels.value.loadFailed; } }
 async function openCreate() {
   try {
-    if (!roomOptions.value.length) await loadRoomOptions();
     roomSearch.value = "";
+    await loadRoomOptions();
     editForm.value = blankContractForm();
   } catch (error) {
     errorMessage.value = error.message || labels.value.loadFailed;
@@ -270,7 +276,7 @@ async function openEdit(contract) {
 }
 function closeEdit() { editForm.value = null; }
 async function saveContract() {
-  if (!editForm.value?.id) return;
+  if (!editForm.value || (!editForm.value.id && !editForm.value.roomId)) return;
   editBusy.value = true;
   try {
     const { id, ...payload } = editForm.value;

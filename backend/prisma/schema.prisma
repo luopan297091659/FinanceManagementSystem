@@ -364,6 +364,7 @@ model Property {
   @@index([postalCode])
   @@index([managementStatus])
   @@index([deletedAt])
+  @@index([deletedAt, name])
 }
 
 model Room {
@@ -416,6 +417,7 @@ model Room {
   @@index([unitType])
   @@index([status])
   @@index([deletedAt])
+  @@index([deletedAt, propertyId, roomNumber])
 }
 
 model Tenant {
@@ -515,6 +517,7 @@ model RoomOwner {
   @@index([ownerId])
   @@index([startDate, endDate])
   @@index([deletedAt])
+  @@index([deletedAt, startDate, createdAt])
 }
 
 model PropertyOwnership {

@@ -59,6 +59,24 @@ export class PropertiesController {
     return this.properties.list(search);
   }
 
+  @Get('rooms/list')
+  @RequirePermission('property.view')
+  rooms(@Query() query: any) {
+    return this.properties.listRooms(query);
+  }
+
+  @Get('rooms/export')
+  @RequirePermission('property.view')
+  exportRooms(@Query('search') search?: string) {
+    return this.properties.exportRooms(search);
+  }
+
+  @Get('room-options/search')
+  @RequirePermission('property.view')
+  roomOptions(@Query('search') search?: string) {
+    return this.properties.roomOptions(search);
+  }
+
   @Get(':propertyId')
   @RequirePermission('property.view')
   get(@Param('propertyId') propertyId: string) {

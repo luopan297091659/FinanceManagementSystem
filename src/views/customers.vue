@@ -267,7 +267,7 @@ const loadCustomers = async () => {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const payload = await api.bootstrap();
+    const payload = await api.bootstrap('customers');
     rooms.value = (payload.rooms || []).map((room) => ({
       id: room.id,
       projectName: payload.projects.find((project) => project.id === room.projectId)?.name || "",

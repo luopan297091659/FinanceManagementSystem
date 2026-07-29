@@ -120,8 +120,8 @@ export const api = {
   },
 
   // Existing APIs
-  async bootstrap() {
-    return request('/bootstrap');
+  async bootstrap(scope = '') {
+    return request(`/bootstrap${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`);
   },
 
   async createRoom(payload) {
@@ -177,8 +177,10 @@ export const api = {
     return request(`/customers/${id}`, { method: 'DELETE' });
   },
 
-  async listContracts(search = '') {
-    return request(`/contracts${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  async listContracts(params = {}) {
+    const normalized = typeof params === 'string' ? { search: params } : params;
+    const query = new URLSearchParams(Object.entries(normalized).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/contracts${query ? `?${query}` : ''}`);
   },
 
   async getContract(id) {
@@ -203,6 +205,23 @@ export const api = {
 
   async setRoomCurrentContract(roomId, contractId) {
     return request(`/rooms/${roomId}/current-contract`, { method: 'PATCH', body: { contractId: contractId || null } });
+  },
+
+  async listRoomContracts(roomId) {
+    return request(`/rooms/${roomId}/contracts`);
+  },
+
+  async listResourceRooms(params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/properties/rooms/list${query ? `?${query}` : ''}`);
+  },
+
+  async exportResourceRooms(search = '') {
+    return request(`/properties/rooms/export${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  },
+
+  async searchRoomOptions(search = '') {
+    return request(`/properties/room-options/search${search ? `?search=${encodeURIComponent(search)}` : ''}`);
   },
 
   async exportContracts(search = '') {

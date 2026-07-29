@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { RequirePermission } from '../rbac/permissions.decorator';
 import { CreateBindingDto } from './dto/create-binding.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -13,8 +13,8 @@ export class FrontendApiController {
   constructor(private readonly frontendApi: FrontendApiService) {}
 
   @Get('bootstrap')
-  bootstrap() {
-    return this.frontendApi.bootstrap();
+  bootstrap(@Query('scope') scope?: string) {
+    return this.frontendApi.bootstrap(scope);
   }
 
   @Get('diagnostics')

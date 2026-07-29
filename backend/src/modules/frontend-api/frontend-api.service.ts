@@ -58,7 +58,7 @@ export class FrontendApiService {
     };
   }
 
-  async bootstrap(): Promise<FrontendBootstrap> {
+  async bootstrap(scope?: string): Promise<FrontendBootstrap> {
     const fallbackEmpty = () => ({
       projects: [],
       properties: [],
@@ -84,6 +84,13 @@ export class FrontendApiService {
     let transactions: any[] = [];
     let documents: any[] = [];
     let knowledgeDocuments: any[] = [];
+    const loadAll = !scope;
+    const loadCustomers = loadAll || scope === 'customers';
+    const loadFinance = loadAll || scope === 'finance';
+    const loadKnowledge = loadAll || scope === 'knowledge';
+    const loadGis = loadAll || scope === 'gis';
+    const loadPropertyData = loadAll || loadCustomers || loadFinance || loadGis;
+    const loadPropertyHierarchy = loadAll || loadCustomers || loadGis;
 
     try {
       [
@@ -99,20 +106,20 @@ export class FrontendApiService {
         documents,
         knowledgeDocuments,
       ] = await Promise.all([
-        this.prisma.project.findMany({ orderBy: { name: 'asc' } }),
-        this.prisma.property.findMany({ orderBy: { name: 'asc' } }),
-        this.prisma.room.findMany({ include: { property: true }, orderBy: [{ propertyId: 'asc' }, { roomNumber: 'asc' }] }),
-        this.prisma.tenant.findMany({ orderBy: { name: 'asc' } }),
-        this.prisma.owner.findMany({ orderBy: { name: 'asc' } }),
-        this.prisma.roomTenant.findMany({ orderBy: { startDate: 'desc' } }),
-        this.prisma.roomOwner.findMany({ orderBy: { startDate: 'desc' } }),
-        this.prisma.feeItem.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
-        this.prisma.transaction.findMany({
+        loadPropertyHierarchy ? this.prisma.project.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
+        loadPropertyHierarchy ? this.prisma.property.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
+        loadPropertyData ? this.prisma.room.findMany({ include: { property: true }, orderBy: [{ propertyId: 'asc' }, { roomNumber: 'asc' }] }) : Promise.resolve([]),
+        loadCustomers ? this.prisma.tenant.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
+        loadCustomers ? this.prisma.owner.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
+        loadCustomers ? this.prisma.roomTenant.findMany({ orderBy: { startDate: 'desc' } }) : Promise.resolve([]),
+        loadCustomers ? this.prisma.roomOwner.findMany({ orderBy: { startDate: 'desc' } }) : Promise.resolve([]),
+        loadFinance ? this.prisma.feeItem.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }) : Promise.resolve([]),
+        loadFinance ? this.prisma.transaction.findMany({
           include: { details: true },
           orderBy: [{ date: 'desc' }, { id: 'desc' }],
-        }),
-        this.prisma.document.findMany({ orderBy: { createdAt: 'desc' } }),
-        this.prisma.knowledgeDocument.findMany({ orderBy: { createdAt: 'desc' } }),
+        }) : Promise.resolve([]),
+        loadKnowledge ? this.prisma.document.findMany({ orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
+        loadKnowledge ? this.prisma.knowledgeDocument.findMany({ orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
       ]);
     } catch (error) {
       const missingTable = /relation "Project" does not exist|表 "Project" 不存在|table "Project" does not exist|relation \"project\" does not exist/i;

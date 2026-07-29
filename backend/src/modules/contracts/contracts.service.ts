@@ -23,21 +23,21 @@ const H = {
 export class ContractsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(search?: string) {
-    const value = normalizeText(search);
-    const contracts = await this.prisma.contract.findMany({
-      where: {
-        deletedAt: null,
-        ...(value ? { OR: [
-          { contractNumber: { contains: value, mode: 'insensitive' } }, { contractorName: { contains: value, mode: 'insensitive' } },
-          { payerName: { contains: value, mode: 'insensitive' } }, { bankSummaryName: { contains: value, mode: 'insensitive' } },
-          { room: { roomNumber: { contains: value, mode: 'insensitive' } } }, { property: { name: { contains: value, mode: 'insensitive' } } },
-        ] } : {}),
-      },
-      include: { property: true, room: true, tenant: true, charges: { orderBy: { sortOrder: 'asc' } }, paymentAliases: true },
-      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
-    });
-    return contracts.map((contract) => this.toContract(contract));
+  async list(query: Record<string, unknown> = {}) {
+    const page = positiveInt(query.page, 1);
+    const pageSize = Math.min(positiveInt(query.pageSize, 20), 200);
+    const where = this.contractWhere(query.search);
+    const [contracts, total] = await Promise.all([
+      this.prisma.contract.findMany({
+        where,
+        include: { property: { select: { id: true, name: true } }, room: { select: { id: true, roomNumber: true } } },
+        orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.contract.count({ where }),
+    ]);
+    return { items: contracts.map((contract) => this.toContract(contract)), pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
   async get(id: string) {
@@ -50,7 +50,12 @@ export class ContractsService {
   }
 
   async exportRows(search?: string) {
-    return this.list(search);
+    const contracts = await this.prisma.contract.findMany({
+      where: this.contractWhere(search),
+      include: { property: { select: { id: true, name: true } }, room: { select: { id: true, roomNumber: true } } },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+    return contracts.map((contract) => this.toContract(contract));
   }
 
   async create(body: Record<string, unknown>, actorUserId?: string) {
@@ -397,6 +402,23 @@ export class ContractsService {
       if (body[key] !== undefined) data[key] = decimalOrNull(body[key]);
     }
     if (body.status !== undefined) data.status = this.validateStatus(body.status);
+  }
+
+  private contractWhere(search: unknown): Prisma.ContractWhereInput {
+    const value = normalizeText(search);
+    return {
+      deletedAt: null,
+      ...(value ? { OR: [
+        { contractNumber: { contains: value, mode: 'insensitive' } },
+        { externalContractId: { contains: value, mode: 'insensitive' } },
+        { contractorName: { contains: value, mode: 'insensitive' } },
+        { payerName: { contains: value, mode: 'insensitive' } },
+        { payerNameKana: { contains: value, mode: 'insensitive' } },
+        { bankSummaryName: { contains: value, mode: 'insensitive' } },
+        { room: { roomNumber: { contains: value, mode: 'insensitive' } } },
+        { property: { name: { contains: value, mode: 'insensitive' } } },
+      ] } : {}),
+    };
   }
 
   private async refreshRoomCurrentContract(roomId: string, actorUserId?: string) {

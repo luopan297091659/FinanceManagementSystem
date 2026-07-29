@@ -40,7 +40,7 @@
         <ResourceTable
           v-model:selected-ids="selectedIds"
           :items="paginatedResources"
-          :total="filteredResources.length"
+          :total="resourceTotal"
           :columns="resourceColumns"
           :labels="labels"
           :common="common"
@@ -50,7 +50,7 @@
         <DataPagination
           v-model:page="resourcePage"
           v-model:page-size="resourcePageSize"
-          :total="filteredResources.length"
+          :total="resourceTotal"
           :labels="common"
         />
       </div>
@@ -186,6 +186,7 @@ const labels = computed(() => dictionary.value.resourcesLabels);
 const common = computed(() => dictionary.value.common);
 const importLabels = computed(() => dictionary.value.propertyImport);
 const resources = ref([]);
+const resourceTotal = ref(0);
 const contracts = ref([]);
 const originalCurrentContractId = ref("");
 const selectedIds = ref([]);
@@ -226,11 +227,7 @@ const roomContractOptions = computed(() => contracts.value
   .map((contract) => ({ id: contract.id, label: joinValues(contract.contractNumber, contract.contractorName), searchText: [contract.contractNumber, contract.contractorName, contract.bankSummaryName, contract.status].filter(Boolean).join(" ").toLowerCase() })));
 const visibleResourceColumns = computed(() => resourceColumns.value.filter((column) => column.visible));
 const exportResourceColumns = computed(() => visibleResourceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
-const filteredResources = computed(() => resources.value.filter(matchesSearch));
-const paginatedResources = computed(() => {
-  const start = (resourcePage.value - 1) * resourcePageSize.value;
-  return filteredResources.value.slice(start, start + resourcePageSize.value);
-});
+const paginatedResources = computed(() => resources.value);
 const unitTypes = ["ROOM", "HOUSE", "SHOP", "OFFICE", "PARKING", "SIGNBOARD", "BASE_STATION", "VENDING", "MINPAKU", "OTHER"];
 const importActions = ["CREATE_PROPERTY_AND_ROOM", "CREATE_ROOM", "UPDATE_PROPERTY", "UPDATE_ROOM", "SKIP", "CONFLICT", "ERROR"];
 const importStatuses = ["READY", "CONFLICT", "ERROR", "SKIPPED", "COMMITTED", "FAILED"];
@@ -259,70 +256,28 @@ const closeResourceModal = () => {
   resetForm();
 };
 
+let resourceRequestId = 0;
 const loadResources = async () => {
+  const requestId = ++resourceRequestId;
   loading.value = true;
   errorMessage.value = "";
   try {
-    const [payload, contractRows] = await Promise.all([api.bootstrap(), api.listContracts().catch(() => [])]);
-    contracts.value = contractRows;
-    resources.value = (payload.rooms || []).map((room) => {
-      const project = payload.projects.find((item) => item.id === room.projectId);
-      const building = payload.buildings.find((item) => item.id === room.buildingId);
-      const roomContracts = contractRows.filter((contract) => contract.roomId === room.id);
-      const currentContract = roomContracts.find((contract) => contract.id === room.currentContractId) || roomContracts.find((contract) => contract.status === "ACTIVE") || roomContracts[0];
-      return {
-        id: room.id,
-        buildingId: building?.id || room.buildingId || "",
-        projectName: project?.name || "",
-        buildingName: building?.name || "",
-        propertyCode: building?.propertyCode || "",
-        buildingNameKana: building?.nameKana || "",
-        postalCode: building?.postalCode || "",
-        address: building?.address || project?.address || "",
-        addressLine1: building?.addressLine1 || "",
-        addressLine2: building?.addressLine2 || "",
-        prefecture: building?.prefecture || "",
-        city: building?.city || "",
-        ward: building?.ward || "",
-        buildingLatitude: building?.latitude || "",
-        buildingLongitude: building?.longitude || "",
-        buildingType: building?.buildingType || "",
-        propertyUsageType: building?.usageType || "",
-        managementStatus: building?.managementStatus || "ACTIVE",
-        propertyRemark: building?.remark || "",
-        roomCode: room.roomCode || "",
-        houseNumber: room.houseNumber,
-        roomNumber: room.number,
-        displayName: room.displayName || "",
-        unitType: room.unitType || "ROOM",
-        roomUsageType: room.usageType || "",
-        area: room.area,
-        floor: room.floor,
-        floorLabel: room.floorLabel || "",
-        roomLatitude: room.latitude || "",
-        roomLongitude: room.longitude || "",
-        status: room.status,
-        note: room.note,
-        roomRemark: room.remark || "",
-        contractPresence: roomContracts.length > 0,
-        currentContractId: currentContract?.id || "",
-        currentContract: currentContract ? joinValues(currentContract.contractNumber, currentContract.contractorName) : "",
-        currentContractStatus: currentContract?.status || "UNCONTRACTED",
-      };
-    });
+    const result = await api.listResourceRooms({ search: searchQuery.value.trim(), page: resourcePage.value, pageSize: resourcePageSize.value });
+    if (requestId !== resourceRequestId) return;
+    const totalPages = result.pagination?.totalPages || 1;
+    if (resourcePage.value > totalPages) {
+      resourcePage.value = totalPages;
+      return;
+    }
+    resources.value = result.items || [];
+    resourceTotal.value = result.pagination?.total || 0;
     selectedIds.value = selectedIds.value.filter((id) => resources.value.some((item) => item.id === id));
   } catch (error) {
-    errorMessage.value = error.message || labels.value.loadFailed;
+    if (requestId === resourceRequestId) errorMessage.value = error.message || labels.value.loadFailed;
   } finally {
-    loading.value = false;
+    if (requestId === resourceRequestId) loading.value = false;
   }
 };
-
-function matchesSearch(item) {
-  const query = searchQuery.value.trim().toLowerCase();
-  if (!query) return true;
-  return visibleResourceColumns.value.some((column) => String(getExportValue(item, column.key)).toLowerCase().includes(query));
-}
 
 const getExportValue = (item, key) =>
   ({
@@ -348,16 +303,15 @@ const resetResourceColumns = () => {
   });
 };
 
+let resourceSearchTimer;
 watch(searchQuery, () => {
   resourcePage.value = 1;
+  clearTimeout(resourceSearchTimer);
+  resourceSearchTimer = setTimeout(loadResources, 300);
 });
-watch(() => resourceColumns.value.map((column) => `${column.key}:${column.visible}`).join("|"), () => {
-  resourcePage.value = 1;
+watch([resourcePage, resourcePageSize], ([nextPage, nextPageSize], [previousPage, previousPageSize]) => {
+  if (nextPage !== previousPage || nextPageSize !== previousPageSize) loadResources();
 });
-watch(() => filteredResources.value.length, (total) => {
-  resourcePage.value = Math.min(resourcePage.value, Math.max(1, Math.ceil(total / resourcePageSize.value)));
-});
-
 const saveResource = async () => {
   if (!form.value.buildingName) return;
 
@@ -383,7 +337,9 @@ const editResource = async (item) => {
   loading.value = true;
   errorMessage.value = "";
   try {
-    form.value = { ...blankForm(), ...(await api.getRoom(item.id)) };
+    const [room, roomContracts] = await Promise.all([api.getRoom(item.id), api.listRoomContracts(item.id)]);
+    contracts.value = roomContracts;
+    form.value = { ...blankForm(), ...room };
     originalCurrentContractId.value = form.value.currentContractId || "";
     resourceModalTitle.value = labels.value.editResource;
     showResourceModal.value = true;
@@ -416,14 +372,17 @@ const batchDelete = async () => {
   }
 };
 
-const exportResources = () => {
-  exportTableXls(
-    labels.value.exportFileName,
-    exportResourceColumns.value,
-    filteredResources.value.map((item) =>
-      Object.fromEntries(visibleResourceColumns.value.map((column) => [column.key, getExportValue(item, column.key)])),
-    ),
-  );
+const exportResources = async () => {
+  try {
+    const rows = await api.exportResourceRooms(searchQuery.value.trim());
+    exportTableXls(
+      labels.value.exportFileName,
+      exportResourceColumns.value,
+      rows.map((item) => Object.fromEntries(visibleResourceColumns.value.map((column) => [column.key, getExportValue(item, column.key)]))),
+    );
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.loadFailed;
+  }
 };
 
 const triggerImport = () => {

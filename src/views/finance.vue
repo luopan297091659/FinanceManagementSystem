@@ -122,7 +122,7 @@ const loadFinance = async () => {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const payload = await api.bootstrap();
+    const payload = await api.bootstrap('finance');
     rooms.value = payload.rooms || [];
     feeItems.value = payload.feeItems || [];
     const roomLabels = new Map(rooms.value.map((room) => [room.id, `${room.houseNumber || room.number || "-"} / ${room.number || "-"}`]));

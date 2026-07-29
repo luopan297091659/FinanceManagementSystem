@@ -19,6 +19,63 @@ export class PropertiesService {
     });
   }
 
+  async listRooms(query: Record<string, unknown> = {}) {
+    const page = positiveInt(query.page, 1);
+    const pageSize = Math.min(positiveInt(query.pageSize, 20), 200);
+    const where = this.roomWhere(query.search);
+    const [rooms, total] = await Promise.all([
+      this.prisma.room.findMany({
+        where,
+        include: {
+          property: { include: { project: true } },
+          contracts: {
+            where: { deletedAt: null },
+            select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, status: true, startDate: true },
+            orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+          },
+        },
+        orderBy: [{ property: { name: 'asc' } }, { roomNumber: 'asc' }, { createdAt: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.room.count({ where }),
+    ]);
+    return {
+      items: rooms.map((room) => this.toRoomListItem(room)),
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    };
+  }
+
+  async roomOptions(search?: string) {
+    const rooms = await this.prisma.room.findMany({
+      where: this.roomWhere(search),
+      include: { property: { include: { project: true } } },
+      orderBy: [{ property: { name: 'asc' } }, { roomNumber: 'asc' }],
+      take: 100,
+    });
+    return rooms.map((room) => ({
+      id: room.id,
+      propertyId: room.propertyId,
+      label: [room.property.project?.name, room.property.name, room.roomNumber || room.displayName, room.property.propertyCode, room.roomCode].filter(Boolean).join(' / '),
+    }));
+  }
+
+  async exportRooms(search?: string) {
+    const rooms = await this.prisma.room.findMany({
+      where: this.roomWhere(search),
+      include: {
+        property: { include: { project: true } },
+        contracts: {
+          where: { deletedAt: null },
+          select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, status: true, startDate: true },
+          orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        },
+      },
+      orderBy: [{ property: { name: 'asc' } }, { roomNumber: 'asc' }, { createdAt: 'asc' }],
+    });
+    return rooms.map((room) => this.toRoomListItem(room));
+  }
+
   async get(id: string) {
     const property = await this.prisma.property.findFirst({
       where: { id, deletedAt: null },
@@ -41,4 +98,73 @@ export class PropertiesService {
     }
     return this.prisma.property.update({ where: { id }, data });
   }
+
+  private roomWhere(search: unknown): Prisma.RoomWhereInput {
+    const value = String(search ?? '').trim();
+    return {
+      deletedAt: null,
+      property: { deletedAt: null },
+      ...(value ? { OR: [
+        { roomCode: { contains: value, mode: 'insensitive' } },
+        { houseNumber: { contains: value, mode: 'insensitive' } },
+        { roomNumber: { contains: value, mode: 'insensitive' } },
+        { displayName: { contains: value, mode: 'insensitive' } },
+        { property: { name: { contains: value, mode: 'insensitive' } } },
+        { property: { propertyCode: { contains: value, mode: 'insensitive' } } },
+        { property: { address: { contains: value, mode: 'insensitive' } } },
+      ] } : {}),
+    };
+  }
+
+  private toRoomListItem(room: any) {
+    const currentContract = room.contracts.find((contract: any) => contract.id === room.currentContractId)
+      ?? room.contracts.find((contract: any) => contract.status === 'ACTIVE')
+      ?? room.contracts[0]
+      ?? null;
+    const property = room.property;
+    return {
+      id: room.id,
+      buildingId: property.id,
+      projectName: property.project?.name ?? '',
+      buildingName: property.name,
+      propertyCode: property.propertyCode ?? '',
+      buildingNameKana: property.nameKana ?? '',
+      postalCode: property.postalCode ?? '',
+      address: property.address ?? '',
+      addressLine1: property.addressLine1 ?? '',
+      addressLine2: property.addressLine2 ?? '',
+      prefecture: property.prefecture ?? '',
+      city: property.city ?? '',
+      ward: property.ward ?? '',
+      buildingLatitude: property.latitude?.toString() ?? '',
+      buildingLongitude: property.longitude?.toString() ?? '',
+      buildingType: property.buildingType ?? '',
+      propertyUsageType: property.usageType ?? '',
+      managementStatus: property.managementStatus,
+      propertyRemark: property.remark ?? '',
+      roomCode: room.roomCode ?? '',
+      houseNumber: room.houseNumber ?? '',
+      roomNumber: room.roomNumber ?? '',
+      displayName: room.displayName ?? '',
+      unitType: room.unitType,
+      roomUsageType: room.usageType ?? '',
+      area: room.area?.toString() ?? '',
+      floor: room.floor,
+      floorLabel: room.floorLabel ?? '',
+      roomLatitude: room.latitude?.toString() ?? '',
+      roomLongitude: room.longitude?.toString() ?? '',
+      status: room.status,
+      note: room.note ?? '',
+      roomRemark: room.remark ?? '',
+      contractPresence: room.contracts.length > 0,
+      currentContractId: currentContract?.id ?? '',
+      currentContract: currentContract ? [currentContract.contractNumber, currentContract.contractorName].filter(Boolean).join(' / ') : '',
+      currentContractStatus: currentContract?.status ?? 'UNCONTRACTED',
+    };
+  }
+}
+
+function positiveInt(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

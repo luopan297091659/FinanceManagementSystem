@@ -61,7 +61,7 @@ const loadData = async () => {
   loading.value = true;
   errorMessage.value = '';
   try {
-    const payload = await api.bootstrap();
+    const payload = await api.bootstrap('knowledge');
     knowledgeItems.value = payload.knowledgeDocuments || [];
   } catch (error) {
     errorMessage.value = error.message || '加载知识库失败';
