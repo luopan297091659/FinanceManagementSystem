@@ -330,9 +330,16 @@ const importResources = async (event) => {
     const rows = await parseTableFile(file);
     const header = rows[0] || [];
     const dataRows = rows.slice(1).map((row) => Object.fromEntries(header.map((name, index) => [name, row[index] ?? ""])));
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-    const fileHash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
-    const result = await api.uploadPropertyImport({ originalName: file.name, fileHash, rows: dataRows });
+    let fileHash;
+    if (globalThis.crypto?.subtle) {
+      const digest = await globalThis.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+      fileHash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+    }
+    const result = await api.uploadPropertyImport({
+      originalName: file.name,
+      ...(fileHash ? { fileHash } : {}),
+      rows: dataRows,
+    });
     applyImportResult(result);
     importView.value = "preview";
     showImportModal.value = true;
