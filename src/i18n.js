@@ -841,6 +841,81 @@ Object.assign(messages.en.resourcesLabels, {
   noContract: "Uncontracted",
 });
 
+messages.ja.dashboard = {
+  quickFilters: "クイック期間", all: "すべて", thisMonth: "今月", lastMonth: "先月", thisQuarter: "今四半期", thisYear: "今年",
+  startDate: "開始日", endDate: "終了日", search: "検索", reset: "リセット", refresh: "更新", configure: "表示設定",
+  updated: "更新", allData: "全期間", to: "～", from: "開始", until: "終了", pending: "件対応待ち",
+  attention: "要対応", tasksAlerts: "タスクとアラート", filterType: "種類で絞り込む", filterSeverity: "重要度で絞り込む",
+  allTypes: "すべての種類", allSeverities: "すべての重要度", due: "期限", openTask: "タスクを開く", markRead: "既読にする",
+  ignore: "一時的に非表示", noAlerts: "現在対応が必要な項目はありません", viewAll: "すべて表示", showLess: "折りたたむ",
+  liveOverview: "現在の状況", businessStatus: "業務ステータス", noStatus: "表示できる業務ステータスはありません",
+  selectedPeriod: "選択期間", financialSummary: "財務サマリー", totalIncome: "収入合計", totalExpense: "支出合計", netBalance: "差引残高",
+  ownerRemittance: "オーナー送金", unconfirmedIncome: "未確認収入", pendingPayment: "支払待ち", financialRestricted: "財務情報を表示する権限がありません",
+  latestChanges: "最新の変更", recentActivity: "最近のアクティビティ", noActivity: "最近のアクティビティはありません",
+  loadFailed: "ダッシュボードを読み込めませんでした", retry: "再試行", noCards: "表示可能なサマリーカードがありません",
+  invalidRange: "開始日は終了日より後にできません。", configurationTitle: "業務概要の表示設定", configurationHelp: "最大4枚のカードを選択し、表示順と対象ロールを設定します。",
+  administrator: "管理者設定", cardTitle: "カード名", visibleRoles: "表示ロール", allRoles: "空欄の場合は全ロール", enabled: "枚有効",
+  cancel: "キャンセル", save: "保存", saving: "保存中…", maxCards: "業務概要には最大4枚のサマリーカードを表示できます。先に別のカードを無効にしてください。",
+  labels: {
+    unpaidRent: "未収賃料", pendingReconciliation: "銀行照合待ち", activeContracts: "有効な契約", managedProperties: "管理物件",
+    rentUnpaid: "賃料未払い", rentOverdue: "賃料支払期限超過", propertyAbnormal: "物件ステータス異常",
+    abnormalProperties: "異常のある物件", expiringContracts: "期限間近の契約", pendingBank: "銀行照合待ち", pendingOcr: "OCR処理待ち",
+    overdue: "期限超過", critical: "重大", warning: "注意", info: "情報",
+  },
+  units: { unpaidRentCount: "件", pendingReconciliationCount: "件", activeContractCount: "件", propertyCount: "棟" },
+  descriptions: { unpaidRentCount: "入金状況の確認が必要", pendingReconciliationCount: "照合または確認が必要", activeContractCount: "現在有効な契約", propertyCount: "管理中の物件" },
+};
+
+messages.zh.dashboard = {
+  quickFilters: "快捷时间", all: "全部", thisMonth: "本月", lastMonth: "上月", thisQuarter: "本季度", thisYear: "本年",
+  startDate: "开始日期", endDate: "结束日期", search: "查询", reset: "重置", refresh: "刷新", configure: "概览配置",
+  updated: "更新时间", allData: "全部数据", to: "至", from: "从", until: "截至", pending: "项待处理",
+  attention: "需要关注", tasksAlerts: "任务与提醒", filterType: "按类型筛选", filterSeverity: "按严重程度筛选",
+  allTypes: "全部类型", allSeverities: "全部级别", due: "截止", openTask: "打开任务", markRead: "标记已读",
+  ignore: "暂时忽略", noAlerts: "当前没有需要处理的提醒", viewAll: "查看全部", showLess: "收起",
+  liveOverview: "实时概览", businessStatus: "业务状态", noStatus: "没有可显示的业务状态",
+  selectedPeriod: "所选期间", financialSummary: "财务摘要", totalIncome: "总收入", totalExpense: "总支出", netBalance: "净余额",
+  ownerRemittance: "业主汇款", unconfirmedIncome: "未确认收入", pendingPayment: "待付款", financialRestricted: "您无权查看财务数据",
+  latestChanges: "最新变更", recentActivity: "最近活动", noActivity: "暂无最近活动",
+  loadFailed: "业务概览加载失败", retry: "重试", noCards: "没有可显示的摘要卡片",
+  invalidRange: "开始日期不能晚于结束日期。", configurationTitle: "业务概览配置", configurationHelp: "最多选择4张卡片，并设置显示顺序及可见角色。",
+  administrator: "管理员设置", cardTitle: "卡片标题", visibleRoles: "可见角色", allRoles: "留空表示全部角色", enabled: "张已启用",
+  cancel: "取消", save: "保存", saving: "保存中…", maxCards: "业务概览页面最多显示4张摘要卡片，请先停用其他卡片。",
+  labels: {
+    unpaidRent: "未付租金", pendingReconciliation: "待银行对账", activeContracts: "有效合同", managedProperties: "管理物业",
+    rentUnpaid: "租金未付", rentOverdue: "租金逾期", propertyAbnormal: "物业状态异常",
+    abnormalProperties: "异常物业", expiringContracts: "即将到期合同", pendingBank: "待银行对账", pendingOcr: "待处理OCR任务",
+    overdue: "逾期", critical: "严重", warning: "警告", info: "提示",
+  },
+  units: { unpaidRentCount: "项", pendingReconciliationCount: "项", activeContractCount: "份", propertyCount: "栋" },
+  descriptions: { unpaidRentCount: "需要确认收款状态", pendingReconciliationCount: "需要匹配或人工确认", activeContractCount: "当前有效合同", propertyCount: "当前管理的物业" },
+};
+
+messages.en.dashboard = {
+  quickFilters: "Quick filters", all: "All", thisMonth: "This month", lastMonth: "Last month", thisQuarter: "This quarter", thisYear: "This year",
+  startDate: "Start date", endDate: "End date", search: "Search", reset: "Reset", refresh: "Refresh", configure: "Configure",
+  updated: "Updated", allData: "All data", to: "to", from: "From", until: "Until", pending: "pending",
+  attention: "Needs attention", tasksAlerts: "Tasks and Alerts", filterType: "Filter by type", filterSeverity: "Filter by severity",
+  allTypes: "All types", allSeverities: "All severities", due: "Due", openTask: "Open task", markRead: "Mark as read",
+  ignore: "Ignore temporarily", noAlerts: "Nothing needs your attention right now", viewAll: "View all", showLess: "Show less",
+  liveOverview: "Live overview", businessStatus: "Business Status", noStatus: "No business status is available",
+  selectedPeriod: "Selected period", financialSummary: "Financial Summary", totalIncome: "Total income", totalExpense: "Total expense", netBalance: "Net balance",
+  ownerRemittance: "Owner remittance", unconfirmedIncome: "Unconfirmed income", pendingPayment: "Pending payment", financialRestricted: "You do not have access to financial amounts",
+  latestChanges: "Latest changes", recentActivity: "Recent Activity", noActivity: "No recent activity",
+  loadFailed: "Could not load the Business Overview", retry: "Retry", noCards: "No summary cards are available",
+  invalidRange: "The start date cannot be later than the end date.", configurationTitle: "Business Overview Configuration", configurationHelp: "Choose up to four cards, their order, and the roles that can see them.",
+  administrator: "Administrator settings", cardTitle: "Card title", visibleRoles: "Visible roles", allRoles: "Blank means all roles", enabled: "enabled",
+  cancel: "Cancel", save: "Save", saving: "Saving…", maxCards: "The Business Overview page can display a maximum of 4 summary cards. Disable another card first.",
+  labels: {
+    unpaidRent: "Unpaid Rent", pendingReconciliation: "Pending Bank Reconciliation", activeContracts: "Active Contracts", managedProperties: "Managed Properties",
+    rentUnpaid: "Rent unpaid", rentOverdue: "Rent overdue", propertyAbnormal: "Property status issue",
+    abnormalProperties: "Abnormal properties", expiringContracts: "Contracts expiring soon", pendingBank: "Bank records pending", pendingOcr: "OCR tasks pending",
+    overdue: "Overdue", critical: "Critical", warning: "Warning", info: "Info",
+  },
+  units: { unpaidRentCount: "items", pendingReconciliationCount: "items", activeContractCount: "contracts", propertyCount: "buildings" },
+  descriptions: { unpaidRentCount: "Payment status needs review", pendingReconciliationCount: "Matching or review required", activeContractCount: "Currently active agreements", propertyCount: "Properties under management" },
+};
+
 export function setLocale(nextLocale) {
   locale.value = nextLocale;
   if (typeof localStorage !== "undefined") {

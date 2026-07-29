@@ -119,23 +119,7 @@
         </div>
       </header>
 
-      <section v-if="activeView === 'overview'" class="overview-grid">
-        <article class="metric-card">
-          <span class="metric-label">{{ dictionary.metrics.assets }}</span>
-          <strong class="metric-value">6</strong>
-          <p>{{ dictionary.metrics.assetsDescription }}</p>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">{{ dictionary.metrics.alerts }}</span>
-          <strong class="metric-value">4</strong>
-          <p>{{ dictionary.metrics.alertsDescription }}</p>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">{{ dictionary.metrics.search }}</span>
-          <strong class="metric-value">{{ dictionary.metrics.realtime }}</strong>
-          <p>{{ dictionary.metrics.searchDescription }}</p>
-        </article>
-      </section>
+      <OverviewView v-if="activeView === 'overview'" @navigate="handleDashboardNavigate" />
 
       <GisView v-else-if="activeView === 'gis'" />
       <ResourcesView v-else-if="activeView === 'resources'" />
@@ -152,6 +136,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import LoginView from "./views/login.vue";
+import OverviewView from "./views/overview.vue";
 import GisView from "./views/gis/index.vue";
 import ResourcesView from "./views/resources.vue";
 import ContractsView from "./views/contracts.vue";
@@ -164,8 +149,8 @@ import AppIcon from "./components/AppIcon.vue";
 import { useI18n } from "./i18n";
 import { api } from "./services/api";
 
-const activeView = ref("gis");
-const activeNavKey = ref("gis");
+const activeView = ref("overview");
+const activeNavKey = ref("overview");
 const activeSystemTab = ref("users");
 const theme = ref("teal");
 const isSidebarCollapsed = ref(false);
@@ -273,7 +258,30 @@ const setActiveNavItem = (item) => {
     window.history.pushState({}, "", "/contracts");
   } else if (item.key === "resources") {
     window.history.pushState({}, "", "/resources");
+  } else if (item.key === "overview") {
+    window.history.pushState({}, "", "/");
+  } else if (item.key === "gis") {
+    window.history.pushState({}, "", "/gis");
+  } else if (item.key === "finance") {
+    window.history.pushState({}, "", "/finance");
   }
+};
+
+const handleDashboardNavigate = (route) => {
+  const item = route.startsWith("/ai-reconciliation/bank")
+    ? navItems.value.find((entry) => entry.key === "bank-reconciliation")
+    : route.startsWith("/ai-reconciliation/ocr")
+      ? navItems.value.find((entry) => entry.key === "ocr")
+      : route.startsWith("/contracts")
+        ? navItems.value.find((entry) => entry.key === "contracts")
+        : route.startsWith("/resources")
+          ? navItems.value.find((entry) => entry.key === "resources")
+          : route.startsWith("/finance")
+            ? navItems.value.find((entry) => entry.key === "finance")
+            : route.startsWith("/gis")
+              ? navItems.value.find((entry) => entry.key === "gis")
+              : null;
+  if (item && visibleNavItems.value.some((entry) => entry.key === item.key)) setActiveNavItem(item);
 };
 
 const applyRouteFromLocation = () => {
@@ -297,6 +305,15 @@ const applyRouteFromLocation = () => {
   } else if (path.startsWith("/resources")) {
     activeNavKey.value = "resources";
     activeView.value = "resources";
+  } else if (path.startsWith("/finance")) {
+    activeNavKey.value = "finance";
+    activeView.value = "finance";
+  } else if (path.startsWith("/gis")) {
+    activeNavKey.value = "gis";
+    activeView.value = "gis";
+  } else if (path === "/") {
+    activeNavKey.value = "overview";
+    activeView.value = "overview";
   }
 };
 

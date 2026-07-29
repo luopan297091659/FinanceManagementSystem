@@ -106,6 +106,7 @@ export class RbacService implements OnModuleInit {
   async seedPermissions() {
     const permissions = [
       { key: 'overview:view', module: 'overview', description: '查看业务概览' },
+      { key: 'dashboard:config', module: 'overview', description: '配置业务概览卡片' },
       { key: 'gis:view', module: 'gis', description: '查看GIS地图' },
       { key: 'knowledge:view', module: 'knowledge', description: '查看AI知识库' },
       { key: 'user:view', module: 'user', description: '查看用户' },

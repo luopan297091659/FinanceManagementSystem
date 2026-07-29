@@ -56,6 +56,29 @@ export const api = {
     return request('/rbac/me');
   },
 
+  async getDashboardOverview(params = {}) {
+    const query = new URLSearchParams();
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    return request(`/dashboard/overview${query.size ? `?${query}` : ''}`);
+  },
+
+  async getDashboardConfig() {
+    return request('/dashboard/config');
+  },
+
+  async updateDashboardConfig(cards) {
+    return request('/dashboard/config', { method: 'PUT', body: { cards } });
+  },
+
+  async markDashboardReminderRead(id) {
+    return request('/dashboard/reminders/read', { method: 'PATCH', body: { id } });
+  },
+
+  async ignoreDashboardReminder(id) {
+    return request('/dashboard/reminders/ignore', { method: 'PATCH', body: { id } });
+  },
+
   async requestPasswordReset(username) {
     return request('/rbac/password-reset', { method: 'POST', body: { username } });
   },
