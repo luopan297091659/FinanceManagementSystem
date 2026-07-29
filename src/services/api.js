@@ -136,6 +136,31 @@ export const api = {
     return request(`/rooms/${id}`, { method: 'DELETE' });
   },
 
+  async uploadPropertyImport(payload) {
+    return request('/properties/import/upload', { method: 'POST', body: payload });
+  },
+
+  async getPropertyImportBatch(batchId, params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/properties/import/batches/${batchId}${query ? `?${query}` : ''}`);
+  },
+
+  async listPropertyImportBatches() {
+    return request('/properties/import/batches');
+  },
+
+  async updatePropertyImportRow(batchId, rowId, payload) {
+    return request(`/properties/import/${batchId}/rows/${rowId}`, { method: 'PATCH', body: payload });
+  },
+
+  async commitPropertyImport(batchId) {
+    return request(`/properties/import/${batchId}/commit`, { method: 'POST', body: {} });
+  },
+
+  async getPropertyImportErrors(batchId) {
+    return request(`/properties/import/${batchId}/errors`);
+  },
+
   async createCustomer(payload) {
     return request('/customers', { method: 'POST', body: payload });
   },

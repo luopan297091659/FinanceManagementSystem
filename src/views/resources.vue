@@ -15,10 +15,11 @@
           <div class="toolbar-actions">
             <input v-model="searchQuery" class="search-input" type="text" :placeholder="labels.searchPlaceholder" />
             <button class="primary-button" type="button" @click="openResourceModal">{{ labels.newResource }}</button>
-            <button class="secondary-button" type="button" @click="triggerImport">{{ common.import }}</button>
+            <button class="secondary-button" type="button" @click="triggerImport">{{ importLabels.importData }}</button>
+            <button class="secondary-button" type="button" @click="openImportHistory">{{ importLabels.history }}</button>
             <button class="secondary-button" type="button" @click="exportResources">{{ common.export }}</button>
             <button class="danger-button" type="button" :disabled="!selectedIds.length" @click="batchDelete">{{ common.batchDelete }}</button>
-            <input ref="fileInput" class="hidden-file-input" type="file" accept=".xls,.csv,.tsv,.html,.txt" @change="importResources" />
+            <input ref="fileInput" class="hidden-file-input" type="file" accept=".xlsx,.xls,.xlsm,.csv,.tsv" @change="importResources" />
           </div>
           <div class="column-panel-container">
             <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
@@ -41,6 +42,73 @@
           @edit="editResource"
           @delete="deleteResource"
         />
+      </div>
+    </div>
+    <div v-if="showImportModal" class="modal-overlay" @click.self="closeImportModal">
+      <div class="modal-card property-import-modal">
+        <div class="modal-header">
+          <div>
+            <h3>{{ importView === 'history' ? importLabels.history : importLabels.title }}</h3>
+            <p v-if="importBatch" class="form-hint">{{ importBatch.batchNo }} · {{ importBatch.originalName }}</p>
+          </div>
+          <button class="modal-close-button" type="button" @click="closeImportModal" :title="common.close">×</button>
+        </div>
+
+        <div v-if="importView === 'history'" class="import-history-list">
+          <button v-for="batch in importBatches" :key="batch.id" class="history-row" type="button" @click="openImportBatch(batch.id)">
+            <span>{{ batch.batchNo }}</span><span>{{ batch.originalName }}</span><span>{{ batch.status }}</span><span>{{ batch.successRows }}/{{ batch.totalRows }}</span>
+          </button>
+          <p v-if="!importBatches.length" class="form-hint">{{ importLabels.noHistory }}</p>
+        </div>
+
+        <template v-else>
+          <div v-if="importBatch" class="import-summary">
+            <span>{{ importLabels.total }}: {{ importBatch.totalRows }}</span>
+            <span>{{ importLabels.ready }}: {{ importReadyRows }}</span>
+            <span>{{ importLabels.conflicts }}: {{ importBatch.conflictRows }}</span>
+            <span>{{ importLabels.errors }}: {{ importBatch.failedRows }}</span>
+            <span>{{ importLabels.committed }}: {{ importBatch.successRows }}</span>
+          </div>
+          <div class="table-controls import-controls">
+            <input v-model="importSearch" class="search-input" type="search" :placeholder="importLabels.search" @keyup.enter="loadImportPage(1)" />
+            <select v-model="importStatus" @change="loadImportPage(1)">
+              <option value="">{{ importLabels.allStatuses }}</option>
+              <option v-for="status in importStatuses" :key="status" :value="status">{{ importLabels.statuses[status] || status }}</option>
+            </select>
+            <button class="secondary-button" type="button" @click="loadImportPage(1)">{{ importLabels.filter }}</button>
+            <button class="secondary-button" type="button" :disabled="!importBatch" @click="exportImportErrors">{{ importLabels.exportErrors }}</button>
+            <button class="primary-button" type="button" :disabled="!canCommitImport || importBusy" @click="commitImport">{{ importLabels.commit }}</button>
+          </div>
+          <p v-if="importBusy" class="form-hint">{{ common.loading }}</p>
+          <div class="import-table-wrap">
+            <table class="import-table">
+              <thead><tr>
+                <th>{{ importLabels.sourceRow }}</th><th>{{ importLabels.propertyName }}</th><th>{{ importLabels.roomNumber }}</th>
+                <th>{{ importLabels.postalCode }}</th><th>{{ importLabels.address }}</th><th>{{ importLabels.unitType }}</th>
+                <th>{{ importLabels.match }}</th><th>{{ importLabels.action }}</th><th>{{ importLabels.reason }}</th><th>{{ importLabels.remark }}</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="row in importRows" :key="row.id" :class="`import-status-${row.status.toLowerCase()}`">
+                  <td>{{ row.sourceRow }}</td>
+                  <td><input v-model="row.propertyName" @change="saveImportRow(row, { propertyName: row.propertyName })" /></td>
+                  <td><input v-model="row.roomNumber" @change="saveImportRow(row, { roomNumber: row.roomNumber })" /></td>
+                  <td><input v-model="row.postalCode" @change="saveImportRow(row, { postalCode: row.postalCode })" /></td>
+                  <td><input v-model="row.address" class="wide-input" @change="saveImportRow(row, { address: row.address })" /></td>
+                  <td><select v-model="row.detectedUnitType" @change="saveImportRow(row, { detectedUnitType: row.detectedUnitType })"><option v-for="type in unitTypes" :key="type" :value="type">{{ importLabels.unitTypes[type] || type }}</option></select></td>
+                  <td>{{ row.property?.name || '-' }}<br />{{ row.room?.roomNumber || '-' }}</td>
+                  <td><select v-model="row.action" @change="saveImportRow(row, { action: row.action })"><option v-for="action in importActions" :key="action" :value="action">{{ importLabels.actions[action] || action }}</option></select></td>
+                  <td>{{ importLabels.reasons[row.conflictReason || row.errorMessage] || row.conflictReason || row.errorMessage || '-' }}</td>
+                  <td><input v-model="row.remark" @change="saveImportRow(row, { remark: row.remark })" /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="importPagination" class="import-pagination">
+            <button class="secondary-button" type="button" :disabled="importPagination.page <= 1" @click="loadImportPage(importPagination.page - 1)">{{ importLabels.previous }}</button>
+            <span>{{ importPagination.page }} / {{ importPagination.totalPages }}</span>
+            <button class="secondary-button" type="button" :disabled="importPagination.page >= importPagination.totalPages" @click="loadImportPage(importPagination.page + 1)">{{ importLabels.next }}</button>
+          </div>
+        </template>
       </div>
     </div>
     <div v-if="showResourceModal" class="modal-overlay" @click.self="closeResourceModal">
@@ -83,6 +151,7 @@ const form = ref(blankForm());
 const { dictionary } = useI18n();
 const labels = computed(() => dictionary.value.resourcesLabels);
 const common = computed(() => dictionary.value.common);
+const importLabels = computed(() => dictionary.value.propertyImport);
 const resources = ref([]);
 const selectedIds = ref([]);
 const fileInput = ref(null);
@@ -90,6 +159,15 @@ const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
 const showResourceModal = ref(false);
+const showImportModal = ref(false);
+const importView = ref("preview");
+const importBatch = ref(null);
+const importRows = ref([]);
+const importPagination = ref(null);
+const importBatches = ref([]);
+const importSearch = ref("");
+const importStatus = ref("");
+const importBusy = ref(false);
 const resourceModalTitle = ref("");
 const resourceColumns = ref([
   { key: "project", labelKey: "projectBuilding", visible: true },
@@ -104,6 +182,18 @@ const showColumnPanel = ref(false);
 const visibleResourceColumns = computed(() => resourceColumns.value.filter((column) => column.visible));
 const exportResourceColumns = computed(() => visibleResourceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredResources = computed(() => resources.value.filter(matchesSearch));
+const unitTypes = ["ROOM", "HOUSE", "SHOP", "OFFICE", "PARKING", "SIGNBOARD", "BASE_STATION", "VENDING", "MINPAKU", "OTHER"];
+const importActions = ["CREATE_PROPERTY_AND_ROOM", "CREATE_ROOM", "UPDATE_PROPERTY", "UPDATE_ROOM", "SKIP", "CONFLICT", "ERROR"];
+const importStatuses = ["READY", "CONFLICT", "ERROR", "SKIPPED", "COMMITTED", "FAILED"];
+const importReadyRows = computed(() => {
+  if (!importBatch.value) return 0;
+  const resolved = (importBatch.value.successRows || 0) + (importBatch.value.skippedRows || 0) + (importBatch.value.failedRows || 0) + (importBatch.value.conflictRows || 0);
+  return Math.max(0, importBatch.value.totalRows - resolved);
+});
+const canCommitImport = computed(() => {
+  if (!importBatch.value) return false;
+  return importBatch.value.status !== "COMPLETED" && importReadyRows.value > 0;
+});
 
 const resetForm = () => {
   form.value = blankForm();
@@ -235,33 +325,101 @@ const triggerImport = () => {
 const importResources = async (event) => {
   const [file] = event.target.files || [];
   if (!file) return;
+  importBusy.value = true;
   try {
     const rows = await parseTableFile(file);
     const header = rows[0] || [];
-    const dataRows = rows.slice(1);
-    const labelIndex = (label) => header.findIndex((item) => item === label);
-    await Promise.all(
-      dataRows.map((row) => {
-        const projectParts = String(row[labelIndex(labels.value.projectBuilding)] || "").split("/");
-        const houseParts = String(row[labelIndex(labels.value.houseRoom)] || "").split("/");
-        const areaParts = String(row[labelIndex(labels.value.areaFloor)] || "").split("/");
-        return api.createRoom({
-          projectName: projectParts[0]?.trim() || "",
-          buildingName: projectParts[1]?.trim() || "",
-          houseNumber: houseParts[0]?.trim() || "",
-          roomNumber: houseParts[1]?.trim() || "",
-          area: areaParts[0]?.trim() || "",
-          floor: areaParts[1]?.trim() || "",
-          status: row[labelIndex(labels.value.status)] || "VACANT",
-          note: row[labelIndex(labels.value.note)] || "",
-        });
-      }),
-    );
+    const dataRows = rows.slice(1).map((row) => Object.fromEntries(header.map((name, index) => [name, row[index] ?? ""])));
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    const fileHash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+    const result = await api.uploadPropertyImport({ originalName: file.name, fileHash, rows: dataRows });
+    applyImportResult(result);
+    importView.value = "preview";
+    showImportModal.value = true;
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.importFailed;
+  } finally {
+    importBusy.value = false;
+    event.target.value = "";
+  }
+};
+
+const applyImportResult = (result) => {
+  importBatch.value = result.batch;
+  importRows.value = result.rows || [];
+  importPagination.value = result.pagination || null;
+};
+
+const closeImportModal = () => {
+  showImportModal.value = false;
+};
+
+const openImportHistory = async () => {
+  importBusy.value = true;
+  try {
+    importBatches.value = await api.listPropertyImportBatches();
+    importView.value = "history";
+    showImportModal.value = true;
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.importFailed;
+  } finally {
+    importBusy.value = false;
+  }
+};
+
+const openImportBatch = async (batchId) => {
+  importBatch.value = { id: batchId };
+  importView.value = "preview";
+  await loadImportPage(1);
+};
+
+const loadImportPage = async (page = 1) => {
+  if (!importBatch.value?.id) return;
+  importBusy.value = true;
+  try {
+    applyImportResult(await api.getPropertyImportBatch(importBatch.value.id, { page, pageSize: 50, search: importSearch.value, status: importStatus.value }));
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.importFailed;
+  } finally {
+    importBusy.value = false;
+  }
+};
+
+const saveImportRow = async (row, changes) => {
+  try {
+    const updated = await api.updatePropertyImportRow(importBatch.value.id, row.id, changes);
+    Object.assign(row, updated);
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.importFailed;
+  }
+};
+
+const commitImport = async () => {
+  if (!importBatch.value?.id) return;
+  importBusy.value = true;
+  try {
+    applyImportResult(await api.commitPropertyImport(importBatch.value.id));
     await loadResources();
   } catch (error) {
     errorMessage.value = error.message || labels.value.importFailed;
   } finally {
-    event.target.value = "";
+    importBusy.value = false;
+  }
+};
+
+const exportImportErrors = async () => {
+  if (!importBatch.value?.id) return;
+  try {
+    const rows = await api.getPropertyImportErrors(importBatch.value.id);
+    const columns = [
+      { key: "sourceRow", label: importLabels.value.sourceRow }, { key: "propertyName", label: importLabels.value.propertyName },
+      { key: "roomNumber", label: importLabels.value.roomNumber }, { key: "postalCode", label: importLabels.value.postalCode },
+      { key: "address", label: importLabels.value.address }, { key: "action", label: importLabels.value.action },
+      { key: "reason", label: importLabels.value.reason }, { key: "remark", label: importLabels.value.remark },
+    ];
+    exportTableXls(importLabels.value.errorFileName, columns, rows.map((row) => ({ ...row, reason: row.conflictReason || row.errorMessage || "" })));
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.importFailed;
   }
 };
 
@@ -269,3 +427,20 @@ onMounted(() => {
   loadResources();
 });
 </script>
+
+<style scoped>
+.property-import-modal { width: min(96vw, 1500px); max-height: 92vh; overflow: auto; }
+.import-summary { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 0 0 14px; }
+.import-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.import-table-wrap { overflow: auto; max-height: 58vh; border: 1px solid var(--border-color, #dbe3ea); border-radius: 10px; }
+.import-table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px; }
+.import-table th, .import-table td { padding: 7px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+.import-table th { position: sticky; top: 0; z-index: 1; background: #edf5f4; }
+.import-table input, .import-table select { min-width: 110px; max-width: 180px; }
+.import-table .wide-input { min-width: 280px; }
+.import-status-conflict, .import-status-error, .import-status-failed { background: #fff4f2; }
+.import-status-committed { background: #f1faf5; }
+.import-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 14px; }
+.import-history-list { display: grid; gap: 8px; }
+.history-row { display: grid; grid-template-columns: 1.2fr 2fr 1fr .7fr; gap: 12px; width: 100%; padding: 12px; border: 1px solid #dbe3ea; border-radius: 8px; background: #fff; text-align: left; }
+</style>

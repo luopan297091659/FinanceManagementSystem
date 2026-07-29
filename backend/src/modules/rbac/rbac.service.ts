@@ -118,6 +118,21 @@ export class RbacService implements OnModuleInit {
       { key: 'property:create', module: 'property', description: '创建房产' },
       { key: 'property:update', module: 'property', description: '更新房产' },
       { key: 'property:delete', module: 'property', description: '删除房产' },
+      { key: 'property.view', module: 'property', description: '查看物件台账' },
+      { key: 'property.create', module: 'property', description: '创建物件' },
+      { key: 'property.edit', module: 'property', description: '编辑物件' },
+      { key: 'property.import', module: 'property', description: '上传并预览物件导入' },
+      { key: 'property.import.commit', module: 'property', description: '提交物件导入' },
+      { key: 'property.owner.view', module: 'property', description: '查看物件所有权' },
+      { key: 'property.owner.edit', module: 'property', description: '编辑物件所有权' },
+      { key: 'room.view', module: 'room', description: '查看房间' },
+      { key: 'room.create', module: 'room', description: '创建房间' },
+      { key: 'room.edit', module: 'room', description: '编辑房间' },
+      { key: 'contract.view', module: 'contract', description: '查看合同' },
+      { key: 'contract.create', module: 'contract', description: '创建合同' },
+      { key: 'contract.edit', module: 'contract', description: '编辑合同' },
+      { key: 'owner.financial.view', module: 'owner', description: '查看业主财务敏感信息' },
+      { key: 'owner.financial.edit', module: 'owner', description: '编辑业主财务敏感信息' },
       { key: 'tenant:view', module: 'tenant', description: '查看租户' },
       { key: 'tenant:create', module: 'tenant', description: '创建租户' },
       { key: 'tenant:update', module: 'tenant', description: '更新租户' },
@@ -152,11 +167,11 @@ export class RbacService implements OnModuleInit {
       if (role.code === 'SUPER_ADMIN') {
         permissions.forEach((p: { key: string }) => desired.add(p.key));
       } else if (role.code === 'ADMIN') {
-        ['user:view','user:create','user:update','user:reset_password','role:view','property:view','tenant:view','payment:view','payment:create','payment:update','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute','audit_log:view'].forEach((p) => desired.add(p));
+        ['user:view','user:create','user:update','user:reset_password','role:view','property:view','property.view','property.create','property.edit','property.import','property.import.commit','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','owner.financial.view','owner.financial.edit','tenant:view','payment:view','payment:create','payment:update','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute','audit_log:view'].forEach((p) => desired.add(p));
       } else if (role.code === 'FINANCE') {
         ['property:view','tenant:view','payment:view','payment:create','payment:update','payment:delete','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute'].forEach((p) => desired.add(p));
       } else if (role.code === 'BUSINESS') {
-        ['property:view','property:create','property:update','tenant:view','tenant:create','tenant:update','payment:view','reconciliation:view'].forEach((p) => desired.add(p));
+        ['property:view','property:create','property:update','property.view','property.create','property.edit','property.import','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','tenant:view','tenant:create','tenant:update','payment:view','reconciliation:view'].forEach((p) => desired.add(p));
       }
       const existing = await this.prisma.rolePermission.findMany({ where: { roleId: role.id } });
       const existingKeys = new Set(existing.map((entry: { permissionId: string }) => permissions.find((p: { id: string }) => p.id === entry.permissionId)?.key));

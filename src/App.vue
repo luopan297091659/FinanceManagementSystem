@@ -76,6 +76,7 @@
           <div class="locale-switch" role="group" aria-label="Language">
             <button class="locale-button" :class="{ active: locale === 'ja' }" type="button" @click="setLocale('ja')">日本語</button>
             <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">中文</button>
+            <button class="locale-button" :class="{ active: locale === 'en' }" type="button" @click="setLocale('en')">English</button>
           </div>
           <button class="ghost-button" type="button" @click="setActiveNavItem({ key: 'gis' })">{{ dictionary.openGis }}</button>
           <div class="settings-menu" @click.stop>

@@ -104,6 +104,17 @@ export const messages = {
       overdue: "滞納",
       inactive: "停止",
     },
+    propertyImport: {
+      title: "物件データ取込プレビュー", importData: "物件データ取込", history: "取込履歴", noHistory: "取込履歴がありません。",
+      total: "合計", ready: "取込可能", conflicts: "競合", errors: "エラー", committed: "登録済み", search: "物件名・部屋番号・住所を検索",
+      allStatuses: "すべての状態", filter: "絞り込み", exportErrors: "エラー行を出力", commit: "競合のない行を一括登録",
+      sourceRow: "元行", propertyName: "物件名", roomNumber: "部屋番号", postalCode: "郵便番号", address: "住所", unitType: "区画種別",
+      match: "一致候補", action: "処理", reason: "競合・エラー理由", remark: "備考", previous: "前へ", next: "次へ", errorFileName: "物件取込エラー.xls",
+      statuses: { READY: "取込可能", CONFLICT: "競合", ERROR: "エラー", SKIPPED: "スキップ", COMMITTED: "登録済み", FAILED: "登録失敗" },
+      actions: { CREATE_PROPERTY_AND_ROOM: "物件・部屋を作成", CREATE_ROOM: "部屋を作成", UPDATE_PROPERTY: "物件を更新", UPDATE_ROOM: "部屋を更新", SKIP: "スキップ", CONFLICT: "競合", ERROR: "エラー" },
+      unitTypes: { ROOM: "部屋", HOUSE: "戸建て", SHOP: "店舗", OFFICE: "事務所", PARKING: "駐車場", SIGNBOARD: "看板", BASE_STATION: "基地局", VENDING: "自販機", MINPAKU: "民泊", OTHER: "その他" },
+      reasons: { "import.error.duplicateRow": "ファイル内の重複行", "import.error.propertyNameRequired": "物件名が未入力", "import.error.roomNumberRequired": "部屋番号が未入力", "import.error.sameNameDifferentAddress": "同名で住所が異なります", "import.error.sameAddressDifferentName": "同住所で物件名が異なります" },
+    },
     customersLabels: {
       eyebrow: "顧客管理",
       heading: "契約者と家主の統合ビュー",
@@ -378,6 +389,17 @@ export const messages = {
       overdue: "逾期",
       inactive: "停用",
     },
+    propertyImport: {
+      title: "物件数据导入预览", importData: "导入物件数据", history: "导入历史", noHistory: "暂无导入历史。",
+      total: "总计", ready: "可导入", conflicts: "冲突", errors: "错误", committed: "已入库", search: "搜索物件名、房号或地址",
+      allStatuses: "全部状态", filter: "筛选", exportErrors: "导出错误行", commit: "批量提交无冲突行",
+      sourceRow: "源行", propertyName: "物件名", roomNumber: "房号", postalCode: "邮编", address: "地址", unitType: "单元类型",
+      match: "匹配结果", action: "处理动作", reason: "冲突/错误原因", remark: "备注", previous: "上一页", next: "下一页", errorFileName: "物件导入错误.xls",
+      statuses: { READY: "可导入", CONFLICT: "冲突", ERROR: "错误", SKIPPED: "已跳过", COMMITTED: "已入库", FAILED: "提交失败" },
+      actions: { CREATE_PROPERTY_AND_ROOM: "新建物件和房间", CREATE_ROOM: "新建房间", UPDATE_PROPERTY: "更新物件", UPDATE_ROOM: "更新房间", SKIP: "跳过", CONFLICT: "冲突", ERROR: "错误" },
+      unitTypes: { ROOM: "房间", HOUSE: "独栋", SHOP: "商铺", OFFICE: "办公室", PARKING: "停车位", SIGNBOARD: "广告牌", BASE_STATION: "基站", VENDING: "自动售货机", MINPAKU: "民宿", OTHER: "其他" },
+      reasons: { "import.error.duplicateRow": "文件内重复行", "import.error.propertyNameRequired": "物件名为空", "import.error.roomNumberRequired": "房号为空", "import.error.sameNameDifferentAddress": "同名但地址不同", "import.error.sameAddressDifferentName": "同地址但物件名不同" },
+    },
     customersLabels: {
       eyebrow: "客户管理",
       heading: "租客与业主统一视图",
@@ -550,6 +572,25 @@ export const messages = {
       edit: "编辑",
       delete: "删除",
     },
+  },
+};
+
+messages.en = {
+  ...messages.ja,
+  appName: "Property Management Platform",
+  resources: "Property Management",
+  common: { ...messages.ja.common, add: "Add", edit: "Edit", update: "Update", delete: "Delete", cancel: "Cancel", save: "Save", import: "Import", export: "Export", batchDelete: "Batch delete", showColumns: "Columns", loading: "Loading...", select: "Select", noData: "No data.", close: "Close" },
+  resourcesLabels: { ...messages.ja.resourcesLabels, eyebrow: "Property Management", heading: "Property inventory and status", searchPlaceholder: "Search properties, rooms, and status...", newResource: "New property", editResource: "Edit property", loadFailed: "Failed to load properties", saveFailed: "Failed to save property", deleteFailed: "Failed to delete property", batchDeleteFailed: "Failed to delete properties", importFailed: "Failed to import properties", projectBuilding: "Project / Property", houseRoom: "Property code / Room", areaFloor: "Area / Floor", location: "Coordinates", status: "Status", note: "Remark", roomNumber: "Room number" },
+  propertyImport: {
+    title: "Property Import Preview", importData: "Import Property Data", history: "Import History", noHistory: "No import history.",
+    total: "Total", ready: "Ready", conflicts: "Conflicts", errors: "Errors", committed: "Committed", search: "Search property, room, or address",
+    allStatuses: "All statuses", filter: "Filter", exportErrors: "Export errors", commit: "Commit non-conflicting rows",
+    sourceRow: "Source row", propertyName: "Property name", roomNumber: "Room number", postalCode: "Postal code", address: "Address", unitType: "Unit type",
+    match: "Matched records", action: "Action", reason: "Conflict / error", remark: "Remark", previous: "Previous", next: "Next", errorFileName: "property-import-errors.xls",
+    statuses: { READY: "Ready", CONFLICT: "Conflict", ERROR: "Error", SKIPPED: "Skipped", COMMITTED: "Committed", FAILED: "Failed" },
+    actions: { CREATE_PROPERTY_AND_ROOM: "Create property and room", CREATE_ROOM: "Create room", UPDATE_PROPERTY: "Update property", UPDATE_ROOM: "Update room", SKIP: "Skip", CONFLICT: "Conflict", ERROR: "Error" },
+    unitTypes: { ROOM: "Room", HOUSE: "House", SHOP: "Shop", OFFICE: "Office", PARKING: "Parking", SIGNBOARD: "Signboard", BASE_STATION: "Base station", VENDING: "Vending", MINPAKU: "Minpaku", OTHER: "Other" },
+    reasons: { "import.error.duplicateRow": "Duplicate row in file", "import.error.propertyNameRequired": "Property name is required", "import.error.roomNumberRequired": "Room number is required", "import.error.sameNameDifferentAddress": "Same name with a different address", "import.error.sameAddressDifferentName": "Same address with a different name" },
   },
 };
 
