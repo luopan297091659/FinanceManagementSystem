@@ -143,6 +143,7 @@ export class FrontendApiService {
         id: property.id,
         projectId: property.projectId,
         name: property.name,
+        address: property.address,
         latitude: decimalToString(property.latitude),
         longitude: decimalToString(property.longitude),
       })),

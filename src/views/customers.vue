@@ -27,7 +27,7 @@
           <div v-for="item in bindings" :key="item.id" class="table-row binding-row">
             <div>{{ getRoomLabel(item.roomId) }}</div>
             <div>{{ item.kind === "owner" ? labels.owner : labels.tenant }} / {{ getCustomerName(item.customerId) }}</div>
-            <div>{{ item.startDate || "-" }} - {{ item.endDate || "-" }}</div>
+            <div>{{ formatDateRange(item.startDate, item.endDate) }}</div>
             <div>{{ item.status }}</div>
             <div class="row-actions">
               <button class="danger-button mini" type="button" @click="deleteBinding(item.id)">{{ common.delete }}</button>
@@ -47,7 +47,11 @@
           </div>
           <div class="column-panel-container">
             <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
-            <div v-if="showColumnPanel" class="column-panel">
+            <div v-if="showColumnPanel" class="column-panel" role="dialog" :aria-label="common.showColumns">
+              <div class="column-panel-header">
+                <strong>{{ common.showColumns }}</strong>
+                <button class="column-reset-button" type="button" @click="resetCustomerColumns">{{ common.resetColumns }}</button>
+              </div>
               <div class="panel-body">
                 <label v-for="column in customerColumns" :key="column.key" class="panel-item">
                   <input type="checkbox" v-model="column.visible" />
@@ -59,13 +63,20 @@
         </div>
         <CustomerTable
           v-model:selected-ids="selectedIds"
-          :items="filteredCustomers"
+          :items="paginatedCustomers"
+          :total="filteredCustomers.length"
           :columns="customerColumns"
           :labels="labels"
           :common="common"
           @edit="editCustomer"
           @delete="deleteCustomer"
           @bind="openBindingModal"
+        />
+        <DataPagination
+          v-model:page="customerPage"
+          v-model:page-size="customerPageSize"
+          :total="filteredCustomers.length"
+          :labels="common"
         />
       </div>
     </div>
@@ -134,7 +145,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import DataPagination from "../components/DataPagination.vue";
 import CustomerForm from "../components/customers/CustomerForm.vue";
 import CustomerTable from "../components/customers/CustomerTable.vue";
 import { useI18n } from "../i18n";
@@ -181,23 +193,31 @@ const fileInput = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
+const customerPage = ref(1);
+const customerPageSize = ref(20);
 const showCustomerModal = ref(false);
 const customerModalTitle = ref("");
 const showBindingModal = ref(false);
 const bindingModalTitle = ref("");
 const customerColumns = ref([
   { key: "name", labelKey: "customerCode", visible: true },
-  { key: "contact", labelKey: "contact", visible: true },
-  { key: "address", labelKey: "addressAttachment", visible: true },
   { key: "type", labelKey: "customerType", visible: true },
-  { key: "dates", labelKey: "dates", visible: true },
-  { key: "extra", labelKey: "extra", visible: true },
+  { key: "contact", labelKey: "contact", visible: true },
+  { key: "address", labelKey: "address", visible: true },
+  { key: "dates", labelKey: "dates", visible: false },
+  { key: "occupation", labelKey: "occupation", visible: false },
+  { key: "extra", labelKey: "extra", visible: false },
+  { key: "attachments", labelKey: "attachments", visible: false },
 ]);
 
 const showColumnPanel = ref(false);
 const visibleCustomerColumns = computed(() => customerColumns.value.filter((column) => column.visible));
 const exportCustomerColumns = computed(() => visibleCustomerColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredCustomers = computed(() => customers.value.filter(matchesCustomerSearch));
+const paginatedCustomers = computed(() => {
+  const start = (customerPage.value - 1) * customerPageSize.value;
+  return filteredCustomers.value.slice(start, start + customerPageSize.value);
+});
 
 const resetForm = () => {
   form.value = blankForm();
@@ -235,7 +255,7 @@ const closeBindingModal = () => {
 
 const getRoomLabel = (roomId) => {
   const room = rooms.value.find((item) => item.id === roomId);
-  return room ? `${room.projectName} / ${room.buildingName} / ${room.roomNumber}` : labels.value.unassignedRoom;
+  return room ? compactJoin(room.projectName, room.buildingName, room.roomNumber) : labels.value.unassignedRoom;
 };
 
 const getCustomerName = (customerId) => {
@@ -353,13 +373,35 @@ function matchesCustomerSearch(item) {
 
 const getExportValue = (item, key) =>
   ({
-    name: `${item.name || ""} / ${item.customerCode || ""}`,
-    contact: `${item.phone || ""} / ${item.email || ""}`,
-    address: `${item.address || ""} / ${item.note || ""}`,
-    type: `${item.kind === "owner" ? labels.value.owner : labels.value.tenant} / ${item.ownerType === "COMPANY" ? labels.value.company : labels.value.person}`,
-    dates: `${item.birthDate || ""} / ${item.annualIncome || ""}`,
-    extra: `${item.kana || ""} / ${item.nationality || ""}`,
+    name: compactJoin(item.name, item.customerCode),
+    contact: compactJoin(item.phone, item.email),
+    address: compactJoin(item.address, item.note),
+    type: compactJoin(item.kind === "owner" ? labels.value.owner : labels.value.tenant, item.ownerType === "COMPANY" ? labels.value.company : labels.value.person),
+    dates: compactJoin(item.birthDate, item.annualIncome),
+    occupation: item.occupation || "",
+    extra: compactJoin(item.kana, item.nationality),
+    attachments: item.attachments || item.note || "",
   })[key] || "";
+
+const compactJoin = (...values) => values.filter((value) => value !== null && value !== undefined && value !== "").join(" / ");
+const formatDateRange = (startDate, endDate) => [startDate, endDate].filter(Boolean).join(" ～ ");
+
+const resetCustomerColumns = () => {
+  const defaults = new Set(["name", "type", "contact", "address"]);
+  customerColumns.value.forEach((column) => {
+    column.visible = defaults.has(column.key);
+  });
+};
+
+watch(searchQuery, () => {
+  customerPage.value = 1;
+});
+watch(() => customerColumns.value.map((column) => `${column.key}:${column.visible}`).join("|"), () => {
+  customerPage.value = 1;
+});
+watch(() => filteredCustomers.value.length, (total) => {
+  customerPage.value = Math.min(customerPage.value, Math.max(1, Math.ceil(total / customerPageSize.value)));
+});
 
 const editCustomer = (item) => {
   form.value = { ...item };

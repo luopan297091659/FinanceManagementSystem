@@ -23,7 +23,11 @@
           </div>
           <div class="column-panel-container">
             <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
-            <div v-if="showColumnPanel" class="column-panel">
+            <div v-if="showColumnPanel" class="column-panel" role="dialog" :aria-label="common.showColumns">
+              <div class="column-panel-header">
+                <strong>{{ common.showColumns }}</strong>
+                <button class="column-reset-button" type="button" @click="resetResourceColumns">{{ common.resetColumns }}</button>
+              </div>
               <div class="panel-body">
                 <label v-for="column in resourceColumns" :key="column.key" class="panel-item">
                   <input type="checkbox" v-model="column.visible" />
@@ -35,12 +39,19 @@
         </div>
         <ResourceTable
           v-model:selected-ids="selectedIds"
-          :items="filteredResources"
+          :items="paginatedResources"
+          :total="filteredResources.length"
           :columns="resourceColumns"
           :labels="labels"
           :common="common"
           @edit="editResource"
           @delete="deleteResource"
+        />
+        <DataPagination
+          v-model:page="resourcePage"
+          v-model:page-size="resourcePageSize"
+          :total="filteredResources.length"
+          :labels="common"
         />
       </div>
     </div>
@@ -95,9 +106,9 @@
                   <td><input v-model="row.postalCode" @change="saveImportRow(row, { postalCode: row.postalCode })" /></td>
                   <td><input v-model="row.address" class="wide-input" @change="saveImportRow(row, { address: row.address })" /></td>
                   <td><select v-model="row.detectedUnitType" @change="saveImportRow(row, { detectedUnitType: row.detectedUnitType })"><option v-for="type in unitTypes" :key="type" :value="type">{{ importLabels.unitTypes[type] || type }}</option></select></td>
-                  <td>{{ row.property?.name || '-' }}<br />{{ row.room?.roomNumber || '-' }}</td>
+                  <td>{{ joinValues(row.property?.name, row.room?.roomNumber) }}</td>
                   <td><select v-model="row.action" @change="saveImportRow(row, { action: row.action })"><option v-for="action in importActions" :key="action" :value="action">{{ importLabels.actions[action] || action }}</option></select></td>
-                  <td>{{ importLabels.reasons[row.conflictReason || row.errorMessage] || row.conflictReason || row.errorMessage || '-' }}</td>
+                  <td>{{ importLabels.reasons[row.conflictReason || row.errorMessage] || row.conflictReason || row.errorMessage || "" }}</td>
                   <td><input v-model="row.remark" @change="saveImportRow(row, { remark: row.remark })" /></td>
                 </tr>
               </tbody>
@@ -124,7 +135,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import DataPagination from "../components/DataPagination.vue";
 import ResourceForm from "../components/resources/ResourceForm.vue";
 import ResourceTable from "../components/resources/ResourceTable.vue";
 import { useI18n } from "../i18n";
@@ -158,6 +170,8 @@ const fileInput = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
+const resourcePage = ref(1);
+const resourcePageSize = ref(20);
 const showResourceModal = ref(false);
 const showImportModal = ref(false);
 const importView = ref("preview");
@@ -172,16 +186,23 @@ const resourceModalTitle = ref("");
 const resourceColumns = ref([
   { key: "project", labelKey: "projectBuilding", visible: true },
   { key: "house", labelKey: "houseRoom", visible: true },
-  { key: "area", labelKey: "areaFloor", visible: true },
-  { key: "location", labelKey: "location", visible: true },
   { key: "status", labelKey: "status", visible: true },
-  { key: "note", labelKey: "note", visible: true },
+  { key: "address", labelKey: "address", visible: true },
+  { key: "area", labelKey: "area", visible: false },
+  { key: "floor", labelKey: "floor", visible: false },
+  { key: "buildingLocation", labelKey: "buildingCoordinates", visible: false },
+  { key: "roomLocation", labelKey: "roomCoordinates", visible: false },
+  { key: "note", labelKey: "note", visible: false },
 ]);
 
 const showColumnPanel = ref(false);
 const visibleResourceColumns = computed(() => resourceColumns.value.filter((column) => column.visible));
 const exportResourceColumns = computed(() => visibleResourceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredResources = computed(() => resources.value.filter(matchesSearch));
+const paginatedResources = computed(() => {
+  const start = (resourcePage.value - 1) * resourcePageSize.value;
+  return filteredResources.value.slice(start, start + resourcePageSize.value);
+});
 const unitTypes = ["ROOM", "HOUSE", "SHOP", "OFFICE", "PARKING", "SIGNBOARD", "BASE_STATION", "VENDING", "MINPAKU", "OTHER"];
 const importActions = ["CREATE_PROPERTY_AND_ROOM", "CREATE_ROOM", "UPDATE_PROPERTY", "UPDATE_ROOM", "SKIP", "CONFLICT", "ERROR"];
 const importStatuses = ["READY", "CONFLICT", "ERROR", "SKIPPED", "COMMITTED", "FAILED"];
@@ -222,6 +243,7 @@ const loadResources = async () => {
         id: room.id,
         projectName: project?.name || "",
         buildingName: building?.name || "",
+        address: building?.address || project?.address || "",
         buildingLatitude: building?.latitude || "",
         buildingLongitude: building?.longitude || "",
         houseNumber: room.houseNumber,
@@ -250,13 +272,35 @@ function matchesSearch(item) {
 
 const getExportValue = (item, key) =>
   ({
-    project: `${item.projectName || ""} / ${item.buildingName || ""}`,
-    house: `${item.houseNumber || ""} / ${item.roomNumber || ""}`,
-    area: `${item.area || ""} / ${item.floor || ""}`,
-    location: `${item.buildingLatitude || ""}, ${item.buildingLongitude || ""}; ${item.roomLatitude || ""}, ${item.roomLongitude || ""}`,
+    project: joinValues(item.projectName, item.buildingName),
+    house: joinValues(item.houseNumber, item.roomNumber),
+    address: item.address || "",
+    area: item.area || "",
+    floor: item.floor ?? "",
+    buildingLocation: joinValues(item.buildingLatitude, item.buildingLongitude, ", "),
+    roomLocation: joinValues(item.roomLatitude, item.roomLongitude, ", "),
     status: item.status || "",
     note: item.note || "",
   })[key] || "";
+
+const joinValues = (first, second, separator = " / ") => [first, second].filter((value) => value !== null && value !== undefined && value !== "").join(separator);
+
+const resetResourceColumns = () => {
+  const defaults = new Set(["project", "house", "status", "address"]);
+  resourceColumns.value.forEach((column) => {
+    column.visible = defaults.has(column.key);
+  });
+};
+
+watch(searchQuery, () => {
+  resourcePage.value = 1;
+});
+watch(() => resourceColumns.value.map((column) => `${column.key}:${column.visible}`).join("|"), () => {
+  resourcePage.value = 1;
+});
+watch(() => filteredResources.value.length, (total) => {
+  resourcePage.value = Math.min(resourcePage.value, Math.max(1, Math.ceil(total / resourcePageSize.value)));
+});
 
 const saveResource = async () => {
   if (!form.value.projectName || !form.value.buildingName || !form.value.houseNumber) return;

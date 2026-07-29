@@ -2,7 +2,7 @@
   <div class="table-card data-table-card">
     <div class="table-head">
       <strong>{{ labels.resourceList }}</strong>
-      <span>{{ items.length }} {{ common.records }}</span>
+      <span>{{ total ?? items.length }} {{ common.records }}</span>
     </div>
     <div class="data-table-wrap">
       <table class="data-table">
@@ -24,26 +24,33 @@
             <td class="index-cell">{{ index + 1 }}</td>
             <td v-for="column in visibleColumns" :key="column.key">
               <template v-if="column.key === 'project'">
-                <strong>{{ item.projectName || "-" }}</strong>
-                <p>{{ item.buildingName || "-" }}</p>
+                <strong v-if="hasValue(item.projectName)">{{ item.projectName }}</strong>
+                <p v-if="hasValue(item.buildingName)">{{ item.buildingName }}</p>
               </template>
               <template v-else-if="column.key === 'house'">
-                <strong>{{ item.houseNumber || "-" }}</strong>
-                <p>{{ item.roomNumber || "-" }}</p>
+                <strong v-if="hasValue(item.houseNumber)">{{ item.houseNumber }}</strong>
+                <p v-if="hasValue(item.roomNumber)">{{ item.roomNumber }}</p>
               </template>
               <template v-else-if="column.key === 'area'">
-                <p>{{ item.area || "-" }} m2</p>
-                <p>{{ item.floor || "-" }}</p>
+                <span v-if="hasValue(item.area)">{{ item.area }} m²</span>
               </template>
-              <template v-else-if="column.key === 'location'">
-                <p>{{ item.buildingLatitude || "-" }}, {{ item.buildingLongitude || "-" }}</p>
-                <p>{{ item.roomLatitude || "-" }}, {{ item.roomLongitude || "-" }}</p>
+              <template v-else-if="column.key === 'floor'">
+                <span v-if="hasValue(item.floor)">{{ item.floor }}</span>
+              </template>
+              <template v-else-if="column.key === 'buildingLocation'">
+                {{ coordinate(item.buildingLatitude, item.buildingLongitude) }}
+              </template>
+              <template v-else-if="column.key === 'roomLocation'">
+                {{ coordinate(item.roomLatitude, item.roomLongitude) }}
+              </template>
+              <template v-else-if="column.key === 'address'">
+                {{ item.address || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <span class="status-pill" :class="(item.status || 'vacant').toLowerCase()">{{ statusLabel(item.status) }}</span>
               </template>
               <template v-else-if="column.key === 'note'">
-                {{ item.note || "-" }}
+                {{ item.note || "" }}
               </template>
             </td>
             <td class="actions-cell">
@@ -83,6 +90,10 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  total: {
+    type: Number,
+    default: null,
+  },
 });
 
 const emit = defineEmits(["edit", "delete", "update:selectedIds"]);
@@ -115,5 +126,8 @@ const statusLabel = (status) =>
     MAINTENANCE: props.labels.maintenance,
     OVERDUE: props.labels.overdue,
     INACTIVE: props.labels.inactive,
-  })[status] || status || "-";
+  })[status] || status || "";
+
+const hasValue = (value) => value !== null && value !== undefined && value !== "";
+const coordinate = (latitude, longitude) => [latitude, longitude].filter(hasValue).join(", ");
 </script>

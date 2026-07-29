@@ -2,7 +2,7 @@
   <div class="table-card data-table-card">
     <div class="table-head">
       <strong>{{ labels.customerList }}</strong>
-      <span>{{ items.length }} {{ common.records }}</span>
+      <span>{{ total ?? items.length }} {{ common.records }}</span>
     </div>
     <div class="data-table-wrap">
       <table class="data-table">
@@ -24,28 +24,33 @@
             <td class="index-cell">{{ index + 1 }}</td>
             <td v-for="column in visibleColumns" :key="column.key">
               <template v-if="column.key === 'name'">
-                <strong>{{ item.name || "-" }}</strong>
-                <p>{{ item.customerCode || "-" }}</p>
+                <strong v-if="item.name">{{ item.name }}</strong>
+                <p v-if="item.customerCode">{{ item.customerCode }}</p>
               </template>
               <template v-else-if="column.key === 'contact'">
-                <p>{{ item.phone || "-" }}</p>
-                <p>{{ item.email || "-" }}</p>
+                <p v-if="item.phone">{{ item.phone }}</p>
+                <p v-if="item.email">{{ item.email }}</p>
               </template>
               <template v-else-if="column.key === 'address'">
-                <p>{{ item.address || "-" }}</p>
-                <p>{{ item.note || "-" }}</p>
+                <p v-if="item.address">{{ item.address }}</p>
               </template>
               <template v-else-if="column.key === 'type'">
                 <p>{{ item.kind === "owner" ? labels.owner : labels.tenant }}</p>
                 <p>{{ item.ownerType === "COMPANY" ? labels.company : labels.person }}</p>
               </template>
               <template v-else-if="column.key === 'dates'">
-                <p>{{ item.birthDate || "-" }}</p>
-                <p>{{ item.annualIncome || "-" }}</p>
+                <p v-if="item.birthDate">{{ item.birthDate }}</p>
+                <p v-if="item.annualIncome">{{ item.annualIncome }}</p>
               </template>
               <template v-else-if="column.key === 'extra'">
-                <p>{{ item.kana || "-" }}</p>
-                <p>{{ item.nationality || "-" }}</p>
+                <p v-if="item.kana">{{ item.kana }}</p>
+                <p v-if="item.nationality">{{ item.nationality }}</p>
+              </template>
+              <template v-else-if="column.key === 'occupation'">
+                {{ item.occupation || "" }}
+              </template>
+              <template v-else-if="column.key === 'attachments'">
+                {{ item.attachments || item.note || "" }}
               </template>
             </td>
             <td class="actions-cell">
@@ -85,6 +90,10 @@ const props = defineProps({
   common: {
     type: Object,
     required: true,
+  },
+  total: {
+    type: Number,
+    default: null,
   },
 });
 
