@@ -395,6 +395,7 @@ const editResource = async (item) => {
 };
 
 const deleteResource = async (id) => {
+  if (!window.confirm(common.value.deleteConfirm)) return;
   try {
     await api.deleteRoom(id);
     await loadResources();
@@ -405,6 +406,7 @@ const deleteResource = async (id) => {
 
 const batchDelete = async () => {
   if (!selectedIds.value.length) return;
+  if (!window.confirm(common.value.batchDeleteConfirm.replace("{count}", selectedIds.value.length))) return;
   try {
     await Promise.all(selectedIds.value.map((id) => api.deleteRoom(id)));
     selectedIds.value = [];

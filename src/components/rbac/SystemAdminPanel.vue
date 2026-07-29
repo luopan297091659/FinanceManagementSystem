@@ -976,8 +976,15 @@ watch(() => props.initialTab, (tab) => {
 }
 
 .action-button.delete:hover {
-  border-color: #f44336;
-  color: #f44336;
+  border-color: #8f1d14;
+  background: #8f1d14;
+  color: #ffffff;
+}
+
+.action-button.delete {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
 }
 
 .role-grid {

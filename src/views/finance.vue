@@ -206,6 +206,7 @@ const editFinance = (item) => {
 };
 
 const deleteFinance = async (id) => {
+  if (!window.confirm(common.value.deleteConfirm)) return;
   try {
     await api.deleteTransaction(id);
     await loadFinance();
@@ -216,6 +217,7 @@ const deleteFinance = async (id) => {
 
 const batchDelete = async () => {
   if (!selectedIds.value.length) return;
+  if (!window.confirm(common.value.batchDeleteConfirm.replace("{count}", selectedIds.value.length))) return;
   try {
     await Promise.all(selectedIds.value.map((id) => api.deleteTransaction(id)));
     selectedIds.value = [];

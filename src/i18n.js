@@ -696,6 +696,21 @@ messages.en = {
   },
 };
 
+Object.assign(messages.ja.common, {
+  deleteConfirm: "削除すると元に戻せません。削除しますか？",
+  batchDeleteConfirm: "選択した {count} 件を削除します。元に戻せません。続行しますか？",
+});
+
+Object.assign(messages.zh.common, {
+  deleteConfirm: "删除后无法恢复，确定要删除吗？",
+  batchDeleteConfirm: "将删除选中的 {count} 条记录，且无法恢复。确定继续吗？",
+});
+
+Object.assign(messages.en.common, {
+  deleteConfirm: "This cannot be undone. Delete this record?",
+  batchDeleteConfirm: "Delete the selected {count} records? This cannot be undone.",
+});
+
 Object.assign(messages.ja.contractsLabels, {
   importHistory: "インポート履歴",
   noImportHistory: "インポート履歴はありません。",

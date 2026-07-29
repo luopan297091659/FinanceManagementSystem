@@ -137,7 +137,6 @@ const statusLabel = (status) =>
 const hasValue = (value) => value !== null && value !== undefined && value !== "";
 const coordinate = (latitude, longitude) => [latitude, longitude].filter(hasValue).join(", ");
 const openContract = (contractId) => {
-  window.history.pushState({}, "", `/contracts?contractId=${encodeURIComponent(contractId)}`);
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.open(`/contracts?contractId=${encodeURIComponent(contractId)}`, "_blank", "noopener,noreferrer");
 };
 </script>
