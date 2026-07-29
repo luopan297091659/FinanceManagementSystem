@@ -5,8 +5,9 @@ export class CreateRoomDto {
   @IsString()
   buildingId?: string;
 
+  @IsOptional()
   @IsString()
-  projectName!: string;
+  projectName?: string;
 
   @IsString()
   buildingName!: string;

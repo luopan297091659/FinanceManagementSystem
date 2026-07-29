@@ -2,7 +2,6 @@
   <form class="panel-form" @submit.prevent="emit('submit')">
     <div class="field-grid">
       <h4 class="form-section-title">{{ labels.buildingInformation }}</h4>
-      <label v-if="!editing">{{ labels.project }}<input v-model="form.projectName" required /></label>
       <label>{{ labels.building }}<input v-model="form.buildingName" required /></label>
       <label>{{ labels.propertyCode }}<input v-model="form.propertyCode" /></label>
       <label>{{ labels.postalCode }}<input v-model="form.postalCode" /></label>

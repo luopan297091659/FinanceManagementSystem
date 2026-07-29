@@ -292,15 +292,19 @@ export class FrontendApiService {
   }
 
   async createRoom(dto: CreateRoomDto) {
-    const project = await this.prisma.project.upsert({
-      where: { name: dto.projectName },
-      create: { name: dto.projectName },
-      update: {},
+    const projectName = dto.projectName?.trim();
+    const project = projectName
+      ? await this.prisma.project.upsert({
+          where: { name: projectName },
+          create: { name: projectName },
+          update: {},
+        })
+      : null;
+    const existingProperty = await this.prisma.property.findFirst({
+      where: { projectId: project?.id ?? null, name: dto.buildingName, deletedAt: null },
     });
-    const property = await this.prisma.property.upsert({
-      where: { projectId_name: { projectId: project.id, name: dto.buildingName } },
-      create: {
-        projectId: project.id,
+    const propertyCreateData = {
+        projectId: project?.id ?? null,
         propertyCode: this.optionalText(dto.propertyCode),
         name: dto.buildingName,
         normalizedName: this.normalizeMatchText(dto.buildingName),
@@ -319,8 +323,8 @@ export class FrontendApiService {
         usageType: this.optionalText(dto.propertyUsageType),
         managementStatus: dto.managementStatus || 'ACTIVE',
         remark: this.optionalText(dto.propertyRemark),
-      },
-      update: {
+    };
+    const propertyUpdateData = {
         propertyCode: this.nonEmptyText(dto.propertyCode),
         normalizedName: this.normalizeMatchText(dto.buildingName),
         nameKana: this.nonEmptyText(dto.buildingNameKana),
@@ -337,8 +341,10 @@ export class FrontendApiService {
         buildingType: this.nonEmptyText(dto.buildingType),
         usageType: this.nonEmptyText(dto.propertyUsageType),
         remark: this.nonEmptyText(dto.propertyRemark),
-      },
-    });
+    };
+    const property = existingProperty
+      ? await this.prisma.property.update({ where: { id: existingProperty.id }, data: propertyUpdateData })
+      : await this.prisma.property.create({ data: propertyCreateData });
 
     await this.ensureHouseNumberUnique(dto.houseNumber);
     await this.prisma.room.create({
