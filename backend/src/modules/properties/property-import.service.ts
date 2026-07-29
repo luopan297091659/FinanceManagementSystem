@@ -178,11 +178,19 @@ export class PropertyImportService {
       data: {
         ...normalized,
         ...match,
-        propertyId: dto.propertyId !== undefined ? dto.propertyId : match.propertyId,
-        roomId: dto.roomId !== undefined ? dto.roomId : match.roomId,
+        conflictReason: match.conflictReason ?? null,
+        errorMessage: match.errorMessage ?? null,
+        propertyId: dto.propertyId !== undefined ? dto.propertyId : (match.propertyId ?? null),
+        roomId: dto.roomId !== undefined ? dto.roomId : (match.roomId ?? null),
         remark: dto.remark !== undefined ? dto.remark : before.remark,
       },
     });
+    if (updated.status === 'READY') {
+      await this.prisma.propertyImportBatch.update({
+        where: { id: batchId },
+        data: { status: 'PREVIEW_READY', completedAt: null },
+      });
+    }
     await this.prisma.auditLog.create({
       data: { actorUserId, action: 'property.import.row.update', entityType: 'PropertyImportRow', entityId: rowId, before: toJson(before), after: toJson(updated) },
     });
@@ -193,7 +201,8 @@ export class PropertyImportService {
   async commit(batchId: string, actorUserId?: string) {
     const batch = await this.prisma.propertyImportBatch.findUnique({ where: { id: batchId } });
     if (!batch) throw new NotFoundException('import.error.batchNotFound');
-    if (batch.status === 'COMPLETED') throw new ConflictException('import.error.batchAlreadyCommitted');
+    const readyRows = await this.prisma.propertyImportRow.count({ where: { batchId, status: 'READY' } });
+    if (!readyRows) throw new ConflictException('import.error.noReadyRows');
 
     await this.prisma.propertyImportBatch.update({ where: { id: batchId }, data: { status: 'COMMITTING' } });
     const rows = await this.prisma.propertyImportRow.findMany({
@@ -344,7 +353,7 @@ export class PropertyImportService {
       return { action: 'CONFLICT', status: 'CONFLICT', propertyId: sameName[0].id, conflictReason: 'import.error.sameNameDifferentAddress' };
     }
     if (sameAddress.length) {
-      return { action: 'CONFLICT', status: 'CONFLICT', propertyId: sameAddress[0].id, conflictReason: 'import.error.sameAddressDifferentName' };
+      return { action: 'CREATE_PROPERTY_AND_ROOM', status: 'READY' };
     }
     return { action: 'CREATE_PROPERTY_AND_ROOM', status: 'READY' };
   }
