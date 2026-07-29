@@ -19,7 +19,6 @@
     "pm2:logs": "pm2 logs finance-management"
   },
   "dependencies": {
-    "@lucide/vue": "^1.27.0",
     "maplibre-gl": "^4.7.1",
     "vue": "^3.5.4",
     "xlsx": "^0.18.5"

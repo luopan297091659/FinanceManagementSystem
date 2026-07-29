@@ -161,7 +161,7 @@ const translations = {
   ja: {
     menu: { aiReconciliation: "AI 照合センター", bankReconciliation: "銀行明細照合" },
     help: { subtitle: "銀行入金を物件、部屋、契約、支払名義へ紐付け、明示的な提出まで保持します。" },
-    action: { upload: "ファイル選択", addFiles: "ファイル追加", createBatch: "バッチ作成", match: "照合実行", submit: "提出", refresh: "更新", search: "摘要、契約、部屋を検索", manualMatch: "手動確定", unmatch: "未照合へ戻す", exportExcel: "Excel出力", exportJson: "未照合JSON" },
+    action: { upload: "ファイル選択", addFiles: "ファイル追加", createBatch: "バッチ作成", match: "照合実行", submit: "提出", refresh: "更新", search: "摘要、契約、部屋を検索", manualMatch: "手動確定", unmatch: "未照合へ戻す", exportExcel: "Excel出力", exportJson: "未照合" },
     matching: { title: "照合条件", summary: "銀行摘要名", amount: "銀行入金額", date: "入金日", month: "入金月", property: "物件", room: "部屋番号", contract: "契約ID" },
     table: { source: "原始ファイル", date: "入金日", summary: "銀行摘要", amount: "入金額", contract: "部屋 / 契約", status: "結果", remark: "備考", actions: "操作" },
     history: { title: "履歴バッチ", noFile: "ファイルなし" },
@@ -171,7 +171,7 @@ const translations = {
   zh: {
     menu: { aiReconciliation: "AI 对账中心", bankReconciliation: "银行账单对账" },
     help: { subtitle: "将银行入金追溯到物件、房间、契约书与支付名义，提交前保存在对账主表中。" },
-    action: { upload: "选择文件", addFiles: "继续添加", createBatch: "创建批次", match: "执行匹配", submit: "提交", refresh: "刷新", search: "搜索摘要、契约、房间", manualMatch: "手工确认", unmatch: "退回未匹配", exportExcel: "导出 Excel", exportJson: "未匹配 JSON" },
+    action: { upload: "选择文件", addFiles: "继续添加", createBatch: "创建批次", match: "执行匹配", submit: "提交", refresh: "刷新", search: "搜索摘要、契约、房间", manualMatch: "手工确认", unmatch: "退回未匹配", exportExcel: "导出 Excel", exportJson: "未匹配数据" },
     matching: { title: "匹配条件", summary: "银行摘要名", amount: "银行入金金额", date: "入金日期", month: "入金月份", property: "物件", room: "部屋番号", contract: "契约书ID" },
     table: { source: "原始文件", date: "入金日期", summary: "银行摘要", amount: "入金金额", contract: "房间 / 契约", status: "结果", remark: "备注", actions: "操作" },
     history: { title: "历史批次", noFile: "无文件" },

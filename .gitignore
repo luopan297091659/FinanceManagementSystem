@@ -7,4 +7,4 @@ backend/dist/
 logs/*.log
 !logs/.gitkeep
 backend/dist/
-dist/
+dist/*

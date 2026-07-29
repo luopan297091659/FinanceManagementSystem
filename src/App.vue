@@ -14,8 +14,7 @@
         </div>
 
         <button class="sidebar-toggle" type="button" :title="sidebarToggleLabel" :aria-label="sidebarToggleLabel" @click="toggleSidebar">
-          <ChevronRight v-if="isSidebarCollapsed" :size="18" />
-          <ChevronLeft v-else :size="18" />
+          <AppIcon :name="isSidebarCollapsed ? 'chevron-right' : 'chevron-left'" :size="18" />
         </button>
 
       <nav class="nav" :aria-label="dictionary.appName">
@@ -28,7 +27,7 @@
           type="button"
           @click="setActiveNavItem(item)"
         >
-          <component :is="item.icon" class="nav-icon" :size="19" aria-hidden="true" />
+          <AppIcon :name="item.icon" class="nav-icon" :size="19" />
           <span class="nav-label">{{ item.label }}</span>
         </button>
 
@@ -41,9 +40,9 @@
             :aria-expanded="isAiAnalysisExpanded"
             @click="toggleAiAnalysis"
           >
-            <BrainCircuit class="nav-icon" :size="19" aria-hidden="true" />
+            <AppIcon name="brain" class="nav-icon" :size="19" />
             <span class="nav-label">{{ aiMenuTitle }}</span>
-            <ChevronRight class="nav-chevron" :size="16" aria-hidden="true" />
+            <AppIcon name="chevron-right" class="nav-chevron" :size="16" />
           </button>
 
           <div v-show="isAiAnalysisExpanded" class="nav-children">
@@ -56,7 +55,7 @@
               type="button"
               @click="setActiveNavItem(item)"
             >
-              <component :is="item.icon" class="nav-icon" :size="18" aria-hidden="true" />
+              <AppIcon :name="item.icon" class="nav-icon" :size="18" />
               <span class="nav-label">{{ item.label }}</span>
             </button>
           </div>
@@ -81,7 +80,7 @@
           <button class="ghost-button" type="button" @click="setActiveNavItem({ key: 'gis' })">{{ dictionary.openGis }}</button>
           <div class="settings-menu" @click.stop>
             <button class="icon-button" type="button" :title="dictionary.theme" :aria-label="dictionary.theme" :aria-expanded="isSettingsOpen" @click="isSettingsOpen = !isSettingsOpen">
-              <Settings :size="18" />
+              <AppIcon name="settings" :size="18" />
             </button>
             <div v-if="isSettingsOpen" class="settings-popover">
               <p class="settings-title">{{ dictionary.theme }}</p>
@@ -96,7 +95,7 @@
                 >
                   <span class="theme-color" :style="{ background: themeOption.color }" />
                   <span>{{ dictionary[themeOption.labelKey] }}</span>
-                  <Check v-if="theme === themeOption.key" :size="16" />
+                  <AppIcon v-if="theme === themeOption.key" name="check" :size="16" />
                 </button>
               </div>
             </div>
@@ -109,7 +108,7 @@
             </div>
           </div>
           <button class="logout-button" type="button" @click="handleLogout" :title="dictionary.logout" :aria-label="dictionary.logout">
-            <LogOut :size="18" />
+            <AppIcon name="logout" :size="18" />
           </button>
         </div>
       </header>
@@ -155,27 +154,9 @@ import OcrView from "./views/ocr.vue";
 import BankReconciliationView from "./views/bank-reconciliation.vue";
 import KnowledgeView from "./views/knowledge.vue";
 import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
+import AppIcon from "./components/AppIcon.vue";
 import { useI18n } from "./i18n";
 import { api } from "./services/api";
-import {
-  BrainCircuit,
-  Building2,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  FileSearch,
-  Languages,
-  LayoutDashboard,
-  LogOut,
-  Mail,
-  Map,
-  ScrollText,
-  Settings,
-  ShieldCheck,
-  UserCog,
-  Users,
-} from "@lucide/vue";
 
 const activeView = ref("gis");
 const activeNavKey = ref("gis");
@@ -216,19 +197,19 @@ const reconciliationMenuLabels = computed(() => ({
 }));
 
 const navItems = computed(() => [
-  { key: "overview", label: dictionary.value.overview, icon: LayoutDashboard },
-  { key: "gis", label: dictionary.value.gis, icon: Map },
-  { key: "resources", label: dictionary.value.resources, icon: Building2 },
-  { key: "customers", label: dictionary.value.customers, icon: Users },
-  { key: "finance", label: dictionary.value.finance, icon: CircleDollarSign },
-  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: CircleDollarSign, permissions: ["reconciliation.bank.view"] },
-  { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: FileSearch, permissions: ["reconciliation.ocr.view", "ocr:execute"] },
-  { key: "knowledge", label: dictionary.value.knowledge, icon: BrainCircuit },
-  { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, icon: UserCog, permissions: ["user:view"] },
-  { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, icon: ShieldCheck, permissions: ["role:view"] },
-  { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, icon: ScrollText, permissions: ["audit_log:view"] },
-  { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, icon: Mail, permissions: ["setting:email"] },
-  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations || "Translation Management", icon: Languages, permissions: ["i18n.translation.view"] },
+  { key: "overview", label: dictionary.value.overview, icon: "dashboard" },
+  { key: "gis", label: dictionary.value.gis, icon: "map" },
+  { key: "resources", label: dictionary.value.resources, icon: "building" },
+  { key: "customers", label: dictionary.value.customers, icon: "users" },
+  { key: "finance", label: dictionary.value.finance, icon: "finance" },
+  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: "finance", permissions: ["reconciliation.bank.view"] },
+  { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: "search", permissions: ["reconciliation.ocr.view", "ocr:execute"] },
+  { key: "knowledge", label: dictionary.value.knowledge, icon: "brain" },
+  { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, icon: "user-cog", permissions: ["user:view"] },
+  { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, icon: "shield", permissions: ["role:view"] },
+  { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, icon: "scroll", permissions: ["audit_log:view"] },
+  { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, icon: "mail", permissions: ["setting:email"] },
+  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations || "Translation Management", icon: "languages", permissions: ["i18n.translation.view"] },
 ]);
 
 const aiMenuTitle = computed(() => ({
