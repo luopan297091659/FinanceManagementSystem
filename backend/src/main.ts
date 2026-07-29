@@ -12,6 +12,9 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const projectRoot = join(__dirname, '..', '..');
 
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { limit: '10mb', extended: true });
+
   app.enableCors({
     origin: config.get<string>('CORS_ORIGIN')?.split(',') ?? true,
     credentials: true,
