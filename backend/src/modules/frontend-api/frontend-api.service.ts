@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LinkStatus, Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { addMoney, toDecimal } from '../../common/money/decimal';
 import { FrontendBootstrap } from '../../common/types/frontend-contract';
 import { PrismaService } from '../../database/prisma.service';
@@ -346,14 +347,16 @@ export class FrontendApiService {
       ? await this.prisma.property.update({ where: { id: existingProperty.id }, data: propertyUpdateData })
       : await this.prisma.property.create({ data: propertyCreateData });
 
-    await this.ensureHouseNumberUnique(dto.houseNumber);
+    const houseNumber = this.optionalText(dto.houseNumber);
+    const roomNumber = this.roomNumberOrGenerated(dto.roomNumber, houseNumber, dto.roomCode);
+    if (houseNumber) await this.ensureHouseNumberUnique(houseNumber);
     await this.prisma.room.create({
       data: {
         propertyId: property.id,
         roomCode: this.optionalText(dto.roomCode),
-        houseNumber: dto.houseNumber,
-        roomNumber: dto.roomNumber,
-        normalizedRoomNumber: this.normalizeMatchText(dto.roomNumber),
+        houseNumber,
+        roomNumber,
+        normalizedRoomNumber: this.normalizeMatchText(roomNumber),
         displayName: this.optionalText(dto.displayName),
         unitType: dto.unitType || 'ROOM',
         area: this.optionalDecimal(dto.area),
@@ -418,15 +421,17 @@ export class FrontendApiService {
           });
     }
 
-    await this.ensureHouseNumberUnique(dto.houseNumber, id);
+    const houseNumber = this.optionalText(dto.houseNumber);
+    const roomNumber = this.nonEmptyText(dto.roomNumber) || currentRoom.roomNumber;
+    if (houseNumber) await this.ensureHouseNumberUnique(houseNumber, id);
     await this.prisma.room.update({
       where: { id },
       data: {
         propertyId: property.id,
         roomCode: this.optionalText(dto.roomCode),
-        houseNumber: dto.houseNumber,
-        roomNumber: dto.roomNumber,
-        normalizedRoomNumber: this.normalizeMatchText(dto.roomNumber),
+        houseNumber,
+        roomNumber,
+        normalizedRoomNumber: this.normalizeMatchText(roomNumber),
         displayName: this.optionalText(dto.displayName),
         unitType: dto.unitType || 'ROOM',
         area: this.optionalDecimal(dto.area),
@@ -837,6 +842,13 @@ export class FrontendApiService {
   private nonEmptyNormalizedText(value?: string) {
     const normalized = this.normalizeMatchText(value);
     return normalized || undefined;
+  }
+
+  private roomNumberOrGenerated(roomNumber?: string, houseNumber?: string | null, roomCode?: string) {
+    return this.nonEmptyText(roomNumber)
+      || this.nonEmptyText(houseNumber ?? undefined)
+      || this.nonEmptyText(roomCode)
+      || `AUTO-${randomUUID().slice(0, 8).toUpperCase()}`;
   }
 
   private async ensureHouseNumberUnique(houseNumber?: string, excludeId?: string) {

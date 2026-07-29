@@ -72,8 +72,9 @@ export class CreateRoomDto {
   @IsString()
   buildingLongitude?: string;
 
+  @IsOptional()
   @IsString()
-  roomNumber!: string;
+  roomNumber?: string;
 
   @IsOptional()
   @IsString()
@@ -91,8 +92,9 @@ export class CreateRoomDto {
   @IsString()
   roomUsageType?: string;
 
+  @IsOptional()
   @IsString()
-  houseNumber!: string;
+  houseNumber?: string;
 
   @IsOptional()
   @IsString()

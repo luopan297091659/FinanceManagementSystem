@@ -352,7 +352,7 @@ watch(() => filteredResources.value.length, (total) => {
 });
 
 const saveResource = async () => {
-  if (!form.value.buildingName || !form.value.houseNumber) return;
+  if (!form.value.buildingName) return;
 
   try {
     const payload = Object.fromEntries(

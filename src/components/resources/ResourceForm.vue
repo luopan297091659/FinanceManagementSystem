@@ -24,8 +24,8 @@
 
       <h4 class="form-section-title">{{ labels.roomInformation }}</h4>
       <label>{{ labels.roomCode }}<input v-model="form.roomCode" /></label>
-      <label>{{ labels.houseNumber }}<input v-model="form.houseNumber" required /></label>
-      <label>{{ labels.roomNumber }}<input v-model="form.roomNumber" required /></label>
+      <label>{{ labels.houseNumber }}<input v-model="form.houseNumber" /></label>
+      <label>{{ labels.roomNumber }}<input v-model="form.roomNumber" /></label>
       <label>{{ labels.displayName }}<input v-model="form.displayName" /></label>
       <label>
         {{ labels.unitType }}
