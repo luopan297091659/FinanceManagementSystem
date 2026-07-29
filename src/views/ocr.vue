@@ -2,8 +2,8 @@
   <section class="page-shell">
     <div class="page-title-row">
       <div>
-        <h2>AI 对账中心</h2>
-        <p class="subtle">上传文件 → 调用 Make Workflow → 接收 JSON 回调 → 结果展示与人工审核。</p>
+        <h2>{{ labels.title }}</h2>
+        <p class="subtle">{{ labels.subtitle }}</p>
       </div>
     </div>
 
@@ -12,19 +12,19 @@
         <div class="panel-card upload-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">文件上传</p>
-              <h3>选择文件并配置对账参数</h3>
+              <p class="eyebrow">{{ labels.uploadEyebrow }}</p>
+              <h3>{{ labels.uploadHeading }}</h3>
             </div>
             <div class="badge">MVP</div>
           </div>
 
           <div class="config-grid">
             <div class="config-field">
-              <label>Make Webhook 地址</label>
+              <label>{{ labels.webhookUrl }}</label>
               <input type="url" v-model="makeWebhookUrl" placeholder="https://hook.eu1.make.com/..." />
             </div>
             <div class="config-field">
-              <label>回调地址</label>
+              <label>{{ labels.callbackUrl }}</label>
               <input
                 type="url"
                 v-model="callbackUrl"
@@ -32,8 +32,8 @@
               />
             </div>
             <div class="config-field">
-              <label>任务名称</label>
-              <input type="text" v-model="taskName" placeholder="例如：本月 AI OCR 对账" />
+              <label>{{ labels.taskName }}</label>
+              <input type="text" v-model="taskName" :placeholder="labels.taskNamePlaceholder" />
             </div>
           </div>
 
@@ -45,8 +45,8 @@
             @drop.prevent="handleDrop"
           >
             <div>
-              <p class="upload-title">将文件拖拽到此处，或点击“上传文件”</p>
-              <p class="upload-desc">支持 PDF、JPG、PNG、Excel、Word。选中文件后才可开始对账。</p>
+              <p class="upload-title">{{ labels.dropTitle }}</p>
+              <p class="upload-desc">{{ labels.dropHelp }}</p>
             </div>
             <input
               ref="fileInput"
@@ -59,7 +59,7 @@
             <!-- 待上传文件列表 -->
             <div v-if="selectedFiles.length" class="files-list">
               <div class="files-header">
-                <strong>{{ selectedFiles.length }} 个文件待上传</strong>
+                <strong>{{ selectedFiles.length }} {{ labels.filesPending }}</strong>
                 <span class="file-size">{{ totalFileSize }}</span>
               </div>
               <div class="file-item-container">
@@ -77,7 +77,7 @@
                   <button
                     class="remove-btn"
                     type="button"
-                    title="移除此文件"
+                    :title="labels.removeFile"
                     @click="removeFile(index)"
                   >
                     ✕
@@ -87,14 +87,14 @@
             </div>
             <div class="upload-actions">
               <div class="upload-actions-primary">
-                <button class="primary-button" type="button" @click="openFilePicker">{{ selectedFiles.length ? '添加文件' : '选择文件' }}</button>
+                <button class="primary-button" type="button" @click="openFilePicker">{{ selectedFiles.length ? labels.addFiles : labels.chooseFiles }}</button>
                 <button
                   class="primary-button"
                   type="button"
                   :disabled="isBusy || !selectedFiles.length || !makeWebhookUrl || !callbackUrl"
                   @click="uploadFiles"
                 >
-                  上传文件
+                  {{ labels.uploadFiles }}
                 </button>
               </div>
               <button
@@ -103,15 +103,15 @@
                 :disabled="isBusy || !uploadedFileCount || !makeWebhookUrl || !callbackUrl"
                 @click="startReconciliation"
               >
-                开始对账
+                {{ labels.start }}
               </button>
-              <button class="ghost-button" type="button" :disabled="!selectedFiles.length && !uploadedFileCount" @click="clearAll">清空</button>
+              <button class="ghost-button" type="button" :disabled="!selectedFiles.length && !uploadedFileCount" @click="clearAll">{{ labels.clear }}</button>
             </div>
 
             <!-- 已上传文件列表 -->
             <div v-if="uploadedFiles.length" class="files-list">
               <div class="files-header">
-                <strong>{{ uploadedFiles.length }} 个文件已上传</strong>
+                <strong>{{ uploadedFiles.length }} {{ labels.filesUploaded }}</strong>
               </div>
               <div class="file-item-container">
                 <div v-for="(file, index) in uploadedFiles" :key="`uploaded-${index}`" class="file-item">
@@ -125,7 +125,7 @@
                       <p class="file-meta">{{ formatFileSize(file.size) }}</p>
                     </div>
                   </div>
-                  <span class="file-badge">已上传</span>
+                  <span class="file-badge">{{ labels.uploaded }}</span>
                 </div>
               </div>
             </div>
@@ -139,8 +139,8 @@
 
         <div class="panel-card task-panel">
           <div class="table-head">
-            <strong>任务中心</strong>
-            <span>{{ tasks.length }} 条</span>
+            <strong>{{ labels.taskCenter }}</strong>
+            <span>{{ tasks.length }} {{ labels.itemUnit }}</span>
           </div>
           <div v-if="tasks.length" class="task-list">
             <div
@@ -151,29 +151,29 @@
             >
               <div>
                 <strong>{{ task.taskName }}</strong>
-                <p>文件数量：{{ task.fileCount }} • 状态：{{ task.status }}</p>
-                <p>回调地址：{{ task.callbackUrl }}</p>
+                <p>{{ labels.fileCount }}：{{ task.fileCount }} • {{ labels.status }}：{{ task.status }}</p>
+                <p>{{ labels.callback }}：{{ task.callbackUrl }}</p>
               </div>
               <div class="task-actions">
-                <button class="secondary-button" type="button" @click="showResult(task.id)">查看结果</button>
-                <button class="ghost-button" type="button" @click="openManualReview(task.id)">人工审核</button>
+                <button class="secondary-button" type="button" @click="showResult(task.id)">{{ labels.viewResult }}</button>
+                <button class="ghost-button" type="button" @click="openManualReview(task.id)">{{ labels.manualReview }}</button>
               </div>
             </div>
           </div>
-          <div v-else class="empty-state">请先上传文件并点击开始对账，任务将在此显示。</div>
+          <div v-else class="empty-state">{{ labels.noTasks }}</div>
         </div>
 
         <div class="panel-card results-card" id="results-card">
           <div class="table-head search-head">
             <div>
-              <strong>AI 对账结果</strong>
-              <span>{{ filteredResults.length }} 条结果</span>
+              <strong>{{ labels.results }}</strong>
+              <span>{{ filteredResults.length }} {{ labels.resultUnit }}</span>
             </div>
             <input
               class="search-input"
               type="search"
               v-model="searchKeyword"
-              placeholder="搜索文件、租户、业主、摘要"
+              :placeholder="labels.searchPlaceholder"
             />
           </div>
 
@@ -181,13 +181,13 @@
             <table>
               <thead>
                 <tr>
-                  <th>文件</th>
-                  <th>租户</th>
-                  <th>业主</th>
-                  <th>金额</th>
-                  <th>日期</th>
-                  <th>摘要</th>
-                  <th>审核状态</th>
+                  <th>{{ labels.file }}</th>
+                  <th>{{ labels.tenant }}</th>
+                  <th>{{ labels.owner }}</th>
+                  <th>{{ labels.amount }}</th>
+                  <th>{{ labels.date }}</th>
+                  <th>{{ labels.remark }}</th>
+                  <th>{{ labels.reviewStatus }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,20 +198,20 @@
                   <td>{{ item.amount }}</td>
                   <td>{{ item.date }}</td>
                   <td>{{ item.remark }}</td>
-                  <td>{{ item.reviewStatus || '待确认' }}</td>
+                  <td>{{ item.reviewStatus || labels.pendingConfirmation }}</td>
                 </tr>
               </tbody>
             </table>
           </DualScrollTable>
-          <div v-else class="empty-state">尚无识别结果，上传文件后开始对账即可。</div>
+          <div v-else class="empty-state">{{ labels.noResults }}</div>
 
           <div v-if="activeTask && manualReviewMode" class="manual-review">
             <div class="table-head">
-              <strong>人工审核</strong>
-              <button class="ghost-button" type="button" @click="completeReview">完成审核</button>
+              <strong>{{ labels.manualReview }}</strong>
+              <button class="ghost-button" type="button" @click="completeReview">{{ labels.completeReview }}</button>
             </div>
-            <p>当前任务：{{ activeTask.taskName }}</p>
-            <textarea v-model="reviewComment" placeholder="填写审核备注或确认说明"></textarea>
+            <p>{{ labels.currentTask }}：{{ activeTask.taskName }}</p>
+            <textarea v-model="reviewComment" :placeholder="labels.reviewPlaceholder"></textarea>
           </div>
         </div>
       </div>
@@ -219,49 +219,49 @@
       <aside class="side-column">
         <div class="panel-card summary-card">
           <div class="table-head">
-            <strong>任务概览</strong>
-            <span>{{ activeTask?.taskName || '未创建任务' }}</span>
+            <strong>{{ labels.taskOverview }}</strong>
+            <span>{{ activeTask?.taskName || labels.noTask }}</span>
           </div>
           <div class="summary-row">
             <div>
-              <p>文件数</p>
+              <p>{{ labels.fileCount }}</p>
               <strong>{{ activeTask?.fileCount || 0 }}</strong>
             </div>
             <div>
-              <p>结果数</p>
+              <p>{{ labels.resultCount }}</p>
               <strong>{{ results.length }}</strong>
             </div>
           </div>
           <div class="summary-row">
             <div>
-              <p>任务状态</p>
+              <p>{{ labels.taskStatus }}</p>
               <strong>{{ activeTask?.status || statusLabel }}</strong>
             </div>
             <div>
-              <p>审核状态</p>
-              <strong>{{ activeTask?.reviewStatus || '待审核' }}</strong>
+              <p>{{ labels.reviewStatus }}</p>
+              <strong>{{ activeTask?.reviewStatus || labels.pendingReview }}</strong>
             </div>
           </div>
         </div>
 
         <div class="panel-card tips-card">
-          <p class="eyebrow">使用说明</p>
+          <p class="eyebrow">{{ labels.tips }}</p>
           <ul>
-            <li>可配置 Make Webhook URL 和回调地址。</li>
-            <li>上传完成后调用 Make 进行 OCR 与结构化识别。</li>
-            <li>回调结果会保存为任务结果并支持人工审核。</li>
+            <li>{{ labels.tipWebhook }}</li>
+            <li>{{ labels.tipOcr }}</li>
+            <li>{{ labels.tipReview }}</li>
           </ul>
         </div>
 
         <div class="panel-card log-card">
           <div class="table-head">
-            <strong>任务日志</strong>
-            <span>{{ taskLog.length }} 条</span>
+            <strong>{{ labels.taskLog }}</strong>
+            <span>{{ taskLog.length }} {{ labels.itemUnit }}</span>
           </div>
           <div v-if="taskLog.length" class="log-list">
             <p v-for="(item, index) in taskLog" :key="index">{{ item }}</p>
           </div>
-          <div v-else class="empty-state">任务日志将在此显示处理过程。</div>
+          <div v-else class="empty-state">{{ labels.noLogs }}</div>
         </div>
       </aside>
     </div>
@@ -271,6 +271,14 @@
 <script setup>
 import { computed, ref } from 'vue';
 import DualScrollTable from '../components/DualScrollTable.vue';
+import { useI18n } from '../i18n';
+
+const { dictionary } = useI18n();
+const labels = computed(() => dictionary.value.ocrLabels);
+const copy = (key, variables = {}) => Object.entries(variables).reduce(
+  (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+  labels.value[key] || key,
+);
 
 const DEFAULT_WEBHOOK_URL = 'https://hook.eu1.make.com/saj12egei1j9ox8jzipmdwa621umqeo6';
 
@@ -283,11 +291,11 @@ const taskLog = ref([]);
 const activeTaskId = ref('');
 const isDragging = ref(false);
 const status = ref('idle');
-const statusMessage = ref('等待上传文件');
+const statusMessage = ref(labels.value.waitingFiles);
 const searchKeyword = ref('');
 const makeWebhookUrl = ref(localStorage.getItem('makeWebhookUrl') || DEFAULT_WEBHOOK_URL);
 const callbackUrl = ref(localStorage.getItem('ocrCallbackUrl') || '');
-const taskName = ref('AI 对账任务');
+const taskName = ref(labels.value.defaultTaskName);
 const manualReviewMode = ref(false);
 const reviewComment = ref('');
 const currentStep = ref('idle');
@@ -297,12 +305,12 @@ const uploadedFileCount = ref(0);
 
 const isBusy = computed(() => status.value === 'uploading' || status.value === 'processing');
 const statusLabel = computed(() => {
-  if (status.value === 'uploading') return '上传中';
-  if (status.value === 'uploaded') return '已上传';
-  if (status.value === 'processing') return 'AI 处理中';
-  if (status.value === 'success') return '已完成';
-  if (status.value === 'failed') return '失败';
-  return '等待上传';
+  if (status.value === 'uploading') return labels.value.uploading;
+  if (status.value === 'uploaded') return labels.value.uploaded;
+  if (status.value === 'processing') return labels.value.processing;
+  if (status.value === 'success') return labels.value.completed;
+  if (status.value === 'failed') return labels.value.failed;
+  return labels.value.waitingUpload;
 });
 const statusClass = computed(() => `state-${status.value}`);
 
@@ -342,13 +350,13 @@ const uploadFiles = async () => {
   if (selectedFiles.value.length && !isBusy.value && makeWebhookUrl.value && callbackUrl.value) {
     status.value = 'uploading';
     currentStep.value = 'uploading';
-    statusMessage.value = '正在上传文件到服务器...';
+    statusMessage.value = labels.value.uploadingServer;
     fileUploadProgress.value = 10;
 
     saveSettings();
 
     const formData = new FormData();
-    formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
+    formData.append('taskName', taskName.value || `${labels.value.defaultTaskName} ${new Date().toLocaleString()}`);
     formData.append('webhookUrl', makeWebhookUrl.value);
     formData.append('callbackUrl', callbackUrl.value);
     selectedFiles.value.forEach((file) => {
@@ -361,7 +369,7 @@ const uploadFiles = async () => {
         body: formData,
       });
       if (!response.ok) {
-        throw new Error(`上传失败：${response.status}`);
+        throw new Error(copy('uploadHttpError', { status: response.status }));
       }
 
       // 将选中的文件移到已上传列表
@@ -370,12 +378,12 @@ const uploadFiles = async () => {
       selectedFiles.value = [];
       fileUploadProgress.value = 100;
       status.value = 'idle';
-      statusMessage.value = '文件已上传，可继续添加文件或开始对账';
-      pushLog('文件已成功上传至服务器。');
+      statusMessage.value = labels.value.uploadedContinue;
+      pushLog(labels.value.uploadSuccessLog);
     } catch (error) {
       status.value = 'failed';
-      statusMessage.value = '文件上传失败，请重试。';
-      pushLog(`上传失败：${error.message}`);
+      statusMessage.value = labels.value.uploadFailedRetry;
+      pushLog(copy('uploadErrorLog', { error: error.message }));
     }
   }
 };
@@ -408,7 +416,7 @@ const resetUploadState = () => {
   uploadedFiles.value = [];
   uploadedFileCount.value = 0;
   status.value = 'idle';
-  statusMessage.value = '等待上传文件';
+  statusMessage.value = labels.value.waitingFiles;
   if (fileInput.value) {
     fileInput.value.value = '';
   }
@@ -419,7 +427,7 @@ const uploadSelectedFiles = async (files) => {
 
   if (!makeWebhookUrl.value || !callbackUrl.value) {
     status.value = 'failed';
-    statusMessage.value = '请先填写 Webhook 和回调地址，然后重试。';
+    statusMessage.value = labels.value.requireUrls;
     return;
   }
 
@@ -428,13 +436,13 @@ const uploadSelectedFiles = async (files) => {
 
   status.value = 'uploading';
   currentStep.value = 'uploading';
-  statusMessage.value = '正在提交文件到 Make workflow...';
+  statusMessage.value = labels.value.submittingMake;
   fileUploadProgress.value = 10;
 
   saveSettings();
 
   const formData = new FormData();
-  formData.append('taskName', taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`);
+  formData.append('taskName', taskName.value || `${labels.value.defaultTaskName} ${new Date().toLocaleString()}`);
   formData.append('webhookUrl', makeWebhookUrl.value);
   formData.append('callbackUrl', callbackUrl.value);
   allFiles.forEach((file) => {
@@ -447,7 +455,7 @@ const uploadSelectedFiles = async (files) => {
       body: formData,
     });
     if (!response.ok) {
-      throw new Error(`上传失败：${response.status}`);
+      throw new Error(copy('uploadHttpError', { status: response.status }));
     }
 
     const task = await response.json();
@@ -457,13 +465,13 @@ const uploadSelectedFiles = async (files) => {
     tasks.value = [taskSummary];
     activeTaskId.value = taskSummary.id;
     status.value = 'uploaded';
-    statusMessage.value = '文件已提交，开始 AI 处理...';
+    statusMessage.value = labels.value.submittedProcessing;
     fileUploadProgress.value = 100;
-    pushLog(`已提交 ${allFiles.length} 个文件进行对账。`);
+    pushLog(copy('submittedFilesLog', { count: allFiles.length }));
   } catch (error) {
     status.value = 'failed';
-    statusMessage.value = '文件提交失败，请重试。';
-    pushLog(`提交失败：${error.message}`);
+    statusMessage.value = labels.value.submitFailedRetry;
+    pushLog(copy('submitErrorLog', { error: error.message }));
   }
 };
 
@@ -511,7 +519,7 @@ const saveSettings = () => {
 const createBackendTask = async () => {
   saveSettings();
   const body = {
-    taskName: taskName.value || `AI 对账任务 ${new Date().toLocaleString()}`,
+    taskName: taskName.value || `${labels.value.defaultTaskName} ${new Date().toLocaleString()}`,
     webhookUrl: makeWebhookUrl.value,
     callbackUrl: callbackUrl.value,
     fileNames: selectedFiles.value.map((file) => file.name),
@@ -522,7 +530,7 @@ const createBackendTask = async () => {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`创建任务失败：${response.status}`);
+    throw new Error(copy('createTaskError', { status: response.status }));
   }
   return response.json();
 };
@@ -557,8 +565,8 @@ const createTaskSummary = (taskData) => ({
   taskName: taskData.taskName,
   webhookUrl: taskData.webhookUrl,
   callbackUrl: taskData.callbackUrl,
-  status: status.value === 'uploaded' ? '已上传' : '处理中',
-  reviewStatus: '待审核',
+  status: status.value === 'uploaded' ? labels.value.uploaded : labels.value.processing,
+  reviewStatus: labels.value.pendingReview,
   fileCount: uploadedFileCount.value,
   createdAt: new Date().toISOString(),
 });
@@ -581,19 +589,19 @@ const pollTask = async (taskIdValue) => {
     if (!response.ok) continue;
     const payload = await response.json();
     if (payload.state === 'COMPLETED' || payload.state === 'FAILED') {
-      updateTaskStatus(taskIdValue, payload.state === 'COMPLETED' ? '完成' : '失败', payload.reviewStatus || '待审核');
+      updateTaskStatus(taskIdValue, payload.state === 'COMPLETED' ? labels.value.completed : labels.value.failed, payload.reviewStatus || labels.value.pendingReview);
       status.value = payload.state === 'COMPLETED' ? 'success' : 'failed';
-      statusMessage.value = payload.state === 'COMPLETED' ? '回调已接收，结果已更新。' : '回调返回失败状态。';
+      statusMessage.value = payload.state === 'COMPLETED' ? labels.value.callbackSuccess : labels.value.callbackFailed;
       processingProgress.value = 50;
       if (payload.resultJson?.records?.length) {
         results.value = payload.resultJson.records.map((record) => ({
-          fileName: record.original_file_name || record.fileName || selectedFiles.value[0]?.name || '未知文件',
+          fileName: record.original_file_name || record.fileName || selectedFiles.value[0]?.name || labels.value.unknownFile,
           tenant: record.tenant_name || record.inflow_party || '—',
           owner: record.outflow_party || record.owner || '—',
           amount: record.net_amount ? `¥${record.net_amount.toLocaleString()}` : record.document_amount ? `¥${record.document_amount.toLocaleString()}` : '—',
           date: record.date || record.target_month || '—',
           remark: record.summary || record.notes || '—',
-          reviewStatus: record.review_status || record.reviewStatus || '待确认',
+          reviewStatus: record.review_status || record.reviewStatus || labels.value.pendingConfirmation,
         }));
       }
       return;
@@ -601,8 +609,8 @@ const pollTask = async (taskIdValue) => {
   }
   if (status.value === 'processing') {
     status.value = 'failed';
-    statusMessage.value = '等待回调超时，请确认 Make 流程是否已触发。';
-    updateTaskStatus(activeTask.value?.taskId ?? '', '失败', '待审核');
+    statusMessage.value = labels.value.callbackTimeout;
+    updateTaskStatus(activeTask.value?.taskId ?? '', labels.value.failed, labels.value.pendingReview);
   }
 };
 
@@ -617,7 +625,7 @@ const startReconciliation = async () => {
   if (!backendTask.value) return;
 
   status.value = 'processing';
-  statusMessage.value = '已提交至 Make，等待回调结果...';
+  statusMessage.value = labels.value.waitingCallback;
   currentStep.value = 'processing';
   fileUploadProgress.value = 50;
   results.value = [];
@@ -629,28 +637,28 @@ const startReconciliation = async () => {
     const taskSummary = createTaskSummary(createdTask);
     tasks.value = [taskSummary];
     activeTaskId.value = taskSummary.id;
-    pushLog(`已准备任务 ${taskSummary.taskName}。`);
+    pushLog(copy('preparedTaskLog', { task: taskSummary.taskName }));
 
     const sendOk = await triggerMakeWorkflow(createdTask);
     fileUploadProgress.value = 50;
     if (!sendOk) {
       status.value = 'failed';
-      statusMessage.value = '上传到 Make 失败，请检查 Webhook 地址。';
-      updateTaskStatus(createdTask.taskId, '失败', '待审核');
-      pushLog('Make Webhook 上传失败。');
+      statusMessage.value = labels.value.makeFailed;
+      updateTaskStatus(createdTask.taskId, labels.value.failed, labels.value.pendingReview);
+      pushLog(labels.value.makeErrorLog);
       return;
     }
 
     status.value = 'processing';
-    statusMessage.value = '已提交至 Make，等待回调结果...';
-    updateTaskStatus(createdTask.taskId, '处理中');
-    pushLog('文件已上传，等待回调。');
+    statusMessage.value = labels.value.waitingCallback;
+    updateTaskStatus(createdTask.taskId, labels.value.processing);
+    pushLog(labels.value.waitingCallbackLog);
 
     await pollTask(createdTask.taskId);
   } catch (error) {
     status.value = 'failed';
-    statusMessage.value = '任务提交失败。';
-    pushLog(`任务失败：${error.message}`);
+    statusMessage.value = labels.value.taskSubmitFailed;
+    pushLog(copy('taskErrorLog', { error: error.message }));
   }
 };
 
@@ -673,8 +681,8 @@ const openManualReview = (id) => {
 
 const completeReview = () => {
   if (!activeTask.value) return;
-  activeTask.value.reviewStatus = '已审核';
-  pushLog(`任务 ${activeTask.value.taskName} 已完成人工审核。`);
+  activeTask.value.reviewStatus = labels.value.reviewed;
+  pushLog(copy('reviewedLog', { task: activeTask.value.taskName }));
   manualReviewMode.value = false;
 };
 </script>

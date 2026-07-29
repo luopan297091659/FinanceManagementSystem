@@ -33,6 +33,21 @@ export const exportTableTemplate = (filename, columns) => {
   exportTableXls(filename, columns, []);
 };
 
+export const exportTableXlsx = async (filename, columns, rows, sheetName = "文案配置") => {
+  const XLSX = await import("xlsx");
+  const data = [
+    columns.map((column) => column.label),
+    ...rows.map((row) => columns.map((column) => row[column.key] ?? "")),
+  ];
+  const sheet = XLSX.utils.aoa_to_sheet(data);
+  sheet["!cols"] = columns.map((column) => ({
+    wch: Math.min(80, Math.max(12, column.width || column.label.length + 4)),
+  }));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, sheetName.slice(0, 31));
+  XLSX.writeFile(workbook, filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`);
+};
+
 const detectDelimiter = (line) => {
   const candidates = [",", "\t", ";"];
   return candidates

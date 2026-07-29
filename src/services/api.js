@@ -411,4 +411,8 @@ export const api = {
   async rollbackTranslationVersion(version) {
     return request(`/admin/i18n/versions/${encodeURIComponent(version)}/rollback`, { method: 'POST', body: {} });
   },
+
+  async getPublishedTranslations(locale) {
+    return request(`/i18n/translations/${encodeURIComponent(locale)}`);
+  },
 };

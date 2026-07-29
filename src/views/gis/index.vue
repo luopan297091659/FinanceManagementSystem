@@ -1,13 +1,13 @@
 <template>
-  <section class="gis-page" aria-label="GIS map">
+  <section class="gis-page" :aria-label="labels.aria">
     <div class="gis-header-card">
       <div>
-        <p class="eyebrow">地图中心</p>
-        <h2>物业位置与风险态势</h2>
+        <p class="eyebrow">{{ labels.eyebrow }}</p>
+        <h2>{{ labels.heading }}</h2>
       </div>
       <div class="gis-pill-group">
-        <span class="gis-pill">{{ buildingCount }} 个资产点</span>
-        <span class="gis-pill accent">{{ highlightedCount }} 个重点关注</span>
+        <span class="gis-pill">{{ buildingCount }} {{ labels.assetPoints }}</span>
+        <span class="gis-pill accent">{{ highlightedCount }} {{ labels.highlighted }}</span>
       </div>
     </div>
 
@@ -20,29 +20,29 @@
               class="gis-search-input"
               type="search"
               autocomplete="off"
-              placeholder="搜索楼栋、房间、租客、业主或地址"
+              :placeholder="labels.searchPlaceholder"
               @input="handleSearch"
               @keydown.enter.prevent="handleSearch"
             />
             <div class="gis-toolbar">
-              <button class="gis-tool-button" type="button" @click="handleSearch">搜索</button>
-              <button class="gis-tool-button" type="button" @click="clearSearch">清空</button>
+              <button class="gis-tool-button" type="button" @click="handleSearch">{{ labels.search }}</button>
+              <button class="gis-tool-button" type="button" @click="clearSearch">{{ labels.clear }}</button>
             </div>
           </div>
 
           <div class="gis-layer-panel">
             <label class="gis-switch">
               <input v-model="layerState.building" type="checkbox" />
-              <span>显示资产点</span>
+              <span>{{ labels.showAssets }}</span>
             </label>
             <label class="gis-switch">
               <input v-model="layerState.risk" type="checkbox" />
-              <span>显示风险色</span>
+              <span>{{ labels.showRisk }}</span>
             </label>
           </div>
 
           <div v-if="results.length || hasSearched" class="gis-results">
-            <div v-if="!results.length" class="gis-empty-state">没有匹配到相关资产，请尝试换个关键词。</div>
+            <div v-if="!results.length" class="gis-empty-state">{{ labels.noResults }}</div>
             <button
               v-for="item in results"
               v-else
@@ -54,9 +54,9 @@
             >
               <span class="gis-result-title">{{ item.properties.buildingName }}</span>
               <span class="gis-result-grid">
-                <span>Room {{ item.properties.room }}</span>
-                <span>Tenant {{ item.properties.tenant }}</span>
-                <span>Owner {{ item.properties.owner }}</span>
+                <span>{{ labels.room }} {{ item.properties.room }}</span>
+                <span>{{ labels.tenant }} {{ item.properties.tenant }}</span>
+                <span>{{ labels.owner }} {{ item.properties.owner }}</span>
                 <span class="gis-risk" :class="item.properties.riskLevel">{{ item.properties.riskLevel }}</span>
               </span>
               <span class="gis-result-address">{{ item.properties.address }}</span>
@@ -70,42 +70,42 @@
       <aside v-if="activeProperty" class="gis-detail-card">
         <div class="gis-detail-header">
           <div>
-            <p class="eyebrow">资产详情</p>
+            <p class="eyebrow">{{ labels.details }}</p>
             <h3>{{ activeProperty.properties.buildingName }}</h3>
           </div>
-          <button class="ghost-button mini" type="button" @click="closeDetail">关闭</button>
+          <button class="ghost-button mini" type="button" @click="closeDetail">{{ labels.close }}</button>
         </div>
 
         <div class="detail-grid">
           <div>
-            <span class="detail-label">房间</span>
+            <span class="detail-label">{{ labels.room }}</span>
             <strong>{{ activeProperty.properties.room }}</strong>
           </div>
           <div>
-            <span class="detail-label">租客</span>
+            <span class="detail-label">{{ labels.tenant }}</span>
             <strong>{{ activeProperty.properties.tenant }}</strong>
           </div>
           <div>
-            <span class="detail-label">业主</span>
+            <span class="detail-label">{{ labels.owner }}</span>
             <strong>{{ activeProperty.properties.owner }}</strong>
           </div>
           <div>
-            <span class="detail-label">风险</span>
+            <span class="detail-label">{{ labels.risk }}</span>
             <strong class="gis-risk" :class="activeProperty.properties.riskLevel">{{ activeProperty.properties.riskLevel }}</strong>
           </div>
         </div>
 
         <div class="detail-section">
-          <p class="detail-label">地址</p>
+          <p class="detail-label">{{ labels.address }}</p>
           <p>{{ activeProperty.properties.address }}</p>
         </div>
 
         <div class="detail-section">
-          <p class="detail-label">业务信息</p>
+          <p class="detail-label">{{ labels.businessInfo }}</p>
           <ul class="detail-list">
-            <li>入金：{{ incomeSummary }}</li>
-            <li>出金：{{ expenseSummary }}</li>
-            <li>合同：{{ activeProperty.properties.contractNumber }}</li>
+            <li>{{ labels.income }}：{{ incomeSummary }}</li>
+            <li>{{ labels.expense }}：{{ expenseSummary }}</li>
+            <li>{{ labels.contract }}：{{ activeProperty.properties.contractNumber }}</li>
           </ul>
         </div>
       </aside>
@@ -117,7 +117,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { useI18n } from "../../i18n";
 import { api } from "../../services/api";
+
+const { dictionary } = useI18n();
+const labels = computed(() => dictionary.value.gisLabels);
 
 const OSAKA_STATION = [135.495951, 34.702485];
 const DEFAULT_ZOOM = 10;
@@ -356,11 +360,11 @@ const buildBackendFeatureCollection = (payload) => {
         },
         properties: {
           id: room.id,
-          buildingName: building?.name || room.houseNumber || "未命名资产",
+          buildingName: building?.name || room.houseNumber || labels.value.unnamedAsset,
           room: room.number || room.houseNumber,
           tenant: tenant?.name || "—",
           owner: owner?.name || "—",
-          address: building?.name ? `${building.name} / ${room.houseNumber || room.number}` : room.houseNumber || room.number || "未登记地址",
+          address: building?.name ? `${building.name} / ${room.houseNumber || room.number}` : room.houseNumber || room.number || labels.value.unregisteredAddress,
           postalCode: "",
           phone: tenant?.phone || owner?.phone || "",
           contractNumber: "",
@@ -460,11 +464,11 @@ const showHoverPopup = (feature, coordinates) => {
   const props = feature.properties || {};
   const html = `
     <div class="gis-popup-card">
-      <strong>${props.buildingName || "资产"}</strong>
-      <div>房间：${props.room || "—"}</div>
-      <div>租客：${props.tenant || "—"}</div>
-      <div>业主：${props.owner || "—"}</div>
-      <div>风险：${props.riskLevel || "normal"}</div>
+      <strong>${props.buildingName || labels.value.unnamedAsset}</strong>
+      <div>${labels.value.room}：${props.room || "—"}</div>
+      <div>${labels.value.tenant}：${props.tenant || "—"}</div>
+      <div>${labels.value.owner}：${props.owner || "—"}</div>
+      <div>${labels.value.risk}：${props.riskLevel || "normal"}</div>
     </div>
   `;
 

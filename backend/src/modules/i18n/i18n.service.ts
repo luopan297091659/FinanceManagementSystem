@@ -9,10 +9,9 @@ type TranslationImportRow = {
   enabled?: boolean | string;
   'ja-JP'?: string;
   'zh-CN'?: string;
-  'en-US'?: string;
 };
 
-const SUPPORTED_LOCALES = ['ja-JP', 'zh-CN', 'en-US'];
+const SUPPORTED_LOCALES = ['ja-JP', 'zh-CN'] as const;
 const BUILTIN_VERSION = 'builtin';
 
 @Injectable()
@@ -117,7 +116,7 @@ export class I18nService {
     };
   }
 
-  async importCommit(rows: TranslationImportRow[], options: { version?: string; mode?: 'create' | 'overwrite' | 'skip' } = {}, actorUserId?: string) {
+  async importCommit(rows: TranslationImportRow[], options: { version?: string; mode?: 'create' | 'overwrite' | 'skip'; publish?: boolean } = {}, actorUserId?: string) {
     const version = options.version || this.createVersion();
     const mode = options.mode || 'skip';
     const preview = await this.importPreview(rows, version);
@@ -179,7 +178,8 @@ export class I18nService {
         },
       });
     });
-    return result;
+    if (options.publish) await this.publish(version, actorUserId);
+    return { ...result, published: Boolean(options.publish) };
   }
 
   async exportEntries(query: { locale?: string; module?: string; version?: string }) {
@@ -256,10 +256,12 @@ export class I18nService {
     };
   }
 
-  private normalizeLocale(locale: string) {
-    const aliases: Record<string, string> = { ja: 'ja-JP', zh: 'zh-CN', en: 'en-US' };
+  private normalizeLocale(locale: string): (typeof SUPPORTED_LOCALES)[number] {
+    const aliases: Record<string, string> = { ja: 'ja-JP', zh: 'zh-CN' };
     const normalized = aliases[locale] || locale;
-    return SUPPORTED_LOCALES.includes(normalized) ? normalized : 'ja-JP';
+    return SUPPORTED_LOCALES.includes(normalized as (typeof SUPPORTED_LOCALES)[number])
+      ? normalized as (typeof SUPPORTED_LOCALES)[number]
+      : 'ja-JP';
   }
 
   private normalizeStatus(status?: string) {

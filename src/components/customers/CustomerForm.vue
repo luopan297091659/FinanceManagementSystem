@@ -14,15 +14,15 @@
       </label>
       <label>
         {{ labels.name }}
-        <input v-model="form.name" required placeholder="山田 太郎 / ABC株式会社" />
+        <input v-model="form.name" required :placeholder="labels.namePlaceholder" />
       </label>
       <label>
         {{ labels.kana }}
-        <input v-model="form.kana" placeholder="ヤマダ タロウ" />
+        <input v-model="form.kana" :placeholder="labels.kanaPlaceholder" />
       </label>
       <label>
         {{ labels.nationality }}
-        <input v-model="form.nationality" placeholder="日本 / 中国" />
+        <input v-model="form.nationality" :placeholder="labels.nationalityPlaceholder" />
       </label>
       <label>
         {{ labels.phone }}
@@ -38,7 +38,7 @@
       </label>
       <label>
         {{ labels.occupation }}
-        <input v-model="form.occupation" placeholder="会社員 / 06-0000-0000" />
+        <input v-model="form.occupation" :placeholder="labels.occupationPlaceholder" />
       </label>
       <label>
         {{ labels.annualIncome }}
@@ -46,11 +46,11 @@
       </label>
       <label>
         {{ labels.address }}
-        <input v-model="form.address" placeholder="大阪府大阪市..." />
+        <input v-model="form.address" :placeholder="labels.addressPlaceholder" />
       </label>
       <label class="span-2">
         {{ labels.attachments }}
-        <textarea v-model="form.attachments" rows="3" placeholder="身份证、护照、在留卡、合同、营业执照"></textarea>
+        <textarea v-model="form.attachments" rows="3" :placeholder="labels.attachmentsPlaceholder"></textarea>
       </label>
     </div>
 

@@ -164,20 +164,20 @@
       </div>
     </div>
 
-    <!-- Translation Management Tab -->
+    <!-- Copy configuration tab -->
     <div v-if="activeTab === 'translations'" class="tab-content">
       <div class="content-header">
-        <h3>{{ dict.translationManagement || 'Translation Management' }}</h3>
+        <h3>{{ dict.translationManagement }}</h3>
         <div class="header-actions">
           <button @click="loadTranslations" class="secondary-button">{{ dict.refresh }}</button>
-          <button @click="openNewTranslation" class="primary-button">{{ dict.newTranslation || 'New Translation' }}</button>
+          <button @click="openNewTranslation" class="primary-button">{{ dict.newTranslation }}</button>
         </div>
       </div>
 
       <div class="settings-form">
         <div class="form-grid">
           <div class="form-group">
-            <label>{{ dict.key || 'Key' }}</label>
+            <label>{{ dict.key }}</label>
             <input v-model="translationFilters.key" type="search" placeholder="menu.bankReconciliation" />
           </div>
           <div class="form-group">
@@ -185,18 +185,17 @@
             <input v-model="translationFilters.module" type="search" placeholder="menu" />
           </div>
           <div class="form-group">
-            <label>{{ dict.locale || 'Locale' }}</label>
+            <label>{{ dict.locale }}</label>
             <select v-model="translationFilters.locale">
-              <option value="">All</option>
+              <option value="">{{ dict.all }}</option>
               <option value="ja-JP">ja-JP</option>
               <option value="zh-CN">zh-CN</option>
-              <option value="en-US">en-US</option>
             </select>
           </div>
           <div class="form-group">
             <label>{{ dict.status }}</label>
             <select v-model="translationFilters.status">
-              <option value="">All</option>
+              <option value="">{{ dict.all }}</option>
               <option value="DRAFT">DRAFT</option>
               <option value="PUBLISHED">PUBLISHED</option>
               <option value="DISABLED">DISABLED</option>
@@ -205,28 +204,28 @@
         </div>
         <div class="modal-actions">
           <button @click="loadTranslations" class="secondary-button">{{ dict.refresh }}</button>
-          <button @click="exportTranslations" class="secondary-button">{{ dict.export || 'Export' }}</button>
-          <button @click="triggerTranslationImport" class="secondary-button">{{ dict.import || 'Import' }}</button>
+          <button @click="exportTranslations" class="secondary-button">{{ dict.export }}</button>
+          <button @click="triggerTranslationImport" class="secondary-button">{{ dict.import }}</button>
           <input ref="translationFileInput" class="hidden-file-input" type="file" accept=".json,.csv,.tsv,.html,.xls,.xlsx" @change="importTranslations" />
         </div>
       </div>
 
       <div class="settings-form publish-form">
         <div class="form-group">
-          <label>{{ dict.version || 'Version' }}</label>
+          <label>{{ dict.version }}</label>
           <input v-model="translationVersion" type="text" placeholder="2026.07.28.1" />
         </div>
-        <button @click="publishTranslations" class="primary-button">{{ dict.publish || 'Publish' }}</button>
+        <button @click="publishTranslations" class="primary-button">{{ dict.publish }}</button>
       </div>
 
       <div v-if="translationImportPreview" class="settings-form">
-        <h4>{{ dict.importPreview || 'Import Preview' }}</h4>
-        <p>{{ translationImportPreview.validCount }} valid, {{ translationImportPreview.failedCount }} failed, {{ translationImportPreview.duplicateCount }} duplicates</p>
+        <h4>{{ dict.importPreview }}</h4>
+        <p>{{ dict.validRows }}: {{ translationImportPreview.validCount }} · {{ dict.failedRows }}: {{ translationImportPreview.failedCount }} · {{ dict.duplicateRows }}: {{ translationImportPreview.duplicateCount }}</p>
         <div class="modal-actions">
           <select v-model="translationImportMode">
-            <option value="skip">Skip existing</option>
-            <option value="overwrite">Overwrite existing</option>
-            <option value="create">Create only</option>
+            <option value="skip">{{ dict.skipExisting }}</option>
+            <option value="overwrite">{{ dict.overwriteExisting }}</option>
+            <option value="create">{{ dict.createOnly }}</option>
           </select>
           <button @click="commitTranslationImport" class="primary-button">{{ dict.save }}</button>
         </div>
@@ -236,10 +235,10 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>{{ dict.key || 'Key' }}</th>
+              <th>{{ dict.key }}</th>
               <th>{{ dict.module }}</th>
-              <th>{{ dict.locale || 'Locale' }}</th>
-              <th>{{ dict.version || 'Version' }}</th>
+              <th>{{ dict.locale }}</th>
+              <th>{{ dict.version }}</th>
               <th>{{ dict.status }}</th>
               <th>{{ dict.details }}</th>
               <th>{{ dict.actions }}</th>
@@ -362,10 +361,10 @@
     <!-- Translation Modal -->
     <div v-if="showTranslationModal" class="modal-overlay" @click="closeTranslationModal">
       <div class="modal-card wide" @click.stop>
-        <h2>{{ editingTranslation ? (dict.editTranslation || 'Edit Translation') : (dict.newTranslation || 'New Translation') }}</h2>
+        <h2>{{ editingTranslation ? dict.editTranslation : dict.newTranslation }}</h2>
         <div class="form-grid">
           <div class="form-group">
-            <label>{{ dict.key || 'Key' }}</label>
+            <label>{{ dict.key }}</label>
             <input v-model="translationForm.key" type="text" />
           </div>
           <div class="form-group">
@@ -373,15 +372,14 @@
             <input v-model="translationForm.module" type="text" />
           </div>
           <div class="form-group">
-            <label>{{ dict.locale || 'Locale' }}</label>
+            <label>{{ dict.locale }}</label>
             <select v-model="translationForm.locale">
               <option value="ja-JP">ja-JP</option>
               <option value="zh-CN">zh-CN</option>
-              <option value="en-US">en-US</option>
             </select>
           </div>
           <div class="form-group">
-            <label>{{ dict.version || 'Version' }}</label>
+            <label>{{ dict.version }}</label>
             <input v-model="translationForm.version" type="text" />
           </div>
         </div>
@@ -408,9 +406,9 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { locale, messages } from '../../i18n.js';
+import { getTranslationMatrixRows, locale, messages, reloadPublishedTranslations } from '../../i18n.js';
 import { api } from '../../services/api.js';
-import { exportTableXls, parseTableFile } from '../../utils/tableFiles.js';
+import { exportTableXlsx, parseTableFile } from '../../utils/tableFiles.js';
 import DualScrollTable from '../DualScrollTable.vue';
 
 const props = defineProps({
@@ -437,7 +435,7 @@ const translationVersions = ref([]);
 const translationFileInput = ref(null);
 const translationImportRows = ref([]);
 const translationImportPreview = ref(null);
-const translationImportMode = ref('skip');
+const translationImportMode = ref('overwrite');
 const translationVersion = ref(new Date().toISOString().slice(0, 10).replaceAll('-', '.') + '.1');
 
 const showUserModal = ref(false);
@@ -471,25 +469,7 @@ const translationForm = ref({
 
 const dict = computed(() => messages[locale.value].system || messages[locale.value].systemAdmin);
 
-const uiText = computed(() => ({
-  ja: {
-    menuPermissions: '機能メニュー権限', functionMenu: '機能メニュー', permissionsHelp: 'メニューごとに操作権限を設定します。対応しない操作は選択できません。',
-    viewOnly: '閲覧のみ', view: '閲覧', create: '追加', update: '編集', delete: '削除',
-    overview: '業務概要', gis: 'GIS 地図', resources: '物件管理', contracts: '契約管理', finance: '会計管理', bank: '銀行明細照合', ocr: 'OCR 照合', knowledge: 'AI ナレッジベース',
-    users: 'ユーザー管理', roles: '権限管理', audit: '監査ログ', email: 'メール設定', translations: '翻訳管理',
-  },
-  zh: {
-    menuPermissions: '功能菜单权限', functionMenu: '功能菜单', permissionsHelp: '按功能菜单配置操作权限，不适用的操作不可选择。',
-    viewOnly: '仅支持查看', view: '查看', create: '新增', update: '修改', delete: '删除',
-    overview: '业务概览', gis: 'GIS 地图', resources: '房源管理', contracts: '签约管理', finance: '财务中心', bank: '银行账单对账', ocr: 'OCR 对账', knowledge: 'AI 知识库',
-    users: '用户管理', roles: '权限管理', audit: '审计日志', email: '邮箱配置', translations: '翻译管理',
-  },
-}[locale.value] || {
-  menuPermissions: 'Feature permissions', functionMenu: 'Feature menu', permissionsHelp: 'Configure operations by feature menu. Unsupported operations cannot be selected.',
-  viewOnly: 'View only', view: 'View', create: 'Create', update: 'Edit', delete: 'Delete',
-  overview: 'Overview', gis: 'GIS map', resources: 'Properties', contracts: 'Contracts', finance: 'Finance', bank: 'Bank reconciliation', ocr: 'OCR reconciliation', knowledge: 'AI knowledge base',
-  users: 'User management', roles: 'Permission management', audit: 'Audit logs', email: 'Email settings', translations: 'Translation management',
-}));
+const uiText = computed(() => dict.value.permissionMenu);
 
 const permissionActions = computed(() => [
   { key: 'view', label: uiText.value.view },
@@ -609,7 +589,7 @@ const tabs = computed(() => [
   { key: 'roles', label: dict.value.roles, permission: 'role:view' },
   { key: 'logs', label: dict.value.auditLogs, permission: 'audit_log:view' },
   { key: 'email', label: dict.value.emailSettings, permission: 'setting:email' },
-  { key: 'translations', label: dict.value.translationManagement || 'Translation Management', permission: 'i18n.translation.view' },
+  { key: 'translations', label: dict.value.translationManagement, permission: 'i18n.translation.view' },
 ].filter((tab) => can(tab.permission)));
 
 const showNotice = (message, type = 'error') => {
@@ -874,11 +854,12 @@ const importTranslations = async (event) => {
 
 const commitTranslationImport = async () => {
   try {
-    await api.importAdminTranslations(translationImportRows.value, { version: translationVersion.value, mode: translationImportMode.value });
+    await api.importAdminTranslations(translationImportRows.value, { version: translationVersion.value, mode: translationImportMode.value, publish: true });
+    await reloadPublishedTranslations((localeCode) => api.getPublishedTranslations(localeCode));
     translationImportPreview.value = null;
     translationImportRows.value = [];
     await loadTranslations();
-    showNotice(dict.value.saveSuccess || 'Imported', 'success');
+    showNotice(dict.value.importSuccess, 'success');
   } catch (e) {
     showNotice(e.message || 'Failed to import translations');
   }
@@ -886,16 +867,17 @@ const commitTranslationImport = async () => {
 
 const exportTranslations = async () => {
   try {
-    const rows = await api.exportAdminTranslations(translationFilters.value);
-    exportTableXls('translations.xls', [
-      { key: 'key', label: 'key' },
-      { key: 'module', label: 'module' },
-      { key: 'locale', label: 'locale' },
-      { key: 'value', label: 'value' },
-      { key: 'version', label: 'version' },
-      { key: 'status', label: 'status' },
-      { key: 'description', label: 'description' },
-      { key: 'enabled', label: 'enabled' },
+    const rows = getTranslationMatrixRows().filter((row) =>
+      (!translationFilters.value.key || row.key.includes(translationFilters.value.key))
+      && (!translationFilters.value.module || row.module.includes(translationFilters.value.module))
+    );
+    await exportTableXlsx(dict.value.exportFileName, [
+      { key: 'key', label: 'key', width: 45 },
+      { key: 'module', label: 'module', width: 20 },
+      { key: 'description', label: 'description', width: 24 },
+      { key: 'enabled', label: 'enabled', width: 12 },
+      { key: 'ja-JP', label: 'ja-JP', width: 55 },
+      { key: 'zh-CN', label: 'zh-CN', width: 55 },
     ], rows);
   } catch (e) {
     showNotice(e.message || 'Failed to export translations');

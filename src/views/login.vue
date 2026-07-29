@@ -54,7 +54,7 @@
           :class="{ active: currentLocale === loc }"
           @click="setLocale(loc)"
         >
-          {{ loc === 'ja' ? '日本語' : '中文' }}
+          {{ messages[loc].languageJapanese && (loc === 'ja' ? messages[loc].languageJapanese : messages[loc].languageChinese) }}
         </button>
       </div>
     </div>

@@ -78,10 +78,9 @@
           <p class="subtle">{{ currentSubtitle }}</p>
         </div>
         <div class="topbar-actions">
-          <div class="locale-switch" role="group" aria-label="Language">
-            <button class="locale-button" :class="{ active: locale === 'ja' }" type="button" @click="setLocale('ja')">日本語</button>
-            <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">中文</button>
-            <button class="locale-button" :class="{ active: locale === 'en' }" type="button" @click="setLocale('en')">English</button>
+          <div class="locale-switch" role="group" :aria-label="dictionary.language">
+            <button class="locale-button" :class="{ active: locale === 'ja' }" type="button" @click="setLocale('ja')">{{ dictionary.languageJapanese }}</button>
+            <button class="locale-button" :class="{ active: locale === 'zh' }" type="button" @click="setLocale('zh')">{{ dictionary.languageChinese }}</button>
           </div>
           <button class="ghost-button" type="button" @click="setActiveNavItem({ key: 'gis' })">{{ dictionary.openGis }}</button>
           <div class="settings-menu" @click.stop>
@@ -146,7 +145,7 @@ import BankReconciliationView from "./views/bank-reconciliation.vue";
 import KnowledgeView from "./views/knowledge.vue";
 import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
 import AppIcon from "./components/AppIcon.vue";
-import { useI18n } from "./i18n";
+import { reloadPublishedTranslations, useI18n } from "./i18n";
 import { api } from "./services/api";
 
 const activeView = ref("overview");
@@ -163,28 +162,9 @@ const currentPermissions = ref([]);
 const { locale, dictionary, setLocale } = useI18n();
 
 const reconciliationMenuLabels = computed(() => ({
-  ja: {
-    bank: "AI / 銀行明細照合",
-    ocr: "AI / OCR 照合",
-    bankSubtitle: "銀行入金を契約単位で照合し、手動確認と提出まで管理します。",
-    ocrSubtitle: dictionary.value.subtitles.ocr,
-  },
-  zh: {
-    bank: "AI / 银行账单对账",
-    ocr: "AI / OCR 对账",
-    bankSubtitle: "按契约书维度处理银行入金，支持人工复核与正式提交。",
-    ocrSubtitle: dictionary.value.subtitles.ocr,
-  },
-  en: {
-    bank: "AI / Bank Reconciliation",
-    ocr: "AI / OCR Reconciliation",
-    bankSubtitle: "Match bank deposits at contract level, then review and submit explicitly.",
-    ocrSubtitle: "Existing OCR reconciliation workspace.",
-  },
-}[locale.value] || {
-  bank: "AI / 銀行明細照合",
-  ocr: "AI / OCR 照合",
-  bankSubtitle: "銀行入金を契約単位で照合し、手動確認と提出まで管理します。",
+  bank: `AI / ${dictionary.value.bankReconciliation.menu.bankReconciliation}`,
+  ocr: dictionary.value.ocrReconciliation,
+  bankSubtitle: dictionary.value.bankReconciliation.help.subtitle,
   ocrSubtitle: dictionary.value.subtitles.ocr,
 }));
 
@@ -201,14 +181,12 @@ const navItems = computed(() => [
   { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, icon: "shield", permissions: ["role:view"] },
   { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, icon: "scroll", permissions: ["audit_log:view"] },
   { key: "system-email", view: "system", tab: "email", label: dictionary.value.systemEmail, icon: "mail", permissions: ["setting:email"] },
-  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations || "Translation Management", icon: "languages", permissions: ["i18n.translation.view"] },
+  { key: "system-translations", view: "system", tab: "translations", label: dictionary.value.systemTranslations, icon: "languages", permissions: ["i18n.translation.view"] },
 ]);
 
-const aiMenuTitle = computed(() => ({
-  ja: "AI分析",
-  zh: "AI分析",
-  en: "AI Analysis",
-}[locale.value] || "AI分析"));
+const aiMenuTitle = computed(() => dictionary.value.aiAnalysis);
+
+const syncPublishedCopy = () => reloadPublishedTranslations((localeCode) => api.getPublishedTranslations(localeCode)).catch(() => undefined);
 
 const hasAnyPermission = (permissions) => {
   return permissions.some((permission) => currentPermissions.value.includes(permission));
@@ -412,6 +390,7 @@ const handleAuthenticated = (payload) => {
   isAuthenticated.value = true;
   authChecked.value = true;
   ensureActiveNavVisible();
+  syncPublishedCopy();
 };
 
 const handleLogout = () => {
@@ -423,6 +402,7 @@ onMounted(() => {
   window.addEventListener('auth-expired', clearAuth);
   window.addEventListener('popstate', applyRouteFromLocation);
   applyRouteFromLocation();
+  syncPublishedCopy();
   checkAuth();
 });
 

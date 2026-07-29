@@ -77,7 +77,7 @@
             <small>{{ batch.sourceFiles?.[0]?.fileName || t.history.noFile }}</small>
           </button>
           <button class="danger-button mini batch-delete" type="button" :disabled="loading" @click="deleteBatch(batch.id)">
-            删除
+            {{ t.action.delete }}
           </button>
         </div>
       </aside>
@@ -178,47 +178,11 @@
 import { computed, onMounted, ref, watch } from "vue";
 import DataPagination from "../components/DataPagination.vue";
 import DualScrollTable from "../components/DualScrollTable.vue";
-import { locale } from "../i18n";
+import { locale, messages } from "../i18n";
 import { api } from "../services/api";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
-const translations = {
-  ja: {
-    menu: { aiReconciliation: "AI 照合センター", bankReconciliation: "銀行明細照合" },
-    help: { subtitle: "銀行入金を物件、部屋、契約、支払名義へ紐付け、明示的な提出まで保持します。" },
-    action: { upload: "ファイル選択", addFiles: "ファイル追加", createBatch: "バッチ作成", match: "照合実行", submit: "提出", refresh: "更新", search: "摘要、契約、部屋を検索", manualMatch: "手動確定", unmatch: "未照合へ戻す", exportExcel: "Excel出力", exportJson: "未照合", showColumns: "表示項目", resetColumns: "初期値" },
-    matching: { title: "照合条件", summary: "銀行摘要名", amount: "銀行入金額", date: "入金日", month: "入金月", property: "物件", room: "部屋番号", contract: "契約ID" },
-    table: { source: "原始ファイル", date: "入金日", summary: "銀行摘要", amount: "入金額", contract: "部屋 / 契約", status: "結果", remark: "備考", actions: "操作" },
-    history: { title: "履歴バッチ", noFile: "ファイルなし" },
-    status: { AUTO_MATCHED: "100%", MANUAL_MATCHED: "手動", MANUAL_REVIEW: "要確認", UNMATCHED: "未照合", SUBMITTED: "提出済み", FAILED: "失敗" },
-    common: { loading: "処理中...", select: "選択してください", noData: "データがありません" },
-    pagination: { pagination: "ページ切替", total: "合計", pageSize: "表示件数", page: "ページ", previous: "前へ", next: "次へ" },
-  },
-  zh: {
-    menu: { aiReconciliation: "AI 对账中心", bankReconciliation: "银行账单对账" },
-    help: { subtitle: "将银行入金追溯到物件、房间、契约书与支付名义，提交前保存在对账主表中。" },
-    action: { upload: "选择文件", addFiles: "继续添加", createBatch: "创建批次", match: "执行匹配", submit: "提交", refresh: "刷新", search: "搜索摘要、契约、房间", manualMatch: "手工确认", unmatch: "退回未匹配", exportExcel: "导出 Excel", exportJson: "未匹配数据", showColumns: "显示字段", resetColumns: "恢复默认" },
-    matching: { title: "匹配条件", summary: "银行摘要名", amount: "银行入金金额", date: "入金日期", month: "入金月份", property: "物件", room: "部屋番号", contract: "契约书ID" },
-    table: { source: "原始文件", date: "入金日期", summary: "银行摘要", amount: "入金金额", contract: "房间 / 契约", status: "结果", remark: "备注", actions: "操作" },
-    history: { title: "历史批次", noFile: "无文件" },
-    status: { AUTO_MATCHED: "100%", MANUAL_MATCHED: "手工", MANUAL_REVIEW: "待人工", UNMATCHED: "未匹配", SUBMITTED: "已提交", FAILED: "失败" },
-    common: { loading: "处理中...", select: "请选择", noData: "暂无数据" },
-    pagination: { pagination: "分页", total: "共", pageSize: "每页", page: "第", previous: "上一页", next: "下一页" },
-  },
-  en: {
-    menu: { aiReconciliation: "AI Reconciliation Center", bankReconciliation: "Bank Statement Reconciliation" },
-    help: { subtitle: "Trace bank deposits to property, room, contract, and payment alias before explicit submission." },
-    action: { upload: "Choose Files", addFiles: "Add Files", createBatch: "Create Batch", match: "Run Match", submit: "Submit", refresh: "Refresh", search: "Search summary, contract, room", manualMatch: "Manual Match", unmatch: "Unmatch", exportExcel: "Export Excel", exportJson: "Unmatched JSON", showColumns: "Columns", resetColumns: "Reset" },
-    matching: { title: "Matching Conditions", summary: "Bank Summary", amount: "Deposit Amount", date: "Deposit Date", month: "Deposit Month", property: "Property", room: "Room", contract: "Contract ID" },
-    table: { source: "Source", date: "Deposit Date", summary: "Bank Summary", amount: "Amount", contract: "Room / Contract", status: "Result", remark: "Remark", actions: "Actions" },
-    history: { title: "Batch History", noFile: "No file" },
-    status: { AUTO_MATCHED: "100%", MANUAL_MATCHED: "Manual", MANUAL_REVIEW: "Review", UNMATCHED: "Unmatched", SUBMITTED: "Submitted", FAILED: "Failed" },
-    common: { loading: "Working...", select: "Select", noData: "No data" },
-    pagination: { pagination: "Pagination", total: "Total", pageSize: "Rows", page: "Page", previous: "Previous", next: "Next" },
-  },
-};
-
-const t = computed(() => translations[locale.value] || translations.ja);
+const t = computed(() => messages[locale.value].bankReconciliation);
 const selectedFiles = ref([]);
 const batches = ref([]);
 const records = ref([]);
@@ -243,12 +207,11 @@ const bankColumns = ref([
   { key: "remark", visible: true },
 ]);
 const matchingRules = ref(["normalizedBankSummary", "depositAmount"]);
-const isZh = computed(() => locale.value === "zh");
-const roomColumnLabel = computed(() => isZh.value ? "房间" : t.value.matching.room);
-const contractColumnLabel = computed(() => isZh.value ? "契约者 / 契约支付者" : t.value.table.contract);
-const contractPartyLabel = computed(() => isZh.value ? "契约者 / 契约支付者" : "Contractor / Payer");
-const contractorLabel = computed(() => isZh.value ? "契约者" : "Contractor");
-const payerLabel = computed(() => isZh.value ? "契约支付者" : "Payer");
+const roomColumnLabel = computed(() => t.value.table.room);
+const contractColumnLabel = computed(() => t.value.table.contract);
+const contractPartyLabel = computed(() => t.value.matching.contractParty);
+const contractorLabel = computed(() => t.value.matching.contractor);
+const payerLabel = computed(() => t.value.matching.payer);
 const visibleBankColumns = computed(() => bankColumns.value.filter((column) => column.visible));
 const isBankColumnVisible = (key) => bankColumns.value.find((column) => column.key === key)?.visible;
 const bankColumnLabel = (key) => ({ source: t.value.table.source, date: t.value.table.date, summary: t.value.table.summary, amount: t.value.table.amount, room: roomColumnLabel.value, contract: contractColumnLabel.value, status: t.value.table.status, remark: t.value.table.remark })[key] || key;
@@ -273,7 +236,7 @@ const ruleOptions = computed(() => [
 ]);
 
 const tabs = computed(() => [
-  { key: "ALL", label: "All" },
+  { key: "ALL", label: t.value.status.ALL },
   { key: "AUTO_MATCHED", label: t.value.status.AUTO_MATCHED },
   { key: "MANUAL_REVIEW", label: t.value.status.MANUAL_REVIEW },
   { key: "UNMATCHED", label: t.value.status.UNMATCHED },
@@ -282,7 +245,7 @@ const tabs = computed(() => [
 
 const activeBatch = computed(() => batches.value.find((batch) => batch.id === activeBatchId.value));
 const stats = computed(() => [
-  { key: "total", label: "Total", value: activeBatch.value?.totalRecords || 0 },
+  { key: "total", label: t.value.status.total, value: activeBatch.value?.totalRecords || 0 },
   { key: "auto", label: t.value.status.AUTO_MATCHED, value: activeBatch.value?.autoMatchedCount || 0 },
   { key: "manual", label: t.value.status.MANUAL_MATCHED, value: activeBatch.value?.manualMatchedCount || 0 },
   { key: "unmatched", label: t.value.status.UNMATCHED, value: activeBatch.value?.unmatchedCount || 0 },
@@ -376,7 +339,7 @@ const submitBatch = async () => {
 };
 
 const deleteBatch = async (batchId) => {
-  if (!batchId || !window.confirm("确认删除该批次及其对账记录？")) return;
+  if (!batchId || !window.confirm(t.value.history.deleteConfirm)) return;
   loading.value = true;
   try {
     await api.deleteReconciliationBatch(batchId);
@@ -396,8 +359,8 @@ const exportFinalResult = async () => {
     { key: "propertyName", label: t.value.table.property || "Property Name" },
     { key: "roomNumber", label: t.value.matching.room },
     { key: "contractId", label: t.value.matching.contract },
-    { key: "contractorName", label: "Contractor" },
-    { key: "payerName", label: "Payer" },
+    { key: "contractorName", label: contractorLabel.value },
+    { key: "payerName", label: payerLabel.value },
     { key: "originalBankSummary", label: t.value.table.summary },
     { key: "depositAmount", label: t.value.table.amount },
     { key: "paymentMonth", label: t.value.matching.month },

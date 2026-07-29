@@ -1,9 +1,9 @@
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 
 const savedLocale = typeof localStorage === "undefined" ? null : localStorage.getItem("app-locale");
-export const locale = ref(savedLocale || "ja");
+export const locale = ref(savedLocale === "zh" ? "zh" : "ja");
 
-export const messages = {
+export const messages = reactive({
   ja: {
     appName: "不動産管理プラットフォーム",
     company: "日本不動産管理会社",
@@ -31,6 +31,12 @@ export const messages = {
     systemRoles: "権限管理",
     systemLogs: "監査ログ",
     systemEmail: "メール設定",
+    systemTranslations: "文案設定",
+    language: "言語",
+    languageJapanese: "日本語",
+    languageChinese: "中文",
+    aiAnalysis: "AI分析",
+    ocrReconciliation: "AI / OCR 照合",
     subtitles: {
       overview: "主要な運営指標、入出金、異常状況をまとめて確認します。",
       gis: "地図、検索、レイヤー、リスク状態を統合して運営状況を可視化します。",
@@ -199,6 +205,12 @@ export const messages = {
       annualIncome: "年収",
       address: "住所",
       attachments: "添付備考",
+      namePlaceholder: "山田 太郎 / ABC株式会社",
+      kanaPlaceholder: "ヤマダ タロウ",
+      nationalityPlaceholder: "日本 / 中国",
+      occupationPlaceholder: "会社員 / 06-0000-0000",
+      addressPlaceholder: "大阪府大阪市...",
+      attachmentsPlaceholder: "身分証、パスポート、在留カード、契約書、営業許可証",
       startDate: "開始日",
       endDate: "終了日",
       active: "有効",
@@ -276,6 +288,31 @@ export const messages = {
       saveSuccess: "保存しました",
       deleteSuccess: "削除しました",
       testSent: "テストメールを送信しました",
+      translationManagement: "文案設定",
+      newTranslation: "文案を追加",
+      editTranslation: "文案を編集",
+      key: "文案キー",
+      locale: "言語",
+      version: "バージョン",
+      export: "Excel 出力",
+      import: "Excel 取込",
+      publish: "反映",
+      importPreview: "取込プレビュー",
+      all: "すべて",
+      validRows: "有効行",
+      failedRows: "エラー行",
+      duplicateRows: "重複",
+      skipExisting: "既存をスキップ",
+      overwriteExisting: "既存を上書き",
+      createOnly: "新規のみ",
+      importSuccess: "文案を取り込み、システム全体に反映しました",
+      exportFileName: "文案設定.xlsx",
+      permissionMenu: {
+        menuPermissions: "機能メニュー権限", functionMenu: "機能メニュー", permissionsHelp: "メニューごとに操作権限を設定します。対応しない操作は選択できません。",
+        viewOnly: "閲覧のみ", view: "閲覧", create: "追加", update: "編集", delete: "削除", overview: "業務概要", gis: "GIS 地図", resources: "物件管理",
+        contracts: "契約管理", finance: "会計管理", bank: "銀行明細照合", ocr: "OCR 照合", knowledge: "AI ナレッジベース", users: "ユーザー管理",
+        roles: "権限管理", audit: "監査ログ", email: "メール設定", translations: "文案設定",
+      },
     },
     financeLabels: {
       eyebrow: "会計管理",
@@ -362,6 +399,12 @@ export const messages = {
     systemRoles: "权限管理",
     systemLogs: "审计日志",
     systemEmail: "邮箱配置",
+    systemTranslations: "文案配置",
+    language: "语言",
+    languageJapanese: "日本語",
+    languageChinese: "中文",
+    aiAnalysis: "AI分析",
+    ocrReconciliation: "AI / OCR 对账",
     subtitles: {
       overview: "汇总经营指标、出入金与异常状态。",
       gis: "整合地图、搜索、图层与风险状态，提供运营视图。",
@@ -530,6 +573,12 @@ export const messages = {
       annualIncome: "年收入",
       address: "地址",
       attachments: "附件备注",
+      namePlaceholder: "山田 太郎 / ABC株式会社",
+      kanaPlaceholder: "ヤマダ タロウ",
+      nationalityPlaceholder: "日本 / 中国",
+      occupationPlaceholder: "公司职员 / 06-0000-0000",
+      addressPlaceholder: "大阪府大阪市...",
+      attachmentsPlaceholder: "身份证、护照、在留卡、合同、营业执照",
       startDate: "开始日期",
       endDate: "结束日期",
       active: "有效",
@@ -606,6 +655,31 @@ export const messages = {
       saveSuccess: "已保存",
       deleteSuccess: "已删除",
       testSent: "测试邮件已发送",
+      translationManagement: "文案配置",
+      newTranslation: "新增文案",
+      editTranslation: "编辑文案",
+      key: "文案键",
+      locale: "语言",
+      version: "版本",
+      export: "导出 Excel",
+      import: "导入 Excel",
+      publish: "发布生效",
+      importPreview: "导入预览",
+      all: "全部",
+      validRows: "有效行",
+      failedRows: "错误行",
+      duplicateRows: "重复项",
+      skipExisting: "跳过已有文案",
+      overwriteExisting: "覆盖已有文案",
+      createOnly: "仅新增",
+      importSuccess: "文案已导入并全局生效",
+      exportFileName: "文案配置.xlsx",
+      permissionMenu: {
+        menuPermissions: "功能菜单权限", functionMenu: "功能菜单", permissionsHelp: "按功能菜单配置操作权限，不适用的操作不可选择。",
+        viewOnly: "仅支持查看", view: "查看", create: "新增", update: "修改", delete: "删除", overview: "业务概览", gis: "GIS 地图", resources: "房源管理",
+        contracts: "签约管理", finance: "财务中心", bank: "银行账单对账", ocr: "OCR 对账", knowledge: "AI 知识库", users: "用户管理",
+        roles: "权限管理", audit: "审计日志", email: "邮箱配置", translations: "文案配置",
+      },
     },
     financeLabels: {
       eyebrow: "财务中心",
@@ -665,7 +739,7 @@ export const messages = {
       reasons: { "integrated.error.existingContractDiffers": "现有合同与导入值不同", "integrated.error.overlappingContract": "合同期间与现有合同重叠", "import.error.sameNameDifferentAddress": "同名但地址不同", "import.error.propertyNameRequired": "物件名为空" },
     },
   },
-};
+});
 
 messages.en = {
   ...messages.ja,
@@ -891,6 +965,104 @@ messages.zh.dashboard = {
   descriptions: { unpaidRentCount: "需要确认收款状态", pendingReconciliationCount: "需要匹配或人工确认", activeContractCount: "当前有效合同", propertyCount: "当前管理的物业" },
 };
 
+messages.ja.bankReconciliation = {
+  menu: { aiReconciliation: "AI 照合センター", bankReconciliation: "銀行明細照合" },
+  help: { subtitle: "銀行入金を物件、部屋、契約、支払名義へ紐付け、明示的な提出まで保持します。" },
+  action: { upload: "ファイル選択", addFiles: "ファイル追加", createBatch: "バッチ作成", match: "照合実行", submit: "提出", refresh: "更新", search: "摘要、契約、部屋を検索", manualMatch: "手動確定", unmatch: "未照合へ戻す", exportExcel: "Excel出力", exportJson: "未照合", showColumns: "表示項目", resetColumns: "初期値", delete: "削除" },
+  matching: { title: "照合条件", summary: "銀行摘要名", amount: "銀行入金額", date: "入金日", month: "入金月", property: "物件", room: "部屋番号", contract: "契約ID", contractParty: "契約者 / 支払者", contractor: "契約者", payer: "支払者" },
+  table: { source: "原始ファイル", date: "入金日", summary: "銀行摘要", amount: "入金額", room: "部屋", contract: "部屋 / 契約", status: "結果", remark: "備考", actions: "操作" },
+  history: { title: "履歴バッチ", noFile: "ファイルなし", deleteConfirm: "このバッチと照合記録を削除しますか？" },
+  status: { ALL: "すべて", AUTO_MATCHED: "100%", MANUAL_MATCHED: "手動", MANUAL_REVIEW: "要確認", UNMATCHED: "未照合", SUBMITTED: "提出済み", FAILED: "失敗", total: "合計" },
+  common: { loading: "処理中...", select: "選択してください", noData: "データがありません" },
+  pagination: { pagination: "ページ切替", total: "合計", pageSize: "表示件数", page: "ページ", previous: "前へ", next: "次へ" },
+};
+
+messages.zh.bankReconciliation = {
+  menu: { aiReconciliation: "AI 对账中心", bankReconciliation: "银行账单对账" },
+  help: { subtitle: "将银行入金追溯到物件、房间、契约书与支付名义，提交前保存在对账主表中。" },
+  action: { upload: "选择文件", addFiles: "继续添加", createBatch: "创建批次", match: "执行匹配", submit: "提交", refresh: "刷新", search: "搜索摘要、契约、房间", manualMatch: "手工确认", unmatch: "退回未匹配", exportExcel: "导出 Excel", exportJson: "未匹配数据", showColumns: "显示字段", resetColumns: "恢复默认", delete: "删除" },
+  matching: { title: "匹配条件", summary: "银行摘要名", amount: "银行入金金额", date: "入金日期", month: "入金月份", property: "物件", room: "房间", contract: "契约书ID", contractParty: "契约者 / 契约支付者", contractor: "契约者", payer: "契约支付者" },
+  table: { source: "原始文件", date: "入金日期", summary: "银行摘要", amount: "入金金额", room: "房间", contract: "契约者 / 契约支付者", status: "结果", remark: "备注", actions: "操作" },
+  history: { title: "历史批次", noFile: "无文件", deleteConfirm: "确认删除该批次及其对账记录？" },
+  status: { ALL: "全部", AUTO_MATCHED: "100%", MANUAL_MATCHED: "手工", MANUAL_REVIEW: "待人工", UNMATCHED: "未匹配", SUBMITTED: "已提交", FAILED: "失败", total: "合计" },
+  common: { loading: "处理中...", select: "请选择", noData: "暂无数据" },
+  pagination: { pagination: "分页", total: "共", pageSize: "每页", page: "第", previous: "上一页", next: "下一页" },
+};
+
+messages.ja.knowledgeLabels = {
+  eyebrow: "AI ナレッジベース", heading: "物件・契約・業務知識の検索窓口", add: "ナレッジを追加",
+  workspace: "準備中のワークスペース", comingSoon: "Q&A・文書検索機能は近日公開予定です",
+  description: "バックエンドの knowledgeDocuments データを接続済みです。今後、ベクトル検索、Q&A、関連情報の推薦を拡張できます。",
+  entries: "ナレッジ項目", withContent: "内容登録済み", itemUnit: "件", noSummary: "概要なし", empty: "ナレッジの登録はありません。", loadFailed: "ナレッジの読み込みに失敗しました",
+};
+
+messages.zh.knowledgeLabels = {
+  eyebrow: "AI 知识库", heading: "房源、租约与业务知识检索入口", add: "新增知识条目",
+  workspace: "占位工作台", comingSoon: "知识问答与文档检索模块即将开放",
+  description: "当前已把后端 knowledgeDocuments 数据接入前端，后续可继续扩展向量检索、问答和关联推荐。",
+  entries: "知识条目", withContent: "已写入内容", itemUnit: "条", noSummary: "暂无摘要", empty: "当前暂无知识库记录。", loadFailed: "加载知识库失败",
+};
+
+messages.ja.gisLabels = {
+  aria: "GIS 地図", eyebrow: "地図センター", heading: "物件位置とリスク状況", assetPoints: "件の物件", highlighted: "件の要確認",
+  searchPlaceholder: "建物、部屋、契約者、家主、住所を検索", search: "検索", clear: "クリア", showAssets: "物件を表示", showRisk: "リスク色を表示",
+  noResults: "該当する物件がありません。別のキーワードをお試しください。", room: "部屋", tenant: "契約者", owner: "家主", risk: "リスク",
+  details: "物件詳細", close: "閉じる", address: "住所", businessInfo: "業務情報", income: "入金", expense: "出金", contract: "契約",
+  unnamedAsset: "名称未登録の物件", unregisteredAddress: "住所未登録",
+};
+
+messages.zh.gisLabels = {
+  aria: "GIS 地图", eyebrow: "地图中心", heading: "物业位置与风险态势", assetPoints: "个资产点", highlighted: "个重点关注",
+  searchPlaceholder: "搜索楼栋、房间、租客、业主或地址", search: "搜索", clear: "清空", showAssets: "显示资产点", showRisk: "显示风险色",
+  noResults: "没有匹配到相关资产，请尝试换个关键词。", room: "房间", tenant: "租客", owner: "业主", risk: "风险",
+  details: "资产详情", close: "关闭", address: "地址", businessInfo: "业务信息", income: "入金", expense: "出金", contract: "合同",
+  unnamedAsset: "未命名资产", unregisteredAddress: "未登记地址",
+};
+
+messages.ja.ocrLabels = {
+  title: "AI 照合センター", subtitle: "ファイルアップロード → Make Workflow 実行 → JSON コールバック受信 → 結果表示・手動確認",
+  uploadEyebrow: "ファイルアップロード", uploadHeading: "ファイルと照合条件を設定", webhookUrl: "Make Webhook URL", callbackUrl: "コールバック URL", taskName: "タスク名",
+  taskNamePlaceholder: "例：今月の AI OCR 照合", dropTitle: "ここにファイルをドロップするか、「ファイルを選択」をクリック", dropHelp: "PDF、JPG、PNG、Excel、Word に対応。ファイル選択後に照合を開始できます。",
+  filesPending: "ファイル（アップロード待ち）", removeFile: "このファイルを削除", addFiles: "ファイル追加", chooseFiles: "ファイル選択", uploadFiles: "アップロード", start: "照合開始", clear: "クリア",
+  filesUploaded: "ファイル（アップロード済み）", uploaded: "アップロード済み", taskCenter: "タスクセンター", itemUnit: "件", fileCount: "ファイル数", status: "状態", callback: "コールバック URL",
+  viewResult: "結果を見る", manualReview: "手動確認", noTasks: "ファイルをアップロードして照合を開始すると、ここにタスクが表示されます。", results: "AI 照合結果", resultUnit: "件",
+  searchPlaceholder: "ファイル、契約者、家主、摘要を検索", file: "ファイル", tenant: "契約者", owner: "家主", amount: "金額", date: "日付", remark: "摘要", reviewStatus: "確認状態",
+  pendingConfirmation: "確認待ち", noResults: "認識結果はありません。ファイルをアップロードして照合を開始してください。", completeReview: "確認完了", currentTask: "現在のタスク", reviewPlaceholder: "確認メモまたは承認内容を入力",
+  taskOverview: "タスク概要", noTask: "タスク未作成", resultCount: "結果数", taskStatus: "タスク状態", pendingReview: "確認待ち", tips: "利用方法",
+  tipWebhook: "Make Webhook URL とコールバック URL を設定できます。", tipOcr: "アップロード完了後、Make で OCR と構造化処理を実行します。", tipReview: "コールバック結果を保存し、手動確認できます。",
+  taskLog: "タスクログ", noLogs: "処理ログがここに表示されます。", waitingUpload: "アップロード待ち", uploading: "アップロード中", processing: "AI 処理中", completed: "完了", failed: "失敗",
+  waitingFiles: "ファイルのアップロード待ち", defaultTaskName: "AI 照合タスク", uploadingServer: "サーバーへファイルをアップロードしています...", uploadedContinue: "アップロード完了。ファイル追加または照合開始ができます。",
+  uploadFailedRetry: "アップロードに失敗しました。再試行してください。", requireUrls: "Webhook URL とコールバック URL を入力してください。", submittingMake: "Make workflow へファイルを送信しています...",
+  submittedProcessing: "送信完了。AI 処理を開始します...", submitFailedRetry: "ファイル送信に失敗しました。再試行してください。", callbackSuccess: "コールバックを受信し、結果を更新しました。",
+  callbackFailed: "コールバックが失敗状態を返しました。", unknownFile: "不明なファイル", callbackTimeout: "コールバックがタイムアウトしました。Make の実行状況を確認してください。",
+  waitingCallback: "Make に送信済み。結果を待っています...", makeFailed: "Make へのアップロードに失敗しました。Webhook URL を確認してください。", taskSubmitFailed: "タスク送信に失敗しました。", reviewed: "確認済み",
+  uploadHttpError: "アップロード失敗：{status}", uploadSuccessLog: "サーバーへのアップロードが完了しました。", uploadErrorLog: "アップロード失敗：{error}", submittedFilesLog: "{count} ファイルを照合に送信しました。",
+  submitErrorLog: "送信失敗：{error}", createTaskError: "タスク作成失敗：{status}", preparedTaskLog: "タスク {task} を準備しました。", makeErrorLog: "Make Webhook へのアップロードに失敗しました。",
+  waitingCallbackLog: "ファイルをアップロードし、コールバックを待っています。", taskErrorLog: "タスク失敗：{error}", reviewedLog: "タスク {task} の手動確認が完了しました。",
+};
+
+messages.zh.ocrLabels = {
+  title: "AI 对账中心", subtitle: "上传文件 → 调用 Make Workflow → 接收 JSON 回调 → 结果展示与人工审核。",
+  uploadEyebrow: "文件上传", uploadHeading: "选择文件并配置对账参数", webhookUrl: "Make Webhook 地址", callbackUrl: "回调地址", taskName: "任务名称",
+  taskNamePlaceholder: "例如：本月 AI OCR 对账", dropTitle: "将文件拖拽到此处，或点击“上传文件”", dropHelp: "支持 PDF、JPG、PNG、Excel、Word。选中文件后才可开始对账。",
+  filesPending: "个文件待上传", removeFile: "移除此文件", addFiles: "添加文件", chooseFiles: "选择文件", uploadFiles: "上传文件", start: "开始对账", clear: "清空",
+  filesUploaded: "个文件已上传", uploaded: "已上传", taskCenter: "任务中心", itemUnit: "条", fileCount: "文件数量", status: "状态", callback: "回调地址",
+  viewResult: "查看结果", manualReview: "人工审核", noTasks: "请先上传文件并点击开始对账，任务将在此显示。", results: "AI 对账结果", resultUnit: "条结果",
+  searchPlaceholder: "搜索文件、租户、业主、摘要", file: "文件", tenant: "租户", owner: "业主", amount: "金额", date: "日期", remark: "摘要", reviewStatus: "审核状态",
+  pendingConfirmation: "待确认", noResults: "尚无识别结果，上传文件后开始对账即可。", completeReview: "完成审核", currentTask: "当前任务", reviewPlaceholder: "填写审核备注或确认说明",
+  taskOverview: "任务概览", noTask: "未创建任务", resultCount: "结果数", taskStatus: "任务状态", pendingReview: "待审核", tips: "使用说明",
+  tipWebhook: "可配置 Make Webhook URL 和回调地址。", tipOcr: "上传完成后调用 Make 进行 OCR 与结构化识别。", tipReview: "回调结果会保存为任务结果并支持人工审核。",
+  taskLog: "任务日志", noLogs: "任务日志将在此显示处理过程。", waitingUpload: "等待上传", uploading: "上传中", processing: "AI 处理中", completed: "已完成", failed: "失败",
+  waitingFiles: "等待上传文件", defaultTaskName: "AI 对账任务", uploadingServer: "正在上传文件到服务器...", uploadedContinue: "文件已上传，可继续添加文件或开始对账",
+  uploadFailedRetry: "文件上传失败，请重试。", requireUrls: "请先填写 Webhook 和回调地址，然后重试。", submittingMake: "正在提交文件到 Make workflow...",
+  submittedProcessing: "文件已提交，开始 AI 处理...", submitFailedRetry: "文件提交失败，请重试。", callbackSuccess: "回调已接收，结果已更新。",
+  callbackFailed: "回调返回失败状态。", unknownFile: "未知文件", callbackTimeout: "等待回调超时，请确认 Make 流程是否已触发。",
+  waitingCallback: "已提交至 Make，等待回调结果...", makeFailed: "上传到 Make 失败，请检查 Webhook 地址。", taskSubmitFailed: "任务提交失败。", reviewed: "已审核",
+  uploadHttpError: "上传失败：{status}", uploadSuccessLog: "文件已成功上传至服务器。", uploadErrorLog: "上传失败：{error}", submittedFilesLog: "已提交 {count} 个文件进行对账。",
+  submitErrorLog: "提交失败：{error}", createTaskError: "创建任务失败：{status}", preparedTaskLog: "已准备任务 {task}。", makeErrorLog: "Make Webhook 上传失败。",
+  waitingCallbackLog: "文件已上传，等待回调。", taskErrorLog: "任务失败：{error}", reviewedLog: "任务 {task} 已完成人工审核。",
+};
+
 messages.en.dashboard = {
   quickFilters: "Quick filters", all: "All", thisMonth: "This month", lastMonth: "Last month", thisQuarter: "This quarter", thisYear: "This year",
   startDate: "Start date", endDate: "End date", search: "Search", reset: "Reset", refresh: "Refresh", configure: "Configure",
@@ -916,11 +1088,68 @@ messages.en.dashboard = {
   descriptions: { unpaidRentCount: "Payment status needs review", pendingReconciliationCount: "Matching or review required", activeContractCount: "Currently active agreements", propertyCount: "Properties under management" },
 };
 
+// English is intentionally not exposed as a supported runtime locale.
+delete messages.en;
+
 export function setLocale(nextLocale) {
-  locale.value = nextLocale;
+  const supportedLocale = nextLocale === "zh" || nextLocale === "zh-CN" ? "zh" : "ja";
+  locale.value = supportedLocale;
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem("app-locale", nextLocale);
+    localStorage.setItem("app-locale", supportedLocale);
   }
+}
+
+const localeAliases = { "ja-JP": "ja", "zh-CN": "zh", ja: "ja", zh: "zh" };
+
+const flattenMessages = (source, prefix = "", output = {}) => {
+  Object.entries(source || {}).forEach(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      flattenMessages(value, path, output);
+    } else if (["string", "number", "boolean"].includes(typeof value)) {
+      output[path] = String(value);
+    }
+  });
+  return output;
+};
+
+const setMessageByPath = (target, path, value) => {
+  const parts = String(path).split(".").filter(Boolean);
+  if (!parts.length) return;
+  let cursor = target;
+  parts.slice(0, -1).forEach((part) => {
+    if (!cursor[part] || typeof cursor[part] !== "object") cursor[part] = {};
+    cursor = cursor[part];
+  });
+  cursor[parts.at(-1)] = String(value);
+};
+
+export function applyPublishedTranslations(localeCode, translations = {}) {
+  const targetLocale = localeAliases[localeCode];
+  if (!targetLocale) return;
+  Object.entries(translations).forEach(([key, value]) => setMessageByPath(messages[targetLocale], key, value));
+}
+
+export async function reloadPublishedTranslations(loader) {
+  await Promise.all(["ja-JP", "zh-CN"].map(async (localeCode) => {
+    const result = await loader(localeCode);
+    applyPublishedTranslations(localeCode, result?.translations || {});
+  }));
+}
+
+export function getTranslationMatrixRows() {
+  const ja = flattenMessages(messages.ja);
+  const zh = flattenMessages(messages.zh);
+  return [...new Set([...Object.keys(ja), ...Object.keys(zh)])]
+    .sort((left, right) => left.localeCompare(right))
+    .map((key) => ({
+      key,
+      module: key.split(".")[0] || "common",
+      description: "",
+      enabled: true,
+      "ja-JP": ja[key] || zh[key] || "",
+      "zh-CN": zh[key] || ja[key] || "",
+    }));
 }
 
 export function useI18n() {

@@ -39,7 +39,11 @@ export class I18nController {
   @RequirePermission('i18n.translation.import')
   import(@Body() body: any, @Req() request: Request) {
     if (body?.preview) return this.i18n.importPreview(body.rows ?? [], body.version);
-    return this.i18n.importCommit(body.rows ?? [], { version: body.version, mode: body.mode }, this.actorUserId(request));
+    return this.i18n.importCommit(
+      body.rows ?? [],
+      { version: body.version, mode: body.mode, publish: body.publish !== false },
+      this.actorUserId(request),
+    );
   }
 
   @Get('admin/i18n/export')
