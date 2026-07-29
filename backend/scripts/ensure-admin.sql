@@ -41,7 +41,12 @@ DECLARE
     ARRAY['reconciliation:execute', 'reconciliation', '执行对账'],
     ARRAY['reconciliation:confirm', 'reconciliation', '确认对账'],
     ARRAY['ocr:execute', 'ocr', '执行OCR'],
-    ARRAY['audit_log:view', 'audit', '查看日志']
+    ARRAY['audit_log:view', 'audit', '查看日志'],
+    ARRAY['i18n.translation.view', 'i18n', '查看文案配置'],
+    ARRAY['i18n.translation.edit', 'i18n', '编辑文案配置'],
+    ARRAY['i18n.translation.import', 'i18n', '导入文案配置'],
+    ARRAY['i18n.translation.export', 'i18n', '导出文案配置'],
+    ARRAY['i18n.translation.publish', 'i18n', '发布文案配置']
   ];
 BEGIN
   ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "username" TEXT;

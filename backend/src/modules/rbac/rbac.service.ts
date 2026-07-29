@@ -158,6 +158,11 @@ export class RbacService implements OnModuleInit {
       { key: 'ocr:execute', module: 'ocr', description: '执行OCR' },
       { key: 'audit_log:view', module: 'audit', description: '查看日志' },
       { key: 'setting:email', module: 'setting', description: '管理邮件配置' },
+      { key: 'i18n.translation.view', module: 'i18n', description: '查看文案配置' },
+      { key: 'i18n.translation.edit', module: 'i18n', description: '编辑文案配置' },
+      { key: 'i18n.translation.import', module: 'i18n', description: '导入文案配置' },
+      { key: 'i18n.translation.export', module: 'i18n', description: '导出文案配置' },
+      { key: 'i18n.translation.publish', module: 'i18n', description: '发布文案配置' },
     ];
     for (const permission of permissions) {
       await this.prisma.permission.upsert({
@@ -177,7 +182,7 @@ export class RbacService implements OnModuleInit {
       if (role.code === 'SUPER_ADMIN') {
         permissions.forEach((p: { key: string }) => desired.add(p.key));
       } else if (role.code === 'ADMIN') {
-        ['overview:view','gis:view','knowledge:view','user:view','user:create','user:update','user:reset_password','role:view','property:view','property.view','property.create','property.edit','property.import','property.import.commit','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','owner.financial.view','owner.financial.edit','tenant:view','payment:view','payment:create','payment:update','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute','audit_log:view'].forEach((p) => desired.add(p));
+        ['overview:view','gis:view','knowledge:view','user:view','user:create','user:update','user:reset_password','role:view','property:view','property.view','property.create','property.edit','property.import','property.import.commit','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','owner.financial.view','owner.financial.edit','tenant:view','payment:view','payment:create','payment:update','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute','audit_log:view','i18n.translation.view','i18n.translation.edit','i18n.translation.import','i18n.translation.export','i18n.translation.publish'].forEach((p) => desired.add(p));
       } else if (role.code === 'FINANCE') {
         ['overview:view','gis:view','knowledge:view','property:view','tenant:view','payment:view','payment:create','payment:update','payment:delete','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute'].forEach((p) => desired.add(p));
       } else if (role.code === 'BUSINESS') {
