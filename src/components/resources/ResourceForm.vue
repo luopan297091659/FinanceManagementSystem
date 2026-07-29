@@ -23,6 +23,10 @@
       <label class="span-2">{{ labels.propertyRemark }}<textarea v-model="form.propertyRemark" rows="2"></textarea></label>
 
       <h4 class="form-section-title">{{ labels.roomInformation }}</h4>
+      <template v-if="editing">
+        <label class="span-2">{{ labels.currentContractSearch }}<input v-model="contractSearch" type="search" :placeholder="labels.currentContractSearchPlaceholder" /></label>
+        <label class="span-2">{{ labels.currentContract }}<select v-model="form.currentContractId" :disabled="!contractOptions.length"><option value="" disabled>{{ labels.selectCurrentContract }}</option><option v-for="option in filteredContractOptions" :key="option.id" :value="option.id">{{ option.label }}</option></select></label>
+      </template>
       <label>{{ labels.roomCode }}<input v-model="form.roomCode" /></label>
       <label>{{ labels.houseNumber }}<input v-model="form.houseNumber" /></label>
       <label>{{ labels.roomNumber }}<input v-model="form.roomNumber" /></label>
@@ -57,12 +61,13 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
   labels: { type: Object, required: true },
   common: { type: Object, required: true },
+  contractOptions: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(["submit", "cancel"]);
@@ -71,5 +76,12 @@ const form = computed({
   set: (value) => emit("update:modelValue", value),
 });
 const editing = computed(() => Boolean(props.modelValue.id));
+const contractSearch = ref("");
+const filteredContractOptions = computed(() => {
+  const query = contractSearch.value.trim().toLowerCase();
+  const options = query ? props.contractOptions.filter((option) => option.searchText.includes(query)) : props.contractOptions;
+  const current = props.contractOptions.find((option) => option.id === props.modelValue.currentContractId);
+  return current && !options.some((option) => option.id === current.id) ? [current, ...options] : options;
+});
 const unitTypes = ["ROOM", "HOUSE", "SHOP", "OFFICE", "PARKING", "SIGNBOARD", "BASE_STATION", "VENDING", "MINPAKU", "OTHER"];
 </script>

@@ -128,7 +128,7 @@
           <h3>{{ resourceModalTitle }}</h3>
           <button class="modal-close-button" type="button" @click="closeResourceModal" :title="common.close">×</button>
         </div>
-        <ResourceForm v-model="form" :labels="labels" :common="common" @submit="saveResource" @cancel="closeResourceModal" />
+        <ResourceForm v-model="form" :labels="labels" :common="common" :contract-options="roomContractOptions" @submit="saveResource" @cancel="closeResourceModal" />
       </div>
     </div>
   </section>
@@ -164,6 +164,7 @@ const blankForm = () => ({
   managementStatus: "ACTIVE",
   propertyRemark: "",
   roomCode: "",
+  currentContractId: "",
   houseNumber: "",
   roomNumber: "",
   displayName: "",
@@ -185,6 +186,8 @@ const labels = computed(() => dictionary.value.resourcesLabels);
 const common = computed(() => dictionary.value.common);
 const importLabels = computed(() => dictionary.value.propertyImport);
 const resources = ref([]);
+const contracts = ref([]);
+const originalCurrentContractId = ref("");
 const selectedIds = ref([]);
 const fileInput = ref(null);
 const loading = ref(false);
@@ -218,6 +221,9 @@ const resourceColumns = ref([
 ]);
 
 const showColumnPanel = ref(false);
+const roomContractOptions = computed(() => contracts.value
+  .filter((contract) => contract.roomId === form.value.id)
+  .map((contract) => ({ id: contract.id, label: joinValues(contract.contractNumber, contract.contractorName), searchText: [contract.contractNumber, contract.contractorName, contract.bankSummaryName, contract.status].filter(Boolean).join(" ").toLowerCase() })));
 const visibleResourceColumns = computed(() => resourceColumns.value.filter((column) => column.visible));
 const exportResourceColumns = computed(() => visibleResourceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const filteredResources = computed(() => resources.value.filter(matchesSearch));
@@ -258,11 +264,12 @@ const loadResources = async () => {
   errorMessage.value = "";
   try {
     const [payload, contractRows] = await Promise.all([api.bootstrap(), api.listContracts().catch(() => [])]);
+    contracts.value = contractRows;
     resources.value = (payload.rooms || []).map((room) => {
       const project = payload.projects.find((item) => item.id === room.projectId);
       const building = payload.buildings.find((item) => item.id === room.buildingId);
       const roomContracts = contractRows.filter((contract) => contract.roomId === room.id);
-      const currentContract = roomContracts.find((contract) => contract.status === "ACTIVE") || roomContracts[0];
+      const currentContract = roomContracts.find((contract) => contract.id === room.currentContractId) || roomContracts.find((contract) => contract.status === "ACTIVE") || roomContracts[0];
       return {
         id: room.id,
         buildingId: building?.id || room.buildingId || "",
@@ -356,13 +363,15 @@ const saveResource = async () => {
 
   try {
     const payload = Object.fromEntries(
-      Object.entries(form.value).filter(([key]) => key !== "id"),
+      Object.entries(form.value).filter(([key]) => key !== "id" && key !== "currentContractId"),
     );
     payload.area = form.value.area === "" || form.value.area == null ? "" : String(form.value.area);
     payload.floor = form.value.floor === "" || form.value.floor == null ? "" : String(form.value.floor);
 
-    if (form.value.id) await api.updateRoom(form.value.id, payload);
-    else await api.createRoom(payload);
+    if (form.value.id) {
+      await api.updateRoom(form.value.id, payload);
+      if (form.value.currentContractId || form.value.currentContractId !== originalCurrentContractId.value) await api.setRoomCurrentContract(form.value.id, form.value.currentContractId);
+    } else await api.createRoom(payload);
     await loadResources();
     closeResourceModal();
   } catch (error) {
@@ -375,6 +384,7 @@ const editResource = async (item) => {
   errorMessage.value = "";
   try {
     form.value = { ...blankForm(), ...(await api.getRoom(item.id)) };
+    originalCurrentContractId.value = form.value.currentContractId || "";
     resourceModalTitle.value = labels.value.editResource;
     showResourceModal.value = true;
   } catch (error) {

@@ -185,8 +185,28 @@ export const api = {
     return request(`/contracts/${id}`);
   },
 
+  async createContract(payload) {
+    return request('/contracts', { method: 'POST', body: payload });
+  },
+
   async updateContract(id, payload) {
     return request(`/contracts/${id}`, { method: 'PATCH', body: payload });
+  },
+
+  async deleteContract(id) {
+    return request(`/contracts/${id}`, { method: 'DELETE' });
+  },
+
+  async batchDeleteContracts(ids) {
+    return request('/contracts/batch-delete', { method: 'POST', body: { ids } });
+  },
+
+  async setRoomCurrentContract(roomId, contractId) {
+    return request(`/rooms/${roomId}/current-contract`, { method: 'PATCH', body: { contractId: contractId || null } });
+  },
+
+  async exportContracts(search = '') {
+    return request(`/contracts/export${search ? `?search=${encodeURIComponent(search)}` : ''}`);
   },
 
   async uploadIntegratedImport(payload) {
@@ -196,6 +216,10 @@ export const api = {
   async getIntegratedImport(batchId, params = {}) {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
     return request(`/integrated-import/${batchId}${query ? `?${query}` : ''}`);
+  },
+
+  async listIntegratedImportBatches() {
+    return request('/integrated-import/batches');
   },
 
   async updateIntegratedImportRow(batchId, rowId, payload) {

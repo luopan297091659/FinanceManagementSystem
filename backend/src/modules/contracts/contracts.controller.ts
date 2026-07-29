@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { RequirePermission } from '../rbac/permissions.decorator';
 import { ContractsService } from './contracts.service';
@@ -13,6 +13,24 @@ export class ContractsController {
     return this.contracts.list(search);
   }
 
+  @Post()
+  @RequirePermission('contract.create')
+  create(@Body() body: any, @Req() request: Request) {
+    return this.contracts.create(body, this.actor(request));
+  }
+
+  @Get('export')
+  @RequirePermission('contract.view')
+  export(@Query('search') search?: string) {
+    return this.contracts.exportRows(search);
+  }
+
+  @Post('batch-delete')
+  @RequirePermission('contract.edit')
+  batchDelete(@Body('ids') ids: unknown, @Req() request: Request) {
+    return this.contracts.batchDelete(ids, this.actor(request));
+  }
+
   @Get(':contractId')
   @RequirePermission('contract.view')
   get(@Param('contractId') contractId: string) {
@@ -23,6 +41,12 @@ export class ContractsController {
   @RequirePermission('contract.edit')
   update(@Param('contractId') contractId: string, @Body() body: any, @Req() request: Request) {
     return this.contracts.update(contractId, body, this.actor(request));
+  }
+
+  @Delete(':contractId')
+  @RequirePermission('contract.edit')
+  delete(@Param('contractId') contractId: string, @Req() request: Request) {
+    return this.contracts.delete(contractId, this.actor(request));
   }
 
   private actor(request: Request) {
@@ -38,6 +62,12 @@ export class IntegratedImportController {
   @RequirePermission('contract.import')
   upload(@Body() body: any, @Req() request: Request) {
     return this.contracts.uploadIntegrated(body, this.actor(request));
+  }
+
+  @Get('batches')
+  @RequirePermission('contract.import')
+  batches() {
+    return this.contracts.listImportBatches();
   }
 
   @Get(':batchId')
@@ -77,6 +107,12 @@ export class LinkedContractsController {
   @RequirePermission('contract.view')
   roomContracts(@Param('roomId') roomId: string) {
     return this.contracts.listLinked({ roomId });
+  }
+
+  @Patch('rooms/:roomId/current-contract')
+  @RequirePermission('contract.edit')
+  setRoomCurrentContract(@Param('roomId') roomId: string, @Body('contractId') contractId: unknown, @Req() request: Request) {
+    return this.contracts.setRoomCurrentContract(roomId, contractId, (request as any).user?.id as string | undefined);
   }
 
   @Get('properties/:propertyId/contract-summary')

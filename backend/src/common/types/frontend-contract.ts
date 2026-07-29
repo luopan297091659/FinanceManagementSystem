@@ -35,6 +35,7 @@ export interface FrontendRoom {
   projectId?: string | null;
   buildingId: string;
   roomCode?: string | null;
+  currentContractId?: string | null;
   houseNumber?: string | null;
   number: string | null;
   displayName?: string | null;

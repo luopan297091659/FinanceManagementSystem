@@ -49,6 +49,33 @@ export class ContractsService {
     return this.toContract(contract);
   }
 
+  async exportRows(search?: string) {
+    return this.list(search);
+  }
+
+  async create(body: Record<string, unknown>, actorUserId?: string) {
+    const roomId = normalizeText(body.roomId);
+    if (!roomId) throw new BadRequestException('contract.error.roomRequired');
+    const room = await this.prisma.room.findFirst({ where: { id: roomId, deletedAt: null }, include: { property: true } });
+    if (!room || room.property.deletedAt) throw new NotFoundException('contract.error.roomNotFound');
+    const contractNumber = normalizeText(body.contractNumber) || `CTR-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${createHash('sha1').update(`${roomId}|${Date.now()}|${Math.random()}`).digest('hex').slice(0, 4).toUpperCase()}`;
+    const duplicate = await this.prisma.contract.findFirst({ where: { contractNumber } });
+    if (duplicate) throw new ConflictException('contract.error.numberExists');
+    const data: Prisma.ContractUncheckedCreateInput = {
+      propertyId: room.propertyId,
+      roomId,
+      contractNumber,
+      status: body.status !== undefined ? this.validateStatus(body.status) : ContractStatus.DRAFT,
+      createdBy: actorUserId,
+      updatedBy: actorUserId,
+    };
+    this.applyEditableFields(data, body);
+    const created = await this.prisma.contract.create({ data });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'contract.create', entityType: 'Contract', entityId: created.id, after: json(created) } });
+    await this.setRoomCurrentContract(roomId, created.id, actorUserId);
+    return this.get(created.id);
+  }
+
   async listLinked(where: { propertyId?: string; roomId?: string }) {
     const contracts = await this.prisma.contract.findMany({
       where: { ...where, deletedAt: null },
@@ -73,20 +100,74 @@ export class ContractsService {
   async update(id: string, body: Record<string, unknown>, actorUserId?: string) {
     const before = await this.prisma.contract.findFirst({ where: { id, deletedAt: null } });
     if (!before) throw new NotFoundException('contract.error.notFound');
-    const allowed = ['contractorName', 'contractorNameKana', 'contractorType', 'payerName', 'payerNameKana', 'bankSummaryName', 'paymentMethod', 'paymentMonthType', 'guaranteeCompanyName', 'guaranteeCompanyNameKana', 'insuranceName', 'insurancePeriod', 'collectionAccount', 'managementContractType', 'remark'] as const;
     const data: Prisma.ContractUpdateInput = { updatedBy: actorUserId };
-    for (const key of allowed) if (body[key] !== undefined) (data as any)[key] = normalizeText(body[key]) || null;
-    for (const key of ['startDate', 'endDate', 'insuranceStartDate', 'insuranceEndDate'] as const) {
-      if (body[key] !== undefined) (data as any)[key] = parseDate(body[key]);
-    }
-    for (const key of ['monthlyRent', 'managementFee', 'deposit', 'keyMoney', 'guaranteeDeposit', 'guaranteeFee', 'keyReplacementFee', 'renewalAdministrativeFee', 'insuranceFee'] as const) {
-      if (body[key] !== undefined) (data as any)[key] = decimalOrNull(body[key]);
-    }
-    if (body.status !== undefined) data.status = this.validateStatus(body.status);
+    this.applyEditableFields(data, body);
     const updated = await this.prisma.contract.update({ where: { id }, data });
     await this.prisma.auditLog.create({ data: { actorUserId, action: 'contract.update', entityType: 'Contract', entityId: id, before: json(before), after: json(updated) } });
+    const room = await this.prisma.room.findUnique({ where: { id: updated.roomId }, select: { currentContractId: true } });
+    if (room?.currentContractId === updated.id) {
+      await this.prisma.room.update({ where: { id: updated.roomId }, data: { status: updated.status === 'ACTIVE' ? 'OCCUPIED' : 'VACANT', updatedBy: actorUserId } });
+    } else if (!room?.currentContractId) {
+      await this.refreshRoomCurrentContract(updated.roomId, actorUserId);
+    }
     await this.recalculateProperty(updated.propertyId);
     return this.get(id);
+  }
+
+  async delete(id: string, actorUserId?: string) {
+    const contract = await this.prisma.contract.findFirst({ where: { id, deletedAt: null } });
+    if (!contract) throw new NotFoundException('contract.error.notFound');
+    const deletedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contract.update({ where: { id }, data: { deletedAt, updatedBy: actorUserId } });
+      await tx.room.updateMany({ where: { id: contract.roomId, currentContractId: id }, data: { currentContractId: null, updatedBy: actorUserId } });
+      await tx.auditLog.create({ data: { actorUserId, action: 'contract.delete', entityType: 'Contract', entityId: id, before: json(contract), after: { deletedAt: deletedAt.toISOString() } } });
+    });
+    await this.refreshRoomCurrentContract(contract.roomId, actorUserId);
+    await this.recalculateProperty(contract.propertyId);
+    return { ok: true, id };
+  }
+
+  async batchDelete(value: unknown, actorUserId?: string) {
+    const ids = [...new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && id.length > 0) : [])];
+    if (!ids.length) throw new BadRequestException('contract.error.idsRequired');
+    if (ids.length > 500) throw new BadRequestException('contract.error.tooManyIds');
+    const contracts = await this.prisma.contract.findMany({ where: { id: { in: ids }, deletedAt: null } });
+    if (!contracts.length) return { ok: true, deletedCount: 0 };
+    const existingIds = contracts.map((contract) => contract.id);
+    const deletedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contract.updateMany({ where: { id: { in: existingIds }, deletedAt: null }, data: { deletedAt, updatedBy: actorUserId } });
+      await tx.room.updateMany({ where: { currentContractId: { in: existingIds } }, data: { currentContractId: null, updatedBy: actorUserId } });
+      await tx.auditLog.create({ data: { actorUserId, action: 'contract.batch_delete', entityType: 'Contract', after: { ids: existingIds, deletedCount: existingIds.length, deletedAt: deletedAt.toISOString() } } });
+    });
+    const roomIds = [...new Set(contracts.map((contract) => contract.roomId))];
+    const propertyIds = [...new Set(contracts.map((contract) => contract.propertyId))];
+    for (const roomId of roomIds) await this.refreshRoomCurrentContract(roomId, actorUserId);
+    for (const propertyId of propertyIds) await this.recalculateProperty(propertyId);
+    return { ok: true, deletedCount: existingIds.length };
+  }
+
+  async setRoomCurrentContract(roomId: string, value: unknown, actorUserId?: string) {
+    const room = await this.prisma.room.findFirst({ where: { id: roomId, deletedAt: null } });
+    if (!room) throw new NotFoundException('contract.error.roomNotFound');
+    const contractId = normalizeText(value) || null;
+    const contract = contractId
+      ? await this.prisma.contract.findFirst({ where: { id: contractId, roomId, deletedAt: null } })
+      : null;
+    if (contractId && !contract) throw new BadRequestException('contract.error.contractRoomMismatch');
+    const before = { currentContractId: room.currentContractId, status: room.status };
+    const updated = await this.prisma.room.update({
+      where: { id: roomId },
+      data: {
+        currentContractId: contract?.id ?? null,
+        status: contract?.status === 'ACTIVE' ? 'OCCUPIED' : 'VACANT',
+        updatedBy: actorUserId,
+      },
+    });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'room.current_contract.update', entityType: 'Room', entityId: roomId, before, after: { currentContractId: updated.currentContractId, status: updated.status } } });
+    await this.recalculateProperty(room.propertyId);
+    return { ok: true, roomId, currentContractId: updated.currentContractId, status: updated.status };
   }
 
   async uploadIntegrated(body: { originalName?: string; fileHash?: string; rows?: SourceRow[] }, actorUserId?: string) {
@@ -115,6 +196,14 @@ export class ContractsService {
     });
     await this.refreshStats(batch.id);
     return this.getImportBatch(batch.id, { page: 1, pageSize: 50 });
+  }
+
+  async listImportBatches() {
+    return this.prisma.propertyImportBatch.findMany({
+      where: { importType: 'INTEGRATED' },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
   }
 
   async getImportBatch(batchId: string, query: Record<string, unknown> = {}) {
@@ -296,6 +385,38 @@ export class ContractsService {
     const statuses = new Set(contracts.map((item) => item.status));
     const managementStatus = statuses.has('ACTIVE') ? 'ACTIVE' : statuses.has('CANCELLATION_SETTLEMENT') ? 'CANCELLATION_SETTLEMENT' : statuses.has('DRAFT') || statuses.has('FUTURE') ? 'DRAFT' : 'UNCONTRACTED';
     await this.prisma.property.update({ where: { id: propertyId }, data: { managementStatus } });
+  }
+
+  private applyEditableFields(data: Record<string, unknown>, body: Record<string, unknown>) {
+    const textFields = ['contractorName', 'contractorNameKana', 'contractorType', 'payerName', 'payerNameKana', 'bankSummaryName', 'paymentMethod', 'paymentMonthType', 'guaranteeCompanyName', 'guaranteeCompanyNameKana', 'insuranceName', 'insurancePeriod', 'collectionAccount', 'managementContractType', 'remark'] as const;
+    for (const key of textFields) if (body[key] !== undefined) data[key] = normalizeText(body[key]) || null;
+    for (const key of ['startDate', 'endDate', 'insuranceStartDate', 'insuranceEndDate'] as const) {
+      if (body[key] !== undefined) data[key] = parseDate(body[key]);
+    }
+    for (const key of ['monthlyRent', 'managementFee', 'deposit', 'keyMoney', 'guaranteeDeposit', 'guaranteeFee', 'keyReplacementFee', 'renewalAdministrativeFee', 'insuranceFee'] as const) {
+      if (body[key] !== undefined) data[key] = decimalOrNull(body[key]);
+    }
+    if (body.status !== undefined) data.status = this.validateStatus(body.status);
+  }
+
+  private async refreshRoomCurrentContract(roomId: string, actorUserId?: string) {
+    const contracts = await this.prisma.contract.findMany({
+      where: { roomId, deletedAt: null },
+      select: { id: true, status: true },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+    const current = contracts.find((contract) => contract.status === 'ACTIVE')
+      ?? contracts.find((contract) => contract.status === 'FUTURE')
+      ?? contracts[0]
+      ?? null;
+    await this.prisma.room.update({
+      where: { id: roomId },
+      data: {
+        currentContractId: current?.id ?? null,
+        status: current?.status === 'ACTIVE' ? 'OCCUPIED' : 'VACANT',
+        updatedBy: actorUserId,
+      },
+    });
   }
 
   private async refreshStats(batchId: string, complete = false) {
