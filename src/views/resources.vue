@@ -208,6 +208,8 @@ const resourceColumns = ref([
   { key: "house", labelKey: "houseRoom", visible: true },
   { key: "status", labelKey: "status", visible: true },
   { key: "address", labelKey: "address", visible: true },
+  { key: "contractPresence", labelKey: "contractPresence", visible: true },
+  { key: "currentContract", labelKey: "currentContract", visible: true },
   { key: "area", labelKey: "area", visible: false },
   { key: "floor", labelKey: "floor", visible: false },
   { key: "buildingLocation", labelKey: "buildingCoordinates", visible: false },
@@ -255,10 +257,12 @@ const loadResources = async () => {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const payload = await api.bootstrap();
+    const [payload, contractRows] = await Promise.all([api.bootstrap(), api.listContracts().catch(() => [])]);
     resources.value = (payload.rooms || []).map((room) => {
       const project = payload.projects.find((item) => item.id === room.projectId);
       const building = payload.buildings.find((item) => item.id === room.buildingId);
+      const roomContracts = contractRows.filter((contract) => contract.roomId === room.id);
+      const currentContract = roomContracts.find((contract) => contract.status === "ACTIVE") || roomContracts[0];
       return {
         id: room.id,
         buildingId: building?.id || room.buildingId || "",
@@ -293,6 +297,10 @@ const loadResources = async () => {
         status: room.status,
         note: room.note,
         roomRemark: room.remark || "",
+        contractPresence: roomContracts.length > 0,
+        currentContractId: currentContract?.id || "",
+        currentContract: currentContract ? joinValues(currentContract.contractNumber, currentContract.contractorName) : "",
+        currentContractStatus: currentContract?.status || "UNCONTRACTED",
       };
     });
     selectedIds.value = selectedIds.value.filter((id) => resources.value.some((item) => item.id === id));
@@ -314,6 +322,8 @@ const getExportValue = (item, key) =>
     project: joinValues(item.projectName, item.buildingName),
     house: joinValues(item.houseNumber, item.roomNumber),
     address: item.address || "",
+    contractPresence: item.contractPresence ? labels.value.hasContract : labels.value.noContract,
+    currentContract: item.currentContract || "",
     area: item.area || "",
     floor: item.floor ?? "",
     buildingLocation: joinValues(item.buildingLatitude, item.buildingLongitude, ", "),
@@ -325,7 +335,7 @@ const getExportValue = (item, key) =>
 const joinValues = (first, second, separator = " / ") => [first, second].filter((value) => value !== null && value !== undefined && value !== "").join(separator);
 
 const resetResourceColumns = () => {
-  const defaults = new Set(["project", "house", "status", "address"]);
+  const defaults = new Set(["project", "house", "status", "address", "contractPresence", "currentContract"]);
   resourceColumns.value.forEach((column) => {
     column.visible = defaults.has(column.key);
   });
@@ -342,7 +352,7 @@ watch(() => filteredResources.value.length, (total) => {
 });
 
 const saveResource = async () => {
-  if (!form.value.projectName || !form.value.buildingName || !form.value.houseNumber) return;
+  if ((!form.value.id && !form.value.projectName) || !form.value.buildingName || !form.value.houseNumber) return;
 
   try {
     const payload = Object.fromEntries(
@@ -516,8 +526,11 @@ const exportImportErrors = async () => {
   }
 };
 
-onMounted(() => {
-  loadResources();
+onMounted(async () => {
+  await loadResources();
+  const roomId = new URLSearchParams(window.location.search).get("roomId");
+  const room = resources.value.find((item) => item.id === roomId);
+  if (room) await editResource(room);
 });
 </script>
 

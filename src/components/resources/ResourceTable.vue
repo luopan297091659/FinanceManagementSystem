@@ -49,6 +49,12 @@
               <template v-else-if="column.key === 'status'">
                 <span class="status-pill" :class="(item.status || 'vacant').toLowerCase()">{{ statusLabel(item.status) }}</span>
               </template>
+              <template v-else-if="column.key === 'contractPresence'">
+                <span class="status-chip" :class="item.contractPresence ? 'contract-status-active' : 'contract-status-uncontracted'">{{ item.contractPresence ? labels.hasContract : labels.noContract }}</span>
+              </template>
+              <template v-else-if="column.key === 'currentContract'">
+                <button v-if="item.currentContractId" class="table-link-button" type="button" @click="openContract(item.currentContractId)">{{ item.currentContract }}</button>
+              </template>
               <template v-else-if="column.key === 'note'">
                 {{ item.note || "" }}
               </template>
@@ -130,4 +136,8 @@ const statusLabel = (status) =>
 
 const hasValue = (value) => value !== null && value !== undefined && value !== "";
 const coordinate = (latitude, longitude) => [latitude, longitude].filter(hasValue).join(", ");
+const openContract = (contractId) => {
+  window.history.pushState({}, "", `/contracts?contractId=${encodeURIComponent(contractId)}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+};
 </script>

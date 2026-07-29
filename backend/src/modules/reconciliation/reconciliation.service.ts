@@ -279,7 +279,8 @@ export class ReconciliationService {
     if (!contract) throw new BadRequestException('Selected contract does not exist');
 
     const normalizedBankSummary = normalizeBankSummary(dto.normalizedBankSummary ?? record.normalizedBankSummary ?? record.originalBankSummary);
-    const payerName = dto.payerName || contract.tenant.name;
+    const contractPartyName = contract.payerName || contract.contractorName || contract.tenant?.name || '';
+    const payerName = dto.payerName || contractPartyName;
     const updated = await this.prisma.$transaction(async (tx) => {
       const before = await tx.reconciliationRecord.findUnique({ where: { id: recordId } });
       const after = await tx.reconciliationRecord.update({
@@ -289,7 +290,7 @@ export class ReconciliationService {
           roomId: dto.roomId || contract.roomId,
           contractId: contract.id,
           contractorId: dto.contractorId || contract.tenantId,
-          contractorName: dto.contractorName || contract.tenant.name,
+          contractorName: dto.contractorName || contract.contractorName || contract.tenant?.name,
           payerId: dto.payerId || contract.tenantId,
           payerName,
           normalizedBankSummary,
@@ -434,7 +435,7 @@ export class ReconciliationService {
             type: 'INCOME',
             roomId: record.roomId,
             date: record.transactionDate,
-            counterparty: record.payerName ?? record.contract?.tenant.name,
+            counterparty: record.payerName ?? record.contract?.payerName ?? record.contract?.contractorName ?? record.contract?.tenant?.name,
             counterpartyRaw: record.originalBankSummary,
             contentSummary: record.normalizedBankSummary,
             fileAmount: record.depositAmount,
@@ -570,7 +571,10 @@ export class ReconciliationService {
             data: {
               id: this.pick(row, ['contractId', 'Contract ID', '契约书ID']) || undefined,
               roomId: room.id,
+              propertyId: property.id,
               tenantId: tenant.id,
+              contractorName,
+              payerName,
               contractNumber: this.pick(row, ['contractNo', 'Contract No', '契约编号']),
               startDate: this.parseDate(this.pick(row, ['contractStartDate', 'Contract Start Date', '契約開始日'])) ?? new Date(),
               endDate: this.parseDate(this.pick(row, ['contractEndDate', 'Contract End Date', '契約満了日'])),
@@ -626,7 +630,7 @@ export class ReconciliationService {
     const validAliases = aliases.filter(
       (alias) =>
         this.isContractValid(alias.contract, record.transactionDate) &&
-        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.payerName, alias.contract.tenant.name]),
+        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.payerName, alias.contract.payerName, alias.contract.contractorName, alias.contract.tenant?.name]),
     );
 
     const validCandidates = validAliases.length
@@ -638,13 +642,13 @@ export class ReconciliationService {
           .filter(
             (contract) =>
               this.isContractValid(contract, record.transactionDate) &&
-              this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.tenant.name]),
+              this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.payerName, contract.contractorName, contract.tenant?.name]),
           )
           .map((contract) => ({
             contractId: contract.id,
             originalBankSummary: record.originalBankSummary,
             normalizedBankSummary: record.normalizedBankSummary,
-            payerName: contract.tenant.name,
+            payerName: contract.payerName || contract.contractorName || contract.tenant?.name,
             contract,
           }));
 
@@ -654,7 +658,7 @@ export class ReconciliationService {
     }
 
     const candidate = validCandidates[0];
-    const amountMatches = new Prisma.Decimal(record.depositAmount).equals(candidate.contract.monthlyRent);
+    const amountMatches = candidate.contract.monthlyRent != null && new Prisma.Decimal(record.depositAmount).equals(candidate.contract.monthlyRent);
     const duplicate = await this.prisma.reconciliationRecord.findFirst({
       where: { recordHash: record.recordHash, submittedAt: { not: null }, NOT: { id: record.id } },
     });
@@ -670,9 +674,9 @@ export class ReconciliationService {
         roomId: candidate.contract.roomId,
         contractId: candidate.contractId,
         contractorId: candidate.contract.tenantId,
-        contractorName: candidate.contract.tenant.name,
+        contractorName: candidate.contract.contractorName || candidate.contract.tenant?.name,
         payerId: candidate.contract.tenantId,
-        payerName: candidate.payerName || candidate.contract.tenant.name,
+        payerName: candidate.payerName || candidate.contract.payerName || candidate.contract.contractorName || candidate.contract.tenant?.name,
         registeredBankSummaryName: candidate.originalBankSummary,
         matchMode: 'AUTO',
         matchScore: 100,
@@ -820,9 +824,9 @@ export class ReconciliationService {
       propertyId: contract.room?.propertyId,
       propertyName: contract.room?.property?.name,
       contractorId: contract.tenantId,
-      contractorName: contract.tenant?.name,
+      contractorName: contract.contractorName || contract.tenant?.name,
       payerId: contract.tenantId,
-      payerName: contract.tenant?.name,
+      payerName: contract.payerName || contract.contractorName || contract.tenant?.name,
       startDate: contract.startDate?.toISOString().slice(0, 10),
       endDate: contract.endDate?.toISOString().slice(0, 10),
       status: contract.status,
@@ -830,8 +834,8 @@ export class ReconciliationService {
     };
   }
 
-  private isContractValid(contract: { startDate: Date; endDate: Date | null }, transactionDate: Date | null) {
-    if (!transactionDate) return false;
+  private isContractValid(contract: { startDate: Date | null; endDate: Date | null }, transactionDate: Date | null) {
+    if (!transactionDate || !contract.startDate) return false;
     const time = transactionDate.getTime();
     return contract.startDate.getTime() <= time && (!contract.endDate || contract.endDate.getTime() >= time);
   }

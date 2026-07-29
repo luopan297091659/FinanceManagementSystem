@@ -2,10 +2,9 @@
   <form class="panel-form" @submit.prevent="emit('submit')">
     <div class="field-grid">
       <h4 class="form-section-title">{{ labels.buildingInformation }}</h4>
-      <label>{{ labels.project }}<input v-model="form.projectName" required /></label>
+      <label v-if="!editing">{{ labels.project }}<input v-model="form.projectName" required /></label>
       <label>{{ labels.building }}<input v-model="form.buildingName" required /></label>
       <label>{{ labels.propertyCode }}<input v-model="form.propertyCode" /></label>
-      <label>{{ labels.buildingNameKana }}<input v-model="form.buildingNameKana" /></label>
       <label>{{ labels.postalCode }}<input v-model="form.postalCode" /></label>
       <label>{{ labels.address }}<input v-model="form.address" /></label>
       <label>{{ labels.prefecture }}<input v-model="form.prefecture" /></label>
@@ -22,8 +21,6 @@
           <option value="INACTIVE">{{ labels.inactive }}</option>
         </select>
       </label>
-      <label class="readonly-field">{{ labels.buildingLatitude }}<input v-model="form.buildingLatitude" type="text" readonly /></label>
-      <label class="readonly-field">{{ labels.buildingLongitude }}<input v-model="form.buildingLongitude" type="text" readonly /></label>
       <label class="span-2">{{ labels.propertyRemark }}<textarea v-model="form.propertyRemark" rows="2"></textarea></label>
 
       <h4 class="form-section-title">{{ labels.roomInformation }}</h4>
@@ -38,11 +35,7 @@
         </select>
       </label>
       <label>{{ labels.roomUsageType }}<input v-model="form.roomUsageType" /></label>
-      <label>{{ labels.area }}<input v-model.number="form.area" type="number" min="0" step="0.01" /></label>
-      <label>{{ labels.floor }}<input v-model.number="form.floor" type="number" /></label>
       <label>{{ labels.floorLabel }}<input v-model="form.floorLabel" /></label>
-      <label>{{ labels.roomLatitude }}<input v-model="form.roomLatitude" type="text" :placeholder="labels.defaultBuilding" /></label>
-      <label>{{ labels.roomLongitude }}<input v-model="form.roomLongitude" type="text" :placeholder="labels.defaultBuilding" /></label>
       <label>
         {{ labels.status }}
         <select v-model="form.status">

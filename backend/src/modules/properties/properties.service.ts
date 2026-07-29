@@ -23,7 +23,8 @@ export class PropertiesService {
     const property = await this.prisma.property.findFirst({
       where: { id, deletedAt: null },
       include: {
-        rooms: { where: { deletedAt: null }, orderBy: { roomNumber: 'asc' } },
+        rooms: { where: { deletedAt: null }, include: { contracts: { where: { deletedAt: null }, orderBy: { startDate: 'desc' } } }, orderBy: { roomNumber: 'asc' } },
+        contracts: { where: { deletedAt: null }, include: { room: true, tenant: true }, orderBy: { startDate: 'desc' } },
         ownerships: { where: { deletedAt: null }, include: { owner: true }, orderBy: { isPrimary: 'desc' } },
       },
     });

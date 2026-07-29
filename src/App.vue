@@ -134,7 +134,7 @@
 
       <GisView v-else-if="activeView === 'gis'" />
       <ResourcesView v-else-if="activeView === 'resources'" />
-      <CustomersView v-else-if="activeView === 'customers'" />
+      <ContractsView v-else-if="activeView === 'contracts'" />
       <FinanceView v-else-if="activeView === 'finance'" />
       <OcrView v-else-if="activeView === 'ocr'" />
       <BankReconciliationView v-else-if="activeView === 'bank-reconciliation'" />
@@ -149,7 +149,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import LoginView from "./views/login.vue";
 import GisView from "./views/gis/index.vue";
 import ResourcesView from "./views/resources.vue";
-import CustomersView from "./views/customers.vue";
+import ContractsView from "./views/contracts.vue";
 import FinanceView from "./views/finance.vue";
 import OcrView from "./views/ocr.vue";
 import BankReconciliationView from "./views/bank-reconciliation.vue";
@@ -201,7 +201,7 @@ const navItems = computed(() => [
   { key: "overview", label: dictionary.value.overview, icon: "dashboard" },
   { key: "gis", label: dictionary.value.gis, icon: "map" },
   { key: "resources", label: dictionary.value.resources, icon: "building" },
-  { key: "customers", label: dictionary.value.customers, icon: "users" },
+  { key: "contracts", label: dictionary.value.contracts, icon: "users", permissions: ["contract.view"] },
   { key: "finance", label: dictionary.value.finance, icon: "finance" },
   { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: "finance", permissions: ["reconciliation.bank.view"] },
   { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: "search", permissions: ["reconciliation.ocr.view", "ocr:execute"] },
@@ -257,6 +257,10 @@ const setActiveNavItem = (item) => {
     window.history.pushState({}, "", "/ai-reconciliation/bank");
   } else if (item.key === "ocr") {
     window.history.pushState({}, "", "/ai-reconciliation/ocr");
+  } else if (item.key === "contracts") {
+    window.history.pushState({}, "", "/contracts");
+  } else if (item.key === "resources") {
+    window.history.pushState({}, "", "/resources");
   }
 };
 
@@ -274,6 +278,13 @@ const applyRouteFromLocation = () => {
     activeNavKey.value = "ocr";
     activeView.value = "ocr";
     isAiAnalysisExpanded.value = true;
+  } else if (path.startsWith("/contracts") || path.startsWith("/customers")) {
+    if (path.startsWith("/customers")) window.history.replaceState({}, "", "/contracts");
+    activeNavKey.value = "contracts";
+    activeView.value = "contracts";
+  } else if (path.startsWith("/resources")) {
+    activeNavKey.value = "resources";
+    activeView.value = "resources";
   }
 };
 

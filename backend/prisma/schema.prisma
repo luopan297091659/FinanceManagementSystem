@@ -43,6 +43,7 @@ enum FeeValueType {
 enum ContractStatus {
   DRAFT
   ACTIVE
+  CANCELLATION_SETTLEMENT
   EXPIRED
   TERMINATED
   FUTURE
@@ -348,6 +349,7 @@ model Property {
   deletedAt             DateTime?
   note                  String?
   rooms                 Room[]
+  contracts             Contract[]
   ownerships            PropertyOwnership[]
   importRows            PropertyImportRow[]
   documents             Document[]
@@ -549,6 +551,7 @@ model PropertyImportBatch {
   failedRows   Int       @default(0)
   conflictRows Int       @default(0)
   status       String    @default("PENDING")
+  importType   String    @default("PROPERTY")
   mappingJson  Json?
   createdBy    String?
   createdAt    DateTime  @default(now())
@@ -574,6 +577,11 @@ model PropertyImportRow {
   detectedUnitType       String   @default("ROOM")
   propertyId             String?
   roomId                 String?
+  contractId             String?
+  contractAction         String?
+  contractStatus         String?
+  contractDataJson       Json?
+  contractConflictReason String?
   action                 String?
   status                 String   @default("PENDING")
   conflictReason         String?
@@ -585,28 +593,58 @@ model PropertyImportRow {
   batch    PropertyImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   property Property?           @relation(fields: [propertyId], references: [id])
   room     Room?               @relation(fields: [roomId], references: [id])
+  contract Contract?           @relation(fields: [contractId], references: [id])
 
   @@unique([batchId, sourceRow])
   @@index([propertyId])
   @@index([roomId])
+  @@index([contractId])
   @@index([status])
   @@index([action])
 }
 
 model Contract {
   id                    String                 @id @default(uuid())
+  propertyId            String
   roomId                String
-  tenantId              String
+  tenantId              String?
+  property              Property               @relation(fields: [propertyId], references: [id])
   room                  Room                   @relation(fields: [roomId], references: [id])
-  tenant                Tenant                 @relation(fields: [tenantId], references: [id])
-  contractNumber        String?
-  startDate             DateTime
+  tenant                Tenant?                @relation(fields: [tenantId], references: [id])
+  contractNumber        String?                @unique
+  externalContractId    String?                @unique
+  contractorName        String?
+  contractorNameKana    String?
+  contractorType        String?
+  payerName             String?
+  payerNameKana         String?
+  bankSummaryName       String?
+  startDate             DateTime?
   endDate               DateTime?
-  monthlyRent           Decimal                @db.Decimal(18, 2)
+  paymentMethod         String?
+  paymentMonthType      String?
+  monthlyRent           Decimal?               @db.Decimal(18, 2)
   managementFee         Decimal?               @db.Decimal(18, 2)
   deposit               Decimal?               @db.Decimal(18, 2)
   keyMoney              Decimal?               @db.Decimal(18, 2)
+  guaranteeDeposit      Decimal?               @db.Decimal(18, 2)
   guaranteeFee          Decimal?               @db.Decimal(18, 2)
+  keyReplacementFee     Decimal?               @db.Decimal(18, 2)
+  renewalAdministrativeFee Decimal?            @db.Decimal(18, 2)
+  guaranteeCompanyName  String?
+  guaranteeCompanyNameKana String?
+  insuranceName         String?
+  insuranceFee          Decimal?               @db.Decimal(18, 2)
+  insurancePeriod       String?
+  insuranceStartDate    DateTime?
+  insuranceEndDate      DateTime?
+  collectionAccount     String?
+  managementContractType String?
+  remark                String?                @db.Text
+  sourceDataJson        Json?
+  createdBy             String?
+  updatedBy             String?
+  deletedAt             DateTime?
   otherMonthlyFee1Name  String?
   otherMonthlyFee1      Decimal?               @db.Decimal(18, 2)
   otherMonthlyFee2Name  String?
@@ -622,13 +660,37 @@ model Contract {
   anomalyAlerts         AnomalyAlert[]
   paymentAliases        ContractPaymentAlias[]
   partyHistories        ContractPartyHistory[]
+  charges               ContractCharge[]
+  importRows            PropertyImportRow[]
   reconciliationRecords ReconciliationRecord[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
+  @@index([propertyId])
   @@index([roomId, status])
   @@index([tenantId])
   @@index([nextDueDate])
+  @@index([bankSummaryName])
+  @@index([startDate, endDate])
+  @@index([deletedAt])
+}
+
+model ContractCharge {
+  id          String   @id @default(cuid())
+  contractId  String
+  chargeType  String
+  itemName    String
+  amount      Decimal? @db.Decimal(18, 2)
+  monthCount  Decimal? @db.Decimal(8, 2)
+  billingMode String?
+  sortOrder   Int      @default(0)
+  remark      String?  @db.Text
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([chargeType])
 }
 
 model ContractPaymentAlias {

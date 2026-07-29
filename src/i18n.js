@@ -22,6 +22,7 @@ export const messages = {
     gis: "GIS 地図",
     resources: "物件管理",
     customers: "顧客管理",
+    contracts: "契約管理",
     finance: "会計管理",
     ocr: "AI 对账中心",
     knowledge: "AI ナレッジ",
@@ -35,6 +36,7 @@ export const messages = {
       gis: "地図、検索、レイヤー、リスク状態を統合して運営状況を可視化します。",
       resources: "建物、部屋、空室状態を管理します。",
       customers: "契約者、家主、関係者の情報を一元管理します。",
+      contracts: "物件・部屋に紐づく契約、費用、入金名義を管理します。",
       finance: "入出金台帳、計上状態、確認状態を管理します。",
       ocr: "OCR/AI 解析は第2版で拡張し、現在は文書データの保管を優先します。",
       knowledge: "文書と業務知識を蓄積し、第2版のAI検索に備えます。",
@@ -123,6 +125,10 @@ export const messages = {
       roomUsageType: "部屋用途",
       floorLabel: "階表示",
       roomRemark: "部屋備考",
+      contractPresence: "契約有無",
+      currentContract: "現在の契約",
+      hasContract: "契約あり",
+      noContract: "未契約",
       unitTypes: { ROOM: "部屋", HOUSE: "戸建て", SHOP: "店舗", OFFICE: "事務所", PARKING: "駐車場", SIGNBOARD: "看板", BASE_STATION: "基地局", VENDING: "自販機", MINPAKU: "民泊", OTHER: "その他" },
       roomLatitude: "部屋カスタム緯度",
       roomLongitude: "部屋カスタム経度",
@@ -320,6 +326,14 @@ export const messages = {
       edit: "編集",
       delete: "削除",
     },
+    contractsLabels: {
+      eyebrow: "契約管理", heading: "物件・部屋別の契約台帳", searchPlaceholder: "物件、部屋、契約番号、契約者、銀行摘要名義を検索...", integratedImport: "総合情報を取込", refresh: "再読込", list: "契約一覧", loadFailed: "契約データの読込に失敗しました", importFailed: "総合情報の取込に失敗しました",
+      propertyRoom: "物件 / 部屋", contractNo: "契約ID", contractor: "契約者", payerKana: "振込名義人カナ", contractorType: "個人・法人", period: "契約期間", rentFees: "賃料 / 管理費", rent: "賃料", managementFee: "管理費・共益費", bankSummary: "銀行摘要名義", status: "契約状態", details: "契約詳細", paymentMethod: "支払方法", depositKeyMoney: "敷金 / 礼金", guaranteeCompany: "保証会社", guaranteeFee: "保証料", insurance: "保険", collectionAccount: "賃料回収口座", managementContractType: "管理委託契約方式", remark: "メモ", charges: "契約費用明細", months: "か月", noCharges: "追加費用はありません。",
+      previewTitle: "物件・契約総合取込プレビュー", total: "合計", ready: "取込可能", conflict: "競合", error: "エラー", committed: "登録済み", commit: "競合のない行を一括登録", sourceRow: "元行", propertyAction: "物件・部屋処理", contractAction: "契約処理", reason: "競合・エラー理由", createContract: "契約を作成", updateContract: "契約を更新", noContract: "契約なし", skip: "スキップ",
+      statuses: { UNCONTRACTED: "未契約", ACTIVE: "契約中", DRAFT: "作成中", CANCELLATION_SETTLEMENT: "解約精算中", EXPIRED: "満了", TERMINATED: "終了", FUTURE: "開始前" },
+      actions: { CREATE_PROPERTY_AND_ROOM: "物件・部屋を作成", CREATE_ROOM: "部屋を作成", UPDATE_ROOM: "既存部屋を使用", CREATE_CONTRACT: "契約を作成", UPDATE_CONTRACT: "契約を更新", NO_CONTRACT: "契約なし", SKIP: "スキップ", ERROR: "エラー" },
+      reasons: { "integrated.error.existingContractDiffers": "既存契約と取込値が異なります", "integrated.error.overlappingContract": "契約期間が既存契約と重複しています", "import.error.sameNameDifferentAddress": "同名で住所が異なります", "import.error.propertyNameRequired": "物件名が未入力です" },
+    },
   },
   zh: {
     appName: "房产管理平台",
@@ -339,6 +353,7 @@ export const messages = {
     gis: "GIS 地图",
     resources: "房源管理",
     customers: "客户管理",
+    contracts: "签约管理",
     finance: "财务中心",
     ocr: "AI 对账中心",
     knowledge: "AI 知识库",
@@ -352,6 +367,7 @@ export const messages = {
       gis: "整合地图、搜索、图层与风险状态，提供运营视图。",
       resources: "维护楼栋、房间和空置状态。",
       customers: "统一管理租客、业主与业务联系人。",
+      contracts: "管理与物件、房间关联的合同、费用和银行摘要名义。",
       finance: "管理出入金台账、计入状态与确认状态。",
       ocr: "OCR/AI 解析作为第二版扩展，当前优先保留文档数据。",
       knowledge: "沉淀文档和业务知识，为第二版 AI 检索做准备。",
@@ -440,6 +456,10 @@ export const messages = {
       roomUsageType: "房间用途",
       floorLabel: "楼层显示",
       roomRemark: "房间备注",
+      contractPresence: "是否签约",
+      currentContract: "当前合同",
+      hasContract: "已签约",
+      noContract: "未签约",
       unitTypes: { ROOM: "房间", HOUSE: "独栋", SHOP: "商铺", OFFICE: "办公室", PARKING: "停车位", SIGNBOARD: "广告牌", BASE_STATION: "基站", VENDING: "自动售货机", MINPAKU: "民宿", OTHER: "其他" },
       roomLatitude: "Room 自定义纬度",
       roomLongitude: "Room 自定义经度",
@@ -636,6 +656,14 @@ export const messages = {
       edit: "编辑",
       delete: "删除",
     },
+    contractsLabels: {
+      eyebrow: "签约管理", heading: "按物件和房间管理签约信息", searchPlaceholder: "搜索物件、房间、合同编号、签约人或银行摘要名义...", integratedImport: "导入综合信息", refresh: "刷新", list: "签约清单", loadFailed: "加载签约数据失败", importFailed: "导入综合信息失败",
+      propertyRoom: "物件 / 房间", contractNo: "合同编号", contractor: "签约人", payerKana: "汇款名义人假名", contractorType: "个人/法人", period: "合同期间", rentFees: "租金 / 管理费", rent: "租金", managementFee: "管理费・共益费", bankSummary: "银行摘要名义", status: "签约状态", details: "签约详情", paymentMethod: "支付方式", depositKeyMoney: "押金 / 礼金", guaranteeCompany: "担保公司", guaranteeFee: "担保费", insurance: "保险", collectionAccount: "租金收款账户", managementContractType: "管理委托合同方式", remark: "备注", charges: "合同费用明细", months: "个月", noCharges: "没有附加费用。",
+      previewTitle: "房源与合同综合导入预览", total: "总计", ready: "可导入", conflict: "冲突", error: "错误", committed: "已入库", commit: "批量提交无冲突行", sourceRow: "源行", propertyAction: "物件/房间动作", contractAction: "合同动作", reason: "冲突/错误原因", createContract: "新建合同", updateContract: "更新合同", noContract: "无合同", skip: "跳过",
+      statuses: { UNCONTRACTED: "未签约", ACTIVE: "签约中", DRAFT: "创建中", CANCELLATION_SETTLEMENT: "解约结算中", EXPIRED: "已到期", TERMINATED: "已终止", FUTURE: "未开始" },
+      actions: { CREATE_PROPERTY_AND_ROOM: "新建物件和房间", CREATE_ROOM: "新建房间", UPDATE_ROOM: "使用已有房间", CREATE_CONTRACT: "新建合同", UPDATE_CONTRACT: "更新合同", NO_CONTRACT: "无合同", SKIP: "跳过", ERROR: "错误" },
+      reasons: { "integrated.error.existingContractDiffers": "现有合同与导入值不同", "integrated.error.overlappingContract": "合同期间与现有合同重叠", "import.error.sameNameDifferentAddress": "同名但地址不同", "import.error.propertyNameRequired": "物件名为空" },
+    },
   },
 };
 
@@ -643,6 +671,8 @@ messages.en = {
   ...messages.ja,
   appName: "Property Management Platform",
   resources: "Property Management",
+  contracts: "Contract Management",
+  subtitles: { ...messages.ja.subtitles, contracts: "Manage contracts, charges, and bank payment aliases by property and room." },
   common: { ...messages.ja.common, add: "Add", edit: "Edit", update: "Update", delete: "Delete", cancel: "Cancel", save: "Save", import: "Import", export: "Export", batchDelete: "Batch delete", showColumns: "Columns", resetColumns: "Reset", pagination: "Pagination", total: "Total", pageSize: "Rows", page: "Page", previous: "Previous", next: "Next", loading: "Loading...", select: "Select", noData: "No data.", close: "Close" },
   resourcesLabels: { ...messages.ja.resourcesLabels, eyebrow: "Property Management", heading: "Property inventory and status", searchPlaceholder: "Search properties, rooms, and status...", newResource: "New property", editResource: "Edit property", loadFailed: "Failed to load properties", saveFailed: "Failed to save property", deleteFailed: "Failed to delete property", batchDeleteFailed: "Failed to delete properties", importFailed: "Failed to import properties", projectBuilding: "Project / Property", houseRoom: "Property code / Room", areaFloor: "Area / Floor", location: "Coordinates", address: "Address", buildingCoordinates: "Property coordinates", roomCoordinates: "Room coordinates", status: "Status", note: "Note", roomNumber: "Room number", buildingInformation: "Property information", roomInformation: "Room information", propertyCode: "Property code", buildingNameKana: "Property name kana", postalCode: "Postal code", prefecture: "Prefecture", city: "City", ward: "Ward", addressLine1: "Address line 1", addressLine2: "Address line 2", buildingType: "Building type", propertyUsageType: "Property usage", managementStatus: "Management status", active: "Active", propertyRemark: "Property remark", roomCode: "Room code", displayName: "Display name", unitType: "Unit type", roomUsageType: "Room usage", floorLabel: "Floor label", roomRemark: "Room remark", unitTypes: { ROOM: "Room", HOUSE: "House", SHOP: "Shop", OFFICE: "Office", PARKING: "Parking", SIGNBOARD: "Signboard", BASE_STATION: "Base station", VENDING: "Vending", MINPAKU: "Minpaku", OTHER: "Other" } },
   propertyImport: {
@@ -656,7 +686,22 @@ messages.en = {
     unitTypes: { ROOM: "Room", HOUSE: "House", SHOP: "Shop", OFFICE: "Office", PARKING: "Parking", SIGNBOARD: "Signboard", BASE_STATION: "Base station", VENDING: "Vending", MINPAKU: "Minpaku", OTHER: "Other" },
     reasons: { "import.error.duplicateRow": "Duplicate row in file", "import.error.propertyNameRequired": "Property name is required", "import.error.roomNumberRequired": "Room number is required", "import.error.sameNameDifferentAddress": "Same name with a different address", "import.error.sameAddressDifferentName": "Same address with a different name" },
   },
+  contractsLabels: {
+    ...messages.ja.contractsLabels, eyebrow: "Contract Management", heading: "Contracts by property and room", searchPlaceholder: "Search property, room, contract, contractor, or bank alias...", integratedImport: "Import integrated data", refresh: "Refresh", list: "Contracts", loadFailed: "Failed to load contracts", importFailed: "Failed to import integrated data",
+    propertyRoom: "Property / Room", contractNo: "Contract ID", contractor: "Contractor", payerKana: "Payer kana", contractorType: "Person / Company", period: "Contract period", rentFees: "Rent / Management fee", rent: "Rent", managementFee: "Management fee", bankSummary: "Bank payment alias", status: "Status", details: "Contract details", paymentMethod: "Payment method", depositKeyMoney: "Deposit / Key money", guaranteeCompany: "Guarantee company", guaranteeFee: "Guarantee fee", insurance: "Insurance", collectionAccount: "Collection account", managementContractType: "Management contract type", remark: "Remark", charges: "Contract charges", months: "months", noCharges: "No additional charges.",
+    previewTitle: "Integrated property and contract import preview", total: "Total", ready: "Ready", conflict: "Conflict", error: "Error", committed: "Committed", commit: "Commit non-conflicting rows", sourceRow: "Source row", propertyAction: "Property / room action", contractAction: "Contract action", reason: "Conflict / error", createContract: "Create contract", updateContract: "Update contract", noContract: "No contract", skip: "Skip",
+    statuses: { UNCONTRACTED: "Uncontracted", ACTIVE: "Active", DRAFT: "Draft", CANCELLATION_SETTLEMENT: "Cancellation settlement", EXPIRED: "Expired", TERMINATED: "Terminated", FUTURE: "Future" },
+    actions: { CREATE_PROPERTY_AND_ROOM: "Create property and room", CREATE_ROOM: "Create room", UPDATE_ROOM: "Use existing room", CREATE_CONTRACT: "Create contract", UPDATE_CONTRACT: "Update contract", NO_CONTRACT: "No contract", SKIP: "Skip", ERROR: "Error" },
+    reasons: { "integrated.error.existingContractDiffers": "Existing contract values differ", "integrated.error.overlappingContract": "Contract period overlaps an existing contract", "import.error.sameNameDifferentAddress": "Same name with a different address", "import.error.propertyNameRequired": "Property name is required" },
+  },
 };
+
+Object.assign(messages.en.resourcesLabels, {
+  contractPresence: "Contract",
+  currentContract: "Current contract",
+  hasContract: "Contracted",
+  noContract: "Uncontracted",
+});
 
 export function setLocale(nextLocale) {
   locale.value = nextLocale;

@@ -365,15 +365,18 @@ export class FrontendApiService {
   }
 
   async updateRoom(id: string, dto: CreateRoomDto) {
-    const currentRoom = await this.prisma.room.findUnique({ where: { id } });
+    const currentRoom = await this.prisma.room.findUnique({ where: { id }, include: { property: true } });
     if (!currentRoom) throw new NotFoundException('Room not found');
-    const project = await this.prisma.project.upsert({
-      where: { name: dto.projectName },
-      create: { name: dto.projectName },
-      update: {},
-    });
+    const projectName = dto.projectName?.trim();
+    const project = projectName
+      ? await this.prisma.project.upsert({
+          where: { name: projectName },
+          create: { name: projectName },
+          update: {},
+        })
+      : null;
     const propertyData = {
-      projectId: project.id,
+      projectId: project?.id ?? currentRoom.property.projectId,
       propertyCode: this.optionalText(dto.propertyCode),
       name: dto.buildingName,
       normalizedName: this.normalizeMatchText(dto.buildingName),
@@ -391,17 +394,23 @@ export class FrontendApiService {
       managementStatus: dto.managementStatus || 'ACTIVE',
       remark: this.optionalText(dto.propertyRemark),
     };
-    const property = dto.buildingId === currentRoom.propertyId
-      ? await this.prisma.property.update({ where: { id: currentRoom.propertyId }, data: propertyData })
-      : await this.prisma.property.upsert({
-          where: { projectId_name: { projectId: project.id, name: dto.buildingName } },
-          create: {
-            ...propertyData,
-            latitude: this.optionalDecimal(dto.buildingLatitude),
-            longitude: this.optionalDecimal(dto.buildingLongitude),
-          },
-          update: propertyData,
-        });
+    let property;
+    if (dto.buildingId === currentRoom.propertyId) {
+      property = await this.prisma.property.update({ where: { id: currentRoom.propertyId }, data: propertyData });
+    } else {
+      const existingProperty = await this.prisma.property.findFirst({
+        where: { projectId: propertyData.projectId, name: dto.buildingName },
+      });
+      property = existingProperty
+        ? await this.prisma.property.update({ where: { id: existingProperty.id }, data: propertyData })
+        : await this.prisma.property.create({
+            data: {
+              ...propertyData,
+              latitude: this.optionalDecimal(dto.buildingLatitude),
+              longitude: this.optionalDecimal(dto.buildingLongitude),
+            },
+          });
+    }
 
     await this.ensureHouseNumberUnique(dto.houseNumber, id);
     await this.prisma.room.update({

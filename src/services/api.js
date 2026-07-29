@@ -177,6 +177,35 @@ export const api = {
     return request(`/customers/${id}`, { method: 'DELETE' });
   },
 
+  async listContracts(search = '') {
+    return request(`/contracts${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  },
+
+  async getContract(id) {
+    return request(`/contracts/${id}`);
+  },
+
+  async updateContract(id, payload) {
+    return request(`/contracts/${id}`, { method: 'PATCH', body: payload });
+  },
+
+  async uploadIntegratedImport(payload) {
+    return request('/integrated-import/upload', { method: 'POST', body: payload });
+  },
+
+  async getIntegratedImport(batchId, params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/integrated-import/${batchId}${query ? `?${query}` : ''}`);
+  },
+
+  async updateIntegratedImportRow(batchId, rowId, payload) {
+    return request(`/integrated-import/${batchId}/rows/${rowId}`, { method: 'PATCH', body: payload });
+  },
+
+  async commitIntegratedImport(batchId) {
+    return request(`/integrated-import/${batchId}/commit`, { method: 'POST', body: {} });
+  },
+
   async createBinding(payload) {
     return request('/bindings', { method: 'POST', body: payload });
   },

@@ -227,16 +227,84 @@ h3 {
   font-size: 15px;
 }
 
-.field-grid .readonly-field input {
-  background: #f4f7f9;
-  color: var(--muted);
-  cursor: default;
-}
-
 .form-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.table-link-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.contract-detail-modal {
+  width: min(940px, 100%);
+}
+
+.contract-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contract-detail-grid > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.contract-detail-grid span,
+.contract-charge-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.contract-detail-grid .span-2 {
+  grid-column: span 2;
+}
+
+.contract-charge-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.contract-charge-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.status-chip {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.contract-status-active { background: #dcfce7; color: #166534; }
+.contract-status-draft, .contract-status-future { background: #fef3c7; color: #92400e; }
+.contract-status-cancellation_settlement { background: #fee2e2; color: #991b1b; }
+.contract-status-uncontracted, .contract-status-expired, .contract-status-terminated { background: #f1f5f9; color: #64748b; }
+
+@media (max-width: 720px) {
+  .contract-detail-grid { grid-template-columns: 1fr; }
+  .contract-detail-grid .span-2 { grid-column: span 1; }
 }
 
 .table-card {
