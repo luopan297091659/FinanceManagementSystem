@@ -353,25 +353,36 @@ export class FrontendApiService {
       ? this.nonEmptyText(dto.roomNumber) ?? null
       : this.roomNumberOrGenerated(dto.roomNumber, houseNumber, dto.roomCode);
     if (houseNumber) await this.ensureHouseNumberUnique(houseNumber);
-    await this.prisma.room.create({
-      data: {
-        propertyId: property.id,
-        roomCode: this.optionalText(dto.roomCode),
-        houseNumber,
-        roomNumber,
-        normalizedRoomNumber: this.normalizeMatchText(roomNumber ?? undefined),
-        displayName: this.optionalText(dto.displayName),
-        unitType,
-        area: this.optionalDecimal(dto.area),
-        floor: dto.floor ? Number(dto.floor) : undefined,
-        floorLabel: this.optionalText(dto.floorLabel),
-        usageType: this.optionalText(dto.roomUsageType),
-        latitude: this.optionalDecimal(dto.roomLatitude),
-        longitude: this.optionalDecimal(dto.roomLongitude),
-        status: this.normalizeRoomStatus(dto.status),
-        note: dto.note,
-        remark: this.optionalText(dto.roomRemark),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const persistedRoomNumber = roomNumber
+        ?? this.roomNumberOrGenerated(undefined, houseNumber, dto.roomCode);
+      const room = await tx.room.create({
+        data: {
+          propertyId: property.id,
+          roomCode: this.optionalText(dto.roomCode),
+          houseNumber,
+          roomNumber: persistedRoomNumber,
+          normalizedRoomNumber: this.normalizeMatchText(persistedRoomNumber),
+          displayName: this.optionalText(dto.displayName),
+          unitType,
+          area: this.optionalDecimal(dto.area),
+          floor: dto.floor ? Number(dto.floor) : undefined,
+          floorLabel: this.optionalText(dto.floorLabel),
+          usageType: this.optionalText(dto.roomUsageType),
+          latitude: this.optionalDecimal(dto.roomLatitude),
+          longitude: this.optionalDecimal(dto.roomLongitude),
+          status: this.normalizeRoomStatus(dto.status),
+          note: dto.note,
+          remark: this.optionalText(dto.roomRemark),
+        },
+      });
+      if (roomNumber === null) {
+        await tx.$executeRaw`
+          UPDATE "Room"
+          SET "roomNumber" = NULL, "normalizedRoomNumber" = NULL
+          WHERE "id" = ${room.id}
+        `;
+      }
     });
     return { ok: true };
   }
@@ -432,26 +443,38 @@ export class FrontendApiService {
         || currentRoom.roomNumber
         || this.roomNumberOrGenerated(undefined, houseNumber, dto.roomCode);
     if (houseNumber) await this.ensureHouseNumberUnique(houseNumber, id);
-    await this.prisma.room.update({
-      where: { id },
-      data: {
-        propertyId: property.id,
-        roomCode: this.optionalText(dto.roomCode),
-        houseNumber,
-        roomNumber,
-        normalizedRoomNumber: this.normalizeMatchText(roomNumber ?? undefined),
-        displayName: this.optionalText(dto.displayName),
-        unitType,
-        area: this.optionalDecimal(dto.area),
-        floor: dto.floor ? Number(dto.floor) : undefined,
-        floorLabel: this.optionalText(dto.floorLabel),
-        usageType: this.optionalText(dto.roomUsageType),
-        latitude: this.optionalDecimal(dto.roomLatitude),
-        longitude: this.optionalDecimal(dto.roomLongitude),
-        status: this.normalizeRoomStatus(dto.status),
-        note: dto.note,
-        remark: this.optionalText(dto.roomRemark),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const persistedRoomNumber = roomNumber
+        ?? currentRoom.roomNumber
+        ?? this.roomNumberOrGenerated(undefined, houseNumber, dto.roomCode);
+      await tx.room.update({
+        where: { id },
+        data: {
+          propertyId: property.id,
+          roomCode: this.optionalText(dto.roomCode),
+          houseNumber,
+          roomNumber: persistedRoomNumber,
+          normalizedRoomNumber: this.normalizeMatchText(persistedRoomNumber),
+          displayName: this.optionalText(dto.displayName),
+          unitType,
+          area: this.optionalDecimal(dto.area),
+          floor: dto.floor ? Number(dto.floor) : undefined,
+          floorLabel: this.optionalText(dto.floorLabel),
+          usageType: this.optionalText(dto.roomUsageType),
+          latitude: this.optionalDecimal(dto.roomLatitude),
+          longitude: this.optionalDecimal(dto.roomLongitude),
+          status: this.normalizeRoomStatus(dto.status),
+          note: dto.note,
+          remark: this.optionalText(dto.roomRemark),
+        },
+      });
+      if (roomNumber === null) {
+        await tx.$executeRaw`
+          UPDATE "Room"
+          SET "roomNumber" = NULL, "normalizedRoomNumber" = NULL
+          WHERE "id" = ${id}
+        `;
+      }
     });
     return { ok: true };
   }
