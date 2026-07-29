@@ -36,7 +36,7 @@ export interface FrontendRoom {
   buildingId: string;
   roomCode?: string | null;
   houseNumber?: string | null;
-  number: string;
+  number: string | null;
   displayName?: string | null;
   unitType?: string | null;
   area?: string | null;

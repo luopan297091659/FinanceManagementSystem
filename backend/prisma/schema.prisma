@@ -374,7 +374,7 @@ model Room {
   companyId               String?
   company                 ManagementCompany?                     @relation(fields: [companyId], references: [id])
   houseNumber             String?                                @unique
-  roomNumber              String
+  roomNumber              String?
   normalizedRoomNumber    String?
   displayName             String?
   unitType                String                                 @default("ROOM")

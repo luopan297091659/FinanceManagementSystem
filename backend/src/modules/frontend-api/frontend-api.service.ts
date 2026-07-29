@@ -348,7 +348,10 @@ export class FrontendApiService {
       : await this.prisma.property.create({ data: propertyCreateData });
 
     const houseNumber = this.optionalText(dto.houseNumber);
-    const roomNumber = this.roomNumberOrGenerated(dto.roomNumber, houseNumber, dto.roomCode);
+    const unitType = dto.unitType || 'ROOM';
+    const roomNumber = unitType === 'HOUSE'
+      ? this.nonEmptyText(dto.roomNumber) ?? null
+      : this.roomNumberOrGenerated(dto.roomNumber, houseNumber, dto.roomCode);
     if (houseNumber) await this.ensureHouseNumberUnique(houseNumber);
     await this.prisma.room.create({
       data: {
@@ -356,9 +359,9 @@ export class FrontendApiService {
         roomCode: this.optionalText(dto.roomCode),
         houseNumber,
         roomNumber,
-        normalizedRoomNumber: this.normalizeMatchText(roomNumber),
+        normalizedRoomNumber: this.normalizeMatchText(roomNumber ?? undefined),
         displayName: this.optionalText(dto.displayName),
-        unitType: dto.unitType || 'ROOM',
+        unitType,
         area: this.optionalDecimal(dto.area),
         floor: dto.floor ? Number(dto.floor) : undefined,
         floorLabel: this.optionalText(dto.floorLabel),
@@ -422,7 +425,12 @@ export class FrontendApiService {
     }
 
     const houseNumber = this.optionalText(dto.houseNumber);
-    const roomNumber = this.nonEmptyText(dto.roomNumber) || currentRoom.roomNumber;
+    const unitType = dto.unitType || 'ROOM';
+    const roomNumber = unitType === 'HOUSE'
+      ? this.nonEmptyText(dto.roomNumber) ?? null
+      : this.nonEmptyText(dto.roomNumber)
+        || currentRoom.roomNumber
+        || this.roomNumberOrGenerated(undefined, houseNumber, dto.roomCode);
     if (houseNumber) await this.ensureHouseNumberUnique(houseNumber, id);
     await this.prisma.room.update({
       where: { id },
@@ -431,9 +439,9 @@ export class FrontendApiService {
         roomCode: this.optionalText(dto.roomCode),
         houseNumber,
         roomNumber,
-        normalizedRoomNumber: this.normalizeMatchText(roomNumber),
+        normalizedRoomNumber: this.normalizeMatchText(roomNumber ?? undefined),
         displayName: this.optionalText(dto.displayName),
-        unitType: dto.unitType || 'ROOM',
+        unitType,
         area: this.optionalDecimal(dto.area),
         floor: dto.floor ? Number(dto.floor) : undefined,
         floorLabel: this.optionalText(dto.floorLabel),
@@ -807,7 +815,7 @@ export class FrontendApiService {
       propertyRemark: property.remark ?? '',
       roomCode: room.roomCode ?? '',
       houseNumber: room.houseNumber ?? '',
-      roomNumber: room.roomNumber,
+      roomNumber: room.roomNumber ?? '',
       displayName: room.displayName ?? '',
       unitType: room.unitType ?? 'ROOM',
       roomUsageType: room.usageType ?? '',
