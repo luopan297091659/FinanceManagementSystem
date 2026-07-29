@@ -204,14 +204,14 @@ const reconciliationMenuLabels = computed(() => ({
 }));
 
 const navItems = computed(() => [
-  { key: "overview", label: dictionary.value.overview, icon: "dashboard" },
-  { key: "gis", label: dictionary.value.gis, icon: "map" },
-  { key: "resources", label: dictionary.value.resources, icon: "building" },
+  { key: "overview", label: dictionary.value.overview, icon: "dashboard", permissions: ["overview:view"] },
+  { key: "gis", label: dictionary.value.gis, icon: "map", permissions: ["gis:view"] },
+  { key: "resources", label: dictionary.value.resources, icon: "building", permissions: ["property.view", "property:view"] },
   { key: "contracts", label: dictionary.value.contracts, icon: "users", permissions: ["contract.view"] },
-  { key: "finance", label: dictionary.value.finance, icon: "finance" },
+  { key: "finance", label: dictionary.value.finance, icon: "finance", permissions: ["payment:view"] },
   { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: "finance", permissions: ["reconciliation.bank.view"] },
   { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: "search", permissions: ["reconciliation.ocr.view", "ocr:execute"] },
-  { key: "knowledge", label: dictionary.value.knowledge, icon: "brain" },
+  { key: "knowledge", label: dictionary.value.knowledge, icon: "brain", permissions: ["knowledge:view"] },
   { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, icon: "user-cog", permissions: ["user:view"] },
   { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, icon: "shield", permissions: ["role:view"] },
   { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, icon: "scroll", permissions: ["audit_log:view"] },
@@ -233,6 +233,12 @@ const visibleNavItems = computed(() => navItems.value.filter((item) => {
   if (!item.permissions) return true;
   return hasAnyPermission(item.permissions);
 }));
+
+const ensureActiveNavVisible = () => {
+  if (visibleNavItems.value.some((item) => item.key === activeNavKey.value)) return;
+  const [firstVisible] = visibleNavItems.value;
+  if (firstVisible) setActiveNavItem(firstVisible);
+};
 
 const regularNavItems = computed(() => visibleNavItems.value.filter((item) => !["bank-reconciliation", "ocr"].includes(item.key)));
 const aiNavItems = computed(() => visibleNavItems.value
@@ -373,6 +379,7 @@ const checkAuth = async () => {
     currentPermissions.value = result.permissions || [];
     isAuthenticated.value = true;
     localStorage.setItem('permissions', JSON.stringify(currentPermissions.value));
+    ensureActiveNavVisible();
   } catch (e) {
     clearAuth();
   } finally {
@@ -387,6 +394,7 @@ const handleAuthenticated = (payload) => {
   localStorage.setItem('permissions', JSON.stringify(currentPermissions.value));
   isAuthenticated.value = true;
   authChecked.value = true;
+  ensureActiveNavVisible();
 };
 
 const handleLogout = () => {

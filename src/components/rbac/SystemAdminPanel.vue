@@ -1,17 +1,5 @@
 <template>
   <div class="system-admin">
-    <div class="tab-header">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
-        class="tab-button"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-
     <!-- Users Tab -->
     <div v-if="activeTab === 'users'" class="tab-content">
       <div class="content-header">
@@ -57,28 +45,40 @@
         <h3>{{ dict.roles }}</h3>
         <button v-if="can('role:create')" @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
       </div>
-      <div class="role-grid">
-        <div v-for="role in roles" :key="role.id" class="role-card">
-          <div class="role-header">
-            <h4>{{ role.name }}</h4>
-            <span class="role-code">{{ role.code }}</span>
-          </div>
-          <p class="role-description">{{ role.description || '-' }}</p>
-          <div class="role-permissions">
-            <div class="permissions-label">{{ dict.permissions }}:</div>
-            <div class="permission-list">
-              <span v-for="rp in role.rolePermissions" :key="rp.id" class="permission-tag">
-                {{ rp.permission.key }}
-              </span>
-            </div>
-          </div>
-          <div class="role-actions">
-            <button v-if="can('role:update')" @click="editRole(role)" class="action-button edit">{{ dict.edit }}</button>
-            <button v-if="can('role:delete') && !role.isSystem" @click="deleteRole(role.id)" class="action-button delete">
-              {{ dict.delete }}
-            </button>
-          </div>
-        </div>
+      <div class="table-wrapper">
+        <table class="data-table role-table">
+          <thead>
+            <tr>
+              <th>{{ dict.name }}</th>
+              <th>{{ dict.code }}</th>
+              <th>{{ dict.description }}</th>
+              <th>{{ uiText.menuPermissions }}</th>
+              <th>{{ dict.actions }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="role in roles" :key="role.id">
+              <td class="role-name-cell">{{ role.name }}</td>
+              <td><span class="role-code">{{ role.code }}</span></td>
+              <td>{{ role.description || '-' }}</td>
+              <td class="role-permission-summary">
+                <div v-if="getRolePermissionSummary(role).length" class="permission-summary-list">
+                  <span v-for="item in getRolePermissionSummary(role)" :key="item.key" class="permission-summary-item">
+                    <strong>{{ item.label }}</strong>
+                    <span>{{ item.actions.join(' / ') }}</span>
+                  </span>
+                </div>
+                <span v-else>-</span>
+              </td>
+              <td class="actions-cell">
+                <button v-if="can('role:update')" @click="editRole(role)" class="action-button edit">{{ dict.edit }}</button>
+                <button v-if="can('role:delete') && !role.isSystem" @click="deleteRole(role.id)" class="action-button delete">
+                  {{ dict.delete }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -321,16 +321,35 @@
           <textarea v-model="roleForm.description" rows="3"></textarea>
         </div>
         <div class="form-group">
-          <label>{{ dict.permissions }}</label>
-          <div class="permissions-grid">
-            <label v-for="perm in allPermissions" :key="perm.id" class="permission-checkbox">
-              <input
-                type="checkbox"
-                :checked="roleForm.permissions.includes(perm.id)"
-                @change="(e) => togglePermission(perm.id, e.target.checked)"
-              />
-              {{ perm.key }}
-            </label>
+          <label>{{ uiText.menuPermissions }}</label>
+          <p class="permissions-help">{{ uiText.permissionsHelp }}</p>
+          <div class="permission-matrix-wrapper">
+            <table class="permission-matrix">
+              <thead>
+                <tr>
+                  <th>{{ uiText.functionMenu }}</th>
+                  <th v-for="action in permissionActions" :key="action.key">{{ action.label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="group in permissionGroups" :key="group.key">
+                  <td>
+                    <strong>{{ group.label }}</strong>
+                    <small v-if="group.readOnly">{{ uiText.viewOnly }}</small>
+                  </td>
+                  <td v-for="action in permissionActions" :key="action.key" class="permission-action-cell">
+                    <input
+                      v-if="availablePermissionIds(group.actions[action.key]).length"
+                      type="checkbox"
+                      :aria-label="`${group.label} - ${action.label}`"
+                      :checked="isPermissionActionChecked(group, action.key)"
+                      @change="(e) => togglePermissionAction(group, action.key, e.target.checked)"
+                    />
+                    <span v-else class="permission-unavailable">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
         <div class="modal-actions">
@@ -450,6 +469,137 @@ const translationForm = ref({
 });
 
 const dict = computed(() => messages[locale.value].system || messages[locale.value].systemAdmin);
+
+const uiText = computed(() => ({
+  ja: {
+    menuPermissions: '機能メニュー権限', functionMenu: '機能メニュー', permissionsHelp: 'メニューごとに操作権限を設定します。対応しない操作は選択できません。',
+    viewOnly: '閲覧のみ', view: '閲覧', create: '追加', update: '編集', delete: '削除',
+    overview: '業務概要', gis: 'GIS 地図', resources: '物件管理', contracts: '契約管理', finance: '会計管理', bank: '銀行明細照合', ocr: 'OCR 照合', knowledge: 'AI ナレッジベース',
+    users: 'ユーザー管理', roles: '権限管理', audit: '監査ログ', email: 'メール設定', translations: '翻訳管理',
+  },
+  zh: {
+    menuPermissions: '功能菜单权限', functionMenu: '功能菜单', permissionsHelp: '按功能菜单配置操作权限，不适用的操作不可选择。',
+    viewOnly: '仅支持查看', view: '查看', create: '新增', update: '修改', delete: '删除',
+    overview: '业务概览', gis: 'GIS 地图', resources: '房源管理', contracts: '签约管理', finance: '财务中心', bank: '银行账单对账', ocr: 'OCR 对账', knowledge: 'AI 知识库',
+    users: '用户管理', roles: '权限管理', audit: '审计日志', email: '邮箱配置', translations: '翻译管理',
+  },
+}[locale.value] || {
+  menuPermissions: 'Feature permissions', functionMenu: 'Feature menu', permissionsHelp: 'Configure operations by feature menu. Unsupported operations cannot be selected.',
+  viewOnly: 'View only', view: 'View', create: 'Create', update: 'Edit', delete: 'Delete',
+  overview: 'Overview', gis: 'GIS map', resources: 'Properties', contracts: 'Contracts', finance: 'Finance', bank: 'Bank reconciliation', ocr: 'OCR reconciliation', knowledge: 'AI knowledge base',
+  users: 'User management', roles: 'Permission management', audit: 'Audit logs', email: 'Email settings', translations: 'Translation management',
+}));
+
+const permissionActions = computed(() => [
+  { key: 'view', label: uiText.value.view },
+  { key: 'create', label: uiText.value.create },
+  { key: 'update', label: uiText.value.update },
+  { key: 'delete', label: uiText.value.delete },
+]);
+
+const permissionGroups = computed(() => [
+  {
+    key: 'overview', label: uiText.value.overview, readOnly: true,
+    actions: { view: ['overview:view'], create: [], update: [], delete: [] },
+  },
+  {
+    key: 'gis', label: uiText.value.gis, readOnly: true,
+    actions: { view: ['gis:view'], create: [], update: [], delete: [] },
+  },
+  {
+    key: 'resources', label: uiText.value.resources,
+    actions: {
+      view: ['property:view', 'property.view', 'property.owner.view', 'room.view'],
+      create: ['property:create', 'property.create', 'property.import', 'property.import.commit', 'room.create'],
+      update: ['property:update', 'property.edit', 'property.owner.edit', 'room.edit'],
+      delete: ['property:delete'],
+    },
+  },
+  {
+    key: 'contracts', label: uiText.value.contracts,
+    actions: {
+      view: ['contract.view', 'contract.charge.view', 'owner.financial.view', 'tenant:view'],
+      create: ['contract.create', 'contract.import', 'integrated-import.preview', 'integrated-import.commit', 'tenant:create'],
+      update: ['contract.edit', 'contract.status.edit', 'contract.charge.edit', 'owner.financial.edit', 'tenant:update'],
+      delete: ['tenant:delete'],
+    },
+  },
+  {
+    key: 'finance', label: uiText.value.finance,
+    actions: { view: ['payment:view'], create: ['payment:create'], update: ['payment:update', 'payment:export'], delete: ['payment:delete'] },
+  },
+  {
+    key: 'bank', label: uiText.value.bank,
+    actions: {
+      view: ['reconciliation:view', 'reconciliation.bank.view', 'reconciliation.bank.history'],
+      create: ['reconciliation.bank.upload', 'reconciliation.bank.parse', 'reconciliation.bank.master-data.sync'],
+      update: ['reconciliation:execute', 'reconciliation:confirm', 'reconciliation.bank.match', 'reconciliation.bank.edit', 'reconciliation.bank.review', 'reconciliation.bank.submit', 'reconciliation.bank.export'],
+      delete: [],
+    },
+  },
+  {
+    key: 'ocr', label: uiText.value.ocr,
+    actions: { view: ['reconciliation.ocr.view'], create: ['ocr:execute'], update: [], delete: [] },
+  },
+  {
+    key: 'knowledge', label: uiText.value.knowledge, readOnly: true,
+    actions: { view: ['knowledge:view'], create: [], update: [], delete: [] },
+  },
+  {
+    key: 'users', label: uiText.value.users,
+    actions: { view: ['user:view'], create: ['user:create'], update: ['user:update', 'user:reset_password'], delete: ['user:delete'] },
+  },
+  {
+    key: 'roles', label: uiText.value.roles,
+    actions: { view: ['role:view'], create: ['role:create'], update: ['role:update'], delete: ['role:delete'] },
+  },
+  {
+    key: 'audit', label: uiText.value.audit, readOnly: true,
+    actions: { view: ['audit_log:view'], create: [], update: [], delete: [] },
+  },
+  {
+    key: 'email', label: uiText.value.email,
+    actions: { view: ['setting:email'], create: [], update: [], delete: [] },
+  },
+  {
+    key: 'translations', label: uiText.value.translations,
+    actions: {
+      view: ['i18n.translation.view'], create: ['i18n.translation.import'],
+      update: ['i18n.translation.edit', 'i18n.translation.publish', 'i18n.translation.export'], delete: [],
+    },
+  },
+]);
+
+const permissionByKey = computed(() => new Map(allPermissions.value.map((permission) => [permission.key, permission])));
+
+const availablePermissionIds = (keys = []) => keys
+  .map((key) => permissionByKey.value.get(key)?.id)
+  .filter(Boolean);
+
+const isPermissionActionChecked = (group, actionKey) => {
+  const ids = availablePermissionIds(group.actions[actionKey]);
+  return ids.length > 0 && ids.every((id) => roleForm.value.permissions.includes(id));
+};
+
+const togglePermissionAction = (group, actionKey, checked) => {
+  const ids = availablePermissionIds(group.actions[actionKey]);
+  if (checked) {
+    roleForm.value.permissions = [...new Set([...roleForm.value.permissions, ...ids])];
+  } else {
+    const removed = new Set(ids);
+    roleForm.value.permissions = roleForm.value.permissions.filter((id) => !removed.has(id));
+  }
+};
+
+const getRolePermissionSummary = (role) => {
+  const selectedKeys = new Set(role.rolePermissions?.map((entry) => entry.permission?.key).filter(Boolean) || []);
+  return permissionGroups.value.map((group) => {
+    const actions = permissionActions.value
+      .filter((action) => group.actions[action.key].some((key) => selectedKeys.has(key)))
+      .map((action) => action.label);
+    return { key: group.key, label: group.label, actions };
+  }).filter((item) => item.actions.length);
+};
 
 const can = (permission) => props.permissions.includes(permission);
 
@@ -633,16 +783,6 @@ const deleteRole = async (id) => {
   }
 };
 
-const togglePermission = (permId, checked) => {
-  if (checked) {
-    if (!roleForm.value.permissions.includes(permId)) {
-      roleForm.value.permissions.push(permId);
-    }
-  } else {
-    roleForm.value.permissions = roleForm.value.permissions.filter(p => p !== permId);
-  }
-};
-
 const saveEmailSettings = async () => {
   try {
     const result = await api.saveEmailSettings(emailForm.value);
@@ -791,30 +931,6 @@ watch(() => props.initialTab, (tab) => {
   flex-direction: column;
   height: 100%;
   gap: 16px;
-}
-
-.tab-header {
-  display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 12px;
-}
-
-.tab-button {
-  padding: 8px 16px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: #666;
-  font-size: 14px;
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  transition: all 0.3s;
-}
-
-.tab-button.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
 }
 
 .tab-content {
@@ -987,31 +1103,6 @@ watch(() => props.initialTab, (tab) => {
   color: #ffffff;
 }
 
-.role-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.role-card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
-  background: white;
-}
-
-.role-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  margin-bottom: 12px;
-}
-
-.role-header h4 {
-  margin: 0;
-  font-size: 16px;
-}
-
 .role-code {
   background: #f0f0f0;
   padding: 4px 8px;
@@ -1020,44 +1111,35 @@ watch(() => props.initialTab, (tab) => {
   color: #666;
 }
 
-.role-description {
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: #999;
-}
-
-.role-permissions {
-  margin: 12px 0;
-}
-
-.permissions-label {
-  font-size: 12px;
+.role-name-cell {
+  min-width: 120px;
   font-weight: 600;
-  margin-bottom: 8px;
-  color: #333;
+  color: #1f2937 !important;
 }
 
-.permission-list {
+.role-permission-summary {
+  min-width: 360px;
+}
+
+.permission-summary-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.permission-tag {
-  display: inline-block;
-  background: #f0f0f0;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  color: #666;
+.permission-summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #eef7f6;
+  color: #48605e;
+  font-size: 12px;
 }
 
-.role-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+.permission-summary-item strong {
+  color: #1f4542;
 }
 
 .details-cell {
@@ -1091,7 +1173,7 @@ watch(() => props.initialTab, (tab) => {
 }
 
 .modal-card.wide {
-  max-width: 700px;
+  max-width: 880px;
 }
 
 .modal-card h2 {
@@ -1132,26 +1214,65 @@ watch(() => props.initialTab, (tab) => {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.permissions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #f9f9f9;
-  border-radius: 4px;
+.permissions-help {
+  margin: -2px 0 10px;
+  color: #77818d;
+  font-size: 12px;
 }
 
-.permission-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.permission-matrix-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.permission-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.permission-matrix th,
+.permission-matrix td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf0f3;
+  text-align: center;
   font-size: 13px;
 }
 
-.permission-checkbox input {
-  width: auto;
+.permission-matrix th:first-child,
+.permission-matrix td:first-child {
+  min-width: 180px;
+  text-align: left;
+}
+
+.permission-matrix thead {
+  background: #f7f9fb;
+}
+
+.permission-matrix tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.permission-matrix td small {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #f1f3f5;
+  color: #7b8490;
+  font-weight: 400;
+}
+
+.permission-action-cell input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary, #0f766e);
   cursor: pointer;
+}
+
+.permission-unavailable {
+  color: #c3c9d0;
 }
 
 .status-checkbox {
@@ -1224,16 +1345,8 @@ watch(() => props.initialTab, (tab) => {
 }
 
 @media (max-width: 768px) {
-  .role-grid {
-    grid-template-columns: 1fr;
-  }
-  
   .actions-cell {
     flex-direction: column;
-  }
-  
-  .permissions-grid {
-    grid-template-columns: 1fr;
   }
 
   .form-grid,

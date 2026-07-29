@@ -82,7 +82,7 @@ export const messages = {
       searchPlaceholder: "物件、建物、部屋番号、状態を検索...",
       newResource: "新規物件",
       editResource: "物件を編集",
-      resourceList: "物件一覧",
+      // resourceList: "物件一覧",
       loadFailed: "物件の読み込みに失敗しました",
       saveFailed: "物件の保存に失敗しました",
       deleteFailed: "物件の削除に失敗しました",

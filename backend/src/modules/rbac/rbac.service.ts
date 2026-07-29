@@ -105,6 +105,9 @@ export class RbacService implements OnModuleInit {
 
   async seedPermissions() {
     const permissions = [
+      { key: 'overview:view', module: 'overview', description: '查看业务概览' },
+      { key: 'gis:view', module: 'gis', description: '查看GIS地图' },
+      { key: 'knowledge:view', module: 'knowledge', description: '查看AI知识库' },
       { key: 'user:view', module: 'user', description: '查看用户' },
       { key: 'user:create', module: 'user', description: '创建用户' },
       { key: 'user:update', module: 'user', description: '更新用户' },
@@ -173,11 +176,11 @@ export class RbacService implements OnModuleInit {
       if (role.code === 'SUPER_ADMIN') {
         permissions.forEach((p: { key: string }) => desired.add(p.key));
       } else if (role.code === 'ADMIN') {
-        ['user:view','user:create','user:update','user:reset_password','role:view','property:view','property.view','property.create','property.edit','property.import','property.import.commit','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','owner.financial.view','owner.financial.edit','tenant:view','payment:view','payment:create','payment:update','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute','audit_log:view'].forEach((p) => desired.add(p));
+        ['overview:view','gis:view','knowledge:view','user:view','user:create','user:update','user:reset_password','role:view','property:view','property.view','property.create','property.edit','property.import','property.import.commit','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','owner.financial.view','owner.financial.edit','tenant:view','payment:view','payment:create','payment:update','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute','audit_log:view'].forEach((p) => desired.add(p));
       } else if (role.code === 'FINANCE') {
-        ['property:view','tenant:view','payment:view','payment:create','payment:update','payment:delete','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute'].forEach((p) => desired.add(p));
+        ['overview:view','gis:view','knowledge:view','property:view','tenant:view','payment:view','payment:create','payment:update','payment:delete','payment:export','reconciliation:view','reconciliation:execute','reconciliation:confirm','ocr:execute'].forEach((p) => desired.add(p));
       } else if (role.code === 'BUSINESS') {
-        ['property:view','property:create','property:update','property.view','property.create','property.edit','property.import','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','tenant:view','tenant:create','tenant:update','payment:view','reconciliation:view'].forEach((p) => desired.add(p));
+        ['overview:view','gis:view','knowledge:view','property:view','property:create','property:update','property.view','property.create','property.edit','property.import','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','tenant:view','tenant:create','tenant:update','payment:view','reconciliation:view'].forEach((p) => desired.add(p));
       }
       const existing = await this.prisma.rolePermission.findMany({ where: { roleId: role.id } });
       const existingKeys = new Set(existing.map((entry: { permissionId: string }) => permissions.find((p: { id: string }) => p.id === entry.permissionId)?.key));
