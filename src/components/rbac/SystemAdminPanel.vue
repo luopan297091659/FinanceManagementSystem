@@ -653,7 +653,15 @@ const loadTranslations = async () => {
 };
 
 const loadData = async () => {
-  await Promise.all([loadUsers(), loadRoles(), loadLogs(), loadEmailSettings(), loadTranslations()]);
+  notice.value = null;
+  const loaders = {
+    users: loadUsers,
+    roles: loadRoles,
+    logs: loadLogs,
+    email: loadEmailSettings,
+    translations: loadTranslations,
+  };
+  await loaders[activeTab.value]?.();
 };
 
 const resetUserForm = () => {
@@ -905,6 +913,10 @@ watch(() => props.initialTab, (tab) => {
   if (tabs.value.some((item) => item.key === tab)) {
     activeTab.value = tab;
   }
+});
+
+watch(activeTab, () => {
+  loadData();
 });
 </script>
 

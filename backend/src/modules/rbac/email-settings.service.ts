@@ -61,9 +61,9 @@ export class EmailSettingsService {
   }
 
   async getSettings() {
-    const row = await this.prisma.systemSetting.findUnique({ where: { key: EMAIL_SETTINGS_KEY } });
+    const row = await this.safeSystemSetting();
     const settings = this.normalize(row?.value);
-    const sentToday = await this.countPasswordResetTokensToday();
+    const sentToday = await this.safePasswordResetCount();
     return { email_settings: this.toPublic(settings), sent_today: sentToday };
   }
 
@@ -86,8 +86,31 @@ export class EmailSettingsService {
   }
 
   async getRawSettings() {
-    const row = await this.prisma.systemSetting.findUnique({ where: { key: EMAIL_SETTINGS_KEY } });
+    const row = await this.safeSystemSetting();
     return this.normalize(row?.value);
+  }
+
+  private isMissingDatabaseObject(error: unknown) {
+    const code = (error as { code?: string })?.code;
+    return code === 'P2021' || code === 'P2022';
+  }
+
+  private async safeSystemSetting() {
+    try {
+      return await this.prisma.systemSetting.findUnique({ where: { key: EMAIL_SETTINGS_KEY } });
+    } catch (error) {
+      if (this.isMissingDatabaseObject(error)) return null;
+      throw error;
+    }
+  }
+
+  private async safePasswordResetCount() {
+    try {
+      return await this.countPasswordResetTokensToday();
+    } catch (error) {
+      if (this.isMissingDatabaseObject(error)) return 0;
+      throw error;
+    }
   }
 
   private async countPasswordResetTokensToday() {

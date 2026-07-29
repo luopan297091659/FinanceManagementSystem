@@ -28,10 +28,10 @@ export class I18nService {
 
   async publishedTranslations(locale: string, version?: string) {
     const targetLocale = this.normalizeLocale(locale);
-    const publishedVersion = version || await this.latestPublishedVersion();
+    const publishedVersion = version || await this.safeLatestPublishedVersion();
     if (!publishedVersion) return { locale: targetLocale, version: BUILTIN_VERSION, translations: {} };
 
-    const entries = await this.prisma.translationEntry.findMany({
+    const entries = await this.safeTranslationEntries(() => this.prisma.translationEntry.findMany({
       where: {
         locale: targetLocale,
         version: publishedVersion,
@@ -39,7 +39,7 @@ export class I18nService {
         enabled: true,
       },
       orderBy: { key: 'asc' },
-    });
+    }), []);
 
     return {
       locale: targetLocale,
@@ -49,7 +49,7 @@ export class I18nService {
   }
 
   async listAdmin(query: { locale?: string; module?: string; key?: string; status?: string }) {
-    return this.prisma.translationEntry.findMany({
+    return this.safeTranslationEntries(() => this.prisma.translationEntry.findMany({
       where: {
         locale: query.locale || undefined,
         module: query.module || undefined,
@@ -58,7 +58,7 @@ export class I18nService {
       },
       orderBy: [{ updatedAt: 'desc' }, { key: 'asc' }],
       take: 500,
-    });
+    }), []);
   }
 
   async createEntry(body: any, actorUserId?: string) {
@@ -183,14 +183,14 @@ export class I18nService {
   }
 
   async exportEntries(query: { locale?: string; module?: string; version?: string }) {
-    return this.prisma.translationEntry.findMany({
+    return this.safeTranslationEntries(() => this.prisma.translationEntry.findMany({
       where: {
         locale: query.locale || undefined,
         module: query.module || undefined,
         version: query.version || undefined,
       },
       orderBy: [{ key: 'asc' }, { locale: 'asc' }],
-    });
+    }), []);
   }
 
   async publish(version: string, actorUserId?: string) {
@@ -214,11 +214,11 @@ export class I18nService {
   }
 
   async versions() {
-    const versions = await this.prisma.translationEntry.groupBy({
+    const versions = await this.safeTranslationEntries(() => this.prisma.translationEntry.groupBy({
       by: ['version', 'status'],
       _count: { _all: true },
       orderBy: { version: 'desc' },
-    });
+    }), []);
     return versions.map((item) => ({ version: item.version, status: item.status, count: item._count._all }));
   }
 
@@ -286,6 +286,24 @@ export class I18nService {
       select: { version: true },
     });
     return latest?.version;
+  }
+
+  private isMissingDatabaseObject(error: unknown) {
+    const code = (error as { code?: string })?.code;
+    return code === 'P2021' || code === 'P2022';
+  }
+
+  private async safeTranslationEntries<T>(query: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await query();
+    } catch (error) {
+      if (this.isMissingDatabaseObject(error)) return fallback;
+      throw error;
+    }
+  }
+
+  private async safeLatestPublishedVersion() {
+    return this.safeTranslationEntries(() => this.latestPublishedVersion(), undefined);
   }
 
   private async log(actorUserId: string | undefined, action: string, entityId: string, before: unknown, after: unknown) {
