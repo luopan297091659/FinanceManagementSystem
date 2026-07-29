@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LinkStatus, Prisma } from '@prisma/client';
 import { addMoney, toDecimal } from '../../common/money/decimal';
 import { FrontendBootstrap } from '../../common/types/frontend-contract';
@@ -142,19 +142,36 @@ export class FrontendApiService {
       buildings: properties.map((property) => ({
         id: property.id,
         projectId: property.projectId,
+        propertyCode: property.propertyCode,
         name: property.name,
+        nameKana: property.nameKana,
+        postalCode: property.postalCode,
         address: property.address,
+        addressLine1: property.addressLine1,
+        addressLine2: property.addressLine2,
+        prefecture: property.prefecture,
+        city: property.city,
+        ward: property.ward,
         latitude: decimalToString(property.latitude),
         longitude: decimalToString(property.longitude),
+        buildingType: property.buildingType,
+        usageType: property.usageType,
+        managementStatus: property.managementStatus,
+        remark: property.remark,
       })),
       rooms: rooms.map((room) => ({
         id: room.id,
         projectId: room.property.projectId,
         buildingId: room.propertyId,
+        roomCode: room.roomCode,
         houseNumber: room.houseNumber,
         number: room.roomNumber,
+        displayName: room.displayName,
+        unitType: room.unitType,
         area: decimalToString(room.area),
         floor: room.floor,
+        floorLabel: room.floorLabel,
+        usageType: room.usageType,
         latitude: decimalToString(room.latitude),
         longitude: decimalToString(room.longitude),
         effectiveLatitude: decimalToString(room.latitude ?? room.property.latitude),
@@ -167,6 +184,7 @@ export class FrontendApiService {
               : 'none',
         status: room.status,
         note: room.note,
+        remark: room.remark,
       })),
       tenants: tenants.map((tenant) => ({
         id: tenant.id,
@@ -264,6 +282,15 @@ export class FrontendApiService {
     };
   }
 
+  async getRoom(id: string) {
+    const room = await this.prisma.room.findUnique({
+      where: { id },
+      include: { property: { include: { project: true } } },
+    });
+    if (!room) throw new NotFoundException('Room not found');
+    return this.toRoomEditor(room);
+  }
+
   async createRoom(dto: CreateRoomDto) {
     const project = await this.prisma.project.upsert({
       where: { name: dto.projectName },
@@ -274,13 +301,42 @@ export class FrontendApiService {
       where: { projectId_name: { projectId: project.id, name: dto.buildingName } },
       create: {
         projectId: project.id,
+        propertyCode: this.optionalText(dto.propertyCode),
         name: dto.buildingName,
+        normalizedName: this.normalizeMatchText(dto.buildingName),
+        nameKana: this.optionalText(dto.buildingNameKana),
+        postalCode: this.optionalText(dto.postalCode),
+        address: this.optionalText(dto.address),
+        normalizedAddress: this.normalizeMatchText(dto.address),
+        addressLine1: this.optionalText(dto.addressLine1),
+        addressLine2: this.optionalText(dto.addressLine2),
+        prefecture: this.optionalText(dto.prefecture),
+        city: this.optionalText(dto.city),
+        ward: this.optionalText(dto.ward),
         latitude: this.optionalDecimal(dto.buildingLatitude),
         longitude: this.optionalDecimal(dto.buildingLongitude),
+        buildingType: this.optionalText(dto.buildingType),
+        usageType: this.optionalText(dto.propertyUsageType),
+        managementStatus: dto.managementStatus || 'ACTIVE',
+        remark: this.optionalText(dto.propertyRemark),
       },
       update: {
+        propertyCode: this.nonEmptyText(dto.propertyCode),
+        normalizedName: this.normalizeMatchText(dto.buildingName),
+        nameKana: this.nonEmptyText(dto.buildingNameKana),
+        postalCode: this.nonEmptyText(dto.postalCode),
+        address: this.nonEmptyText(dto.address),
+        normalizedAddress: this.nonEmptyNormalizedText(dto.address),
+        addressLine1: this.nonEmptyText(dto.addressLine1),
+        addressLine2: this.nonEmptyText(dto.addressLine2),
+        prefecture: this.nonEmptyText(dto.prefecture),
+        city: this.nonEmptyText(dto.city),
+        ward: this.nonEmptyText(dto.ward),
         latitude: this.optionalDecimal(dto.buildingLatitude),
         longitude: this.optionalDecimal(dto.buildingLongitude),
+        buildingType: this.nonEmptyText(dto.buildingType),
+        usageType: this.nonEmptyText(dto.propertyUsageType),
+        remark: this.nonEmptyText(dto.propertyRemark),
       },
     });
 
@@ -288,52 +344,85 @@ export class FrontendApiService {
     await this.prisma.room.create({
       data: {
         propertyId: property.id,
+        roomCode: this.optionalText(dto.roomCode),
         houseNumber: dto.houseNumber,
         roomNumber: dto.roomNumber,
+        normalizedRoomNumber: this.normalizeMatchText(dto.roomNumber),
+        displayName: this.optionalText(dto.displayName),
+        unitType: dto.unitType || 'ROOM',
         area: this.optionalDecimal(dto.area),
         floor: dto.floor ? Number(dto.floor) : undefined,
+        floorLabel: this.optionalText(dto.floorLabel),
+        usageType: this.optionalText(dto.roomUsageType),
         latitude: this.optionalDecimal(dto.roomLatitude),
         longitude: this.optionalDecimal(dto.roomLongitude),
         status: this.normalizeRoomStatus(dto.status),
         note: dto.note,
+        remark: this.optionalText(dto.roomRemark),
       },
     });
     return { ok: true };
   }
 
   async updateRoom(id: string, dto: CreateRoomDto) {
+    const currentRoom = await this.prisma.room.findUnique({ where: { id } });
+    if (!currentRoom) throw new NotFoundException('Room not found');
     const project = await this.prisma.project.upsert({
       where: { name: dto.projectName },
       create: { name: dto.projectName },
       update: {},
     });
-    const property = await this.prisma.property.upsert({
-      where: { projectId_name: { projectId: project.id, name: dto.buildingName } },
-      create: {
-        projectId: project.id,
-        name: dto.buildingName,
-        latitude: this.optionalDecimal(dto.buildingLatitude),
-        longitude: this.optionalDecimal(dto.buildingLongitude),
-      },
-      update: {
-        latitude: this.optionalDecimal(dto.buildingLatitude),
-        longitude: this.optionalDecimal(dto.buildingLongitude),
-      },
-    });
+    const propertyData = {
+      projectId: project.id,
+      propertyCode: this.optionalText(dto.propertyCode),
+      name: dto.buildingName,
+      normalizedName: this.normalizeMatchText(dto.buildingName),
+      nameKana: this.optionalText(dto.buildingNameKana),
+      postalCode: this.optionalText(dto.postalCode),
+      address: this.optionalText(dto.address),
+      normalizedAddress: this.normalizeMatchText(dto.address),
+      addressLine1: this.optionalText(dto.addressLine1),
+      addressLine2: this.optionalText(dto.addressLine2),
+      prefecture: this.optionalText(dto.prefecture),
+      city: this.optionalText(dto.city),
+      ward: this.optionalText(dto.ward),
+      buildingType: this.optionalText(dto.buildingType),
+      usageType: this.optionalText(dto.propertyUsageType),
+      managementStatus: dto.managementStatus || 'ACTIVE',
+      remark: this.optionalText(dto.propertyRemark),
+    };
+    const property = dto.buildingId === currentRoom.propertyId
+      ? await this.prisma.property.update({ where: { id: currentRoom.propertyId }, data: propertyData })
+      : await this.prisma.property.upsert({
+          where: { projectId_name: { projectId: project.id, name: dto.buildingName } },
+          create: {
+            ...propertyData,
+            latitude: this.optionalDecimal(dto.buildingLatitude),
+            longitude: this.optionalDecimal(dto.buildingLongitude),
+          },
+          update: propertyData,
+        });
 
     await this.ensureHouseNumberUnique(dto.houseNumber, id);
     await this.prisma.room.update({
       where: { id },
       data: {
         propertyId: property.id,
+        roomCode: this.optionalText(dto.roomCode),
         houseNumber: dto.houseNumber,
         roomNumber: dto.roomNumber,
+        normalizedRoomNumber: this.normalizeMatchText(dto.roomNumber),
+        displayName: this.optionalText(dto.displayName),
+        unitType: dto.unitType || 'ROOM',
         area: this.optionalDecimal(dto.area),
         floor: dto.floor ? Number(dto.floor) : undefined,
+        floorLabel: this.optionalText(dto.floorLabel),
+        usageType: this.optionalText(dto.roomUsageType),
         latitude: this.optionalDecimal(dto.roomLatitude),
         longitude: this.optionalDecimal(dto.roomLongitude),
         status: this.normalizeRoomStatus(dto.status),
         note: dto.note,
+        remark: this.optionalText(dto.roomRemark),
       },
     });
     return { ok: true };
@@ -672,6 +761,67 @@ export class FrontendApiService {
   private normalizeLinkStatus(status?: string): LinkStatus {
     if (status === 'ENDED' || status === 'PENDING') return status;
     return 'ACTIVE';
+  }
+
+  private toRoomEditor(room: any) {
+    const property = room.property;
+    return {
+      id: room.id,
+      buildingId: property.id,
+      projectName: property.project?.name ?? '',
+      buildingName: property.name,
+      propertyCode: property.propertyCode ?? '',
+      buildingNameKana: property.nameKana ?? '',
+      postalCode: property.postalCode ?? '',
+      address: property.address ?? '',
+      addressLine1: property.addressLine1 ?? '',
+      addressLine2: property.addressLine2 ?? '',
+      prefecture: property.prefecture ?? '',
+      city: property.city ?? '',
+      ward: property.ward ?? '',
+      buildingLatitude: decimalToString(property.latitude) ?? '',
+      buildingLongitude: decimalToString(property.longitude) ?? '',
+      buildingType: property.buildingType ?? '',
+      propertyUsageType: property.usageType ?? '',
+      managementStatus: property.managementStatus ?? 'ACTIVE',
+      propertyRemark: property.remark ?? '',
+      roomCode: room.roomCode ?? '',
+      houseNumber: room.houseNumber ?? '',
+      roomNumber: room.roomNumber,
+      displayName: room.displayName ?? '',
+      unitType: room.unitType ?? 'ROOM',
+      roomUsageType: room.usageType ?? '',
+      area: decimalToString(room.area) ?? '',
+      floor: room.floor ?? '',
+      floorLabel: room.floorLabel ?? '',
+      roomLatitude: decimalToString(room.latitude) ?? '',
+      roomLongitude: decimalToString(room.longitude) ?? '',
+      status: room.status,
+      note: room.note ?? '',
+      roomRemark: room.remark ?? '',
+    };
+  }
+
+  private optionalText(value?: string) {
+    if (value === undefined) return undefined;
+    const normalized = value.trim();
+    return normalized || null;
+  }
+
+  private normalizeMatchText(value?: string) {
+    if (value === undefined) return undefined;
+    const normalized = value.normalize('NFKC').trim().toLowerCase().replace(/[\s\u3000-]+/g, '');
+    return normalized || null;
+  }
+
+  private nonEmptyText(value?: string) {
+    const normalized = value?.trim();
+    return normalized || undefined;
+  }
+
+  private nonEmptyNormalizedText(value?: string) {
+    const normalized = this.normalizeMatchText(value);
+    return normalized || undefined;
   }
 
   private async ensureHouseNumberUnique(houseNumber?: string, excludeId?: string) {

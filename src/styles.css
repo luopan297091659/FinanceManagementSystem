@@ -214,6 +214,25 @@ h3 {
   grid-column: span 2;
 }
 
+.resource-editor-modal {
+  width: min(920px, 100%);
+}
+
+.form-section-title {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 15px;
+}
+
+.field-grid .readonly-field input {
+  background: #f4f7f9;
+  color: var(--muted);
+  cursor: default;
+}
+
 .form-actions {
   display: flex;
   gap: 10px;

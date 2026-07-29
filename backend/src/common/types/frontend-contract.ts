@@ -12,20 +12,37 @@ export interface FrontendProject {
 export interface FrontendBuilding {
   id: string;
   projectId?: string | null;
+  propertyCode?: string | null;
   name: string;
+  nameKana?: string | null;
+  postalCode?: string | null;
   address?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  prefecture?: string | null;
+  city?: string | null;
+  ward?: string | null;
   latitude?: string | null;
   longitude?: string | null;
+  buildingType?: string | null;
+  usageType?: string | null;
+  managementStatus?: string | null;
+  remark?: string | null;
 }
 
 export interface FrontendRoom {
   id: string;
   projectId?: string | null;
   buildingId: string;
+  roomCode?: string | null;
   houseNumber?: string | null;
   number: string;
+  displayName?: string | null;
+  unitType?: string | null;
   area?: string | null;
   floor?: number | null;
+  floorLabel?: string | null;
+  usageType?: string | null;
   latitude?: string | null;
   longitude?: string | null;
   effectiveLatitude?: string | null;
@@ -33,6 +50,7 @@ export interface FrontendRoom {
   coordinateSource: 'building' | 'room' | 'none';
   status: string;
   note?: string | null;
+  remark?: string | null;
 }
 
 export interface FrontendTenant {

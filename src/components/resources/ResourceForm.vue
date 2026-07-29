@@ -1,46 +1,48 @@
 <template>
   <form class="panel-form" @submit.prevent="emit('submit')">
     <div class="field-grid">
+      <h4 class="form-section-title">{{ labels.buildingInformation }}</h4>
+      <label>{{ labels.project }}<input v-model="form.projectName" required /></label>
+      <label>{{ labels.building }}<input v-model="form.buildingName" required /></label>
+      <label>{{ labels.propertyCode }}<input v-model="form.propertyCode" /></label>
+      <label>{{ labels.buildingNameKana }}<input v-model="form.buildingNameKana" /></label>
+      <label>{{ labels.postalCode }}<input v-model="form.postalCode" /></label>
+      <label>{{ labels.address }}<input v-model="form.address" /></label>
+      <label>{{ labels.prefecture }}<input v-model="form.prefecture" /></label>
+      <label>{{ labels.city }}<input v-model="form.city" /></label>
+      <label>{{ labels.ward }}<input v-model="form.ward" /></label>
+      <label>{{ labels.addressLine1 }}<input v-model="form.addressLine1" /></label>
+      <label class="span-2">{{ labels.addressLine2 }}<input v-model="form.addressLine2" /></label>
+      <label>{{ labels.buildingType }}<input v-model="form.buildingType" /></label>
+      <label>{{ labels.propertyUsageType }}<input v-model="form.propertyUsageType" /></label>
       <label>
-        {{ labels.project }}
-        <input v-model="form.projectName" required placeholder="住之江区西住之江" />
+        {{ labels.managementStatus }}
+        <select v-model="form.managementStatus">
+          <option value="ACTIVE">{{ labels.active }}</option>
+          <option value="INACTIVE">{{ labels.inactive }}</option>
+        </select>
       </label>
+      <label class="readonly-field">{{ labels.buildingLatitude }}<input v-model="form.buildingLatitude" type="text" readonly /></label>
+      <label class="readonly-field">{{ labels.buildingLongitude }}<input v-model="form.buildingLongitude" type="text" readonly /></label>
+      <label class="span-2">{{ labels.propertyRemark }}<textarea v-model="form.propertyRemark" rows="2"></textarea></label>
+
+      <h4 class="form-section-title">{{ labels.roomInformation }}</h4>
+      <label>{{ labels.roomCode }}<input v-model="form.roomCode" /></label>
+      <label>{{ labels.houseNumber }}<input v-model="form.houseNumber" required /></label>
+      <label>{{ labels.roomNumber }}<input v-model="form.roomNumber" required /></label>
+      <label>{{ labels.displayName }}<input v-model="form.displayName" /></label>
       <label>
-        {{ labels.building }}
-        <input v-model="form.buildingName" required placeholder="T1" />
+        {{ labels.unitType }}
+        <select v-model="form.unitType">
+          <option v-for="type in unitTypes" :key="type" :value="type">{{ labels.unitTypes?.[type] || type }}</option>
+        </select>
       </label>
-      <label>
-        {{ labels.houseNumber }}
-        <input v-model="form.houseNumber" required placeholder="H0001" />
-      </label>
-      <label>
-        {{ labels.roomNumber }}
-        <input v-model="form.roomNumber" required placeholder="101" />
-      </label>
-      <label>
-        {{ labels.buildingLatitude }}
-        <input v-model="form.buildingLatitude" type="text" placeholder="34.6937378" />
-      </label>
-      <label>
-        {{ labels.buildingLongitude }}
-        <input v-model="form.buildingLongitude" type="text" placeholder="135.5021651" />
-      </label>
-      <label>
-        {{ labels.area }}
-        <input v-model.number="form.area" type="number" min="0" step="0.01" />
-      </label>
-      <label>
-        {{ labels.floor }}
-        <input v-model.number="form.floor" type="number" />
-      </label>
-      <label>
-        {{ labels.roomLatitude }}
-        <input v-model="form.roomLatitude" type="text" :placeholder="labels.defaultBuilding" />
-      </label>
-      <label>
-        {{ labels.roomLongitude }}
-        <input v-model="form.roomLongitude" type="text" :placeholder="labels.defaultBuilding" />
-      </label>
+      <label>{{ labels.roomUsageType }}<input v-model="form.roomUsageType" /></label>
+      <label>{{ labels.area }}<input v-model.number="form.area" type="number" min="0" step="0.01" /></label>
+      <label>{{ labels.floor }}<input v-model.number="form.floor" type="number" /></label>
+      <label>{{ labels.floorLabel }}<input v-model="form.floorLabel" /></label>
+      <label>{{ labels.roomLatitude }}<input v-model="form.roomLatitude" type="text" :placeholder="labels.defaultBuilding" /></label>
+      <label>{{ labels.roomLongitude }}<input v-model="form.roomLongitude" type="text" :placeholder="labels.defaultBuilding" /></label>
       <label>
         {{ labels.status }}
         <select v-model="form.status">
@@ -51,10 +53,8 @@
           <option value="INACTIVE">{{ labels.inactive }}</option>
         </select>
       </label>
-      <label class="span-2">
-        {{ labels.note }}
-        <textarea v-model="form.note" rows="3" :placeholder="labels.notePlaceholder"></textarea>
-      </label>
+      <label class="span-2">{{ labels.note }}<textarea v-model="form.note" rows="3" :placeholder="labels.notePlaceholder"></textarea></label>
+      <label class="span-2">{{ labels.roomRemark }}<textarea v-model="form.roomRemark" rows="2"></textarea></label>
     </div>
 
     <div class="form-actions">
@@ -68,26 +68,16 @@
 import { computed } from "vue";
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    required: true,
-  },
-  labels: {
-    type: Object,
-    required: true,
-  },
-  common: {
-    type: Object,
-    required: true,
-  },
+  modelValue: { type: Object, required: true },
+  labels: { type: Object, required: true },
+  common: { type: Object, required: true },
 });
 
 const emit = defineEmits(["submit", "cancel"]);
-
 const form = computed({
   get: () => props.modelValue,
   set: (value) => emit("update:modelValue", value),
 });
-
 const editing = computed(() => Boolean(props.modelValue.id));
+const unitTypes = ["ROOM", "HOUSE", "SHOP", "OFFICE", "PARKING", "SIGNBOARD", "BASE_STATION", "VENDING", "MINPAKU", "OTHER"];
 </script>

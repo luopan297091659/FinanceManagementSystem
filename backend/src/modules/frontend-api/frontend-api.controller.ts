@@ -28,6 +28,11 @@ export class FrontendApiController {
     return this.frontendApi.createRoom(dto);
   }
 
+  @Get('rooms/:id')
+  getRoom(@Param('id') id: string) {
+    return this.frontendApi.getRoom(id);
+  }
+
   @Put('rooms/:id')
   @RequirePermission('property:update')
   updateRoom(@Param('id') id: string, @Body() dto: CreateRoomDto) {

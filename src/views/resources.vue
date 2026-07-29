@@ -123,7 +123,7 @@
       </div>
     </div>
     <div v-if="showResourceModal" class="modal-overlay" @click.self="closeResourceModal">
-      <div class="modal-card">
+      <div class="modal-card resource-editor-modal">
         <div class="modal-header">
           <h3>{{ resourceModalTitle }}</h3>
           <button class="modal-close-button" type="button" @click="closeResourceModal" :title="common.close">×</button>
@@ -145,18 +145,38 @@ import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const blankForm = () => ({
   id: "",
+  buildingId: "",
   projectName: "",
   buildingName: "",
+  propertyCode: "",
+  buildingNameKana: "",
+  postalCode: "",
+  address: "",
+  addressLine1: "",
+  addressLine2: "",
+  prefecture: "",
+  city: "",
+  ward: "",
   buildingLatitude: "",
   buildingLongitude: "",
+  buildingType: "",
+  propertyUsageType: "",
+  managementStatus: "ACTIVE",
+  propertyRemark: "",
+  roomCode: "",
   houseNumber: "",
   roomNumber: "",
+  displayName: "",
+  unitType: "ROOM",
+  roomUsageType: "",
   area: "",
   floor: "",
+  floorLabel: "",
   roomLatitude: "",
   roomLongitude: "",
   status: "VACANT",
   note: "",
+  roomRemark: "",
 });
 
 const form = ref(blankForm());
@@ -241,19 +261,38 @@ const loadResources = async () => {
       const building = payload.buildings.find((item) => item.id === room.buildingId);
       return {
         id: room.id,
+        buildingId: building?.id || room.buildingId || "",
         projectName: project?.name || "",
         buildingName: building?.name || "",
+        propertyCode: building?.propertyCode || "",
+        buildingNameKana: building?.nameKana || "",
+        postalCode: building?.postalCode || "",
         address: building?.address || project?.address || "",
+        addressLine1: building?.addressLine1 || "",
+        addressLine2: building?.addressLine2 || "",
+        prefecture: building?.prefecture || "",
+        city: building?.city || "",
+        ward: building?.ward || "",
         buildingLatitude: building?.latitude || "",
         buildingLongitude: building?.longitude || "",
+        buildingType: building?.buildingType || "",
+        propertyUsageType: building?.usageType || "",
+        managementStatus: building?.managementStatus || "ACTIVE",
+        propertyRemark: building?.remark || "",
+        roomCode: room.roomCode || "",
         houseNumber: room.houseNumber,
         roomNumber: room.number,
+        displayName: room.displayName || "",
+        unitType: room.unitType || "ROOM",
+        roomUsageType: room.usageType || "",
         area: room.area,
         floor: room.floor,
+        floorLabel: room.floorLabel || "",
         roomLatitude: room.latitude || "",
         roomLongitude: room.longitude || "",
         status: room.status,
         note: room.note,
+        roomRemark: room.remark || "",
       };
     });
     selectedIds.value = selectedIds.value.filter((id) => resources.value.some((item) => item.id === id));
@@ -306,16 +345,11 @@ const saveResource = async () => {
   if (!form.value.projectName || !form.value.buildingName || !form.value.houseNumber) return;
 
   try {
-    const payload = {
-      projectName: form.value.projectName,
-      buildingName: form.value.buildingName,
-      houseNumber: form.value.houseNumber,
-      roomNumber: form.value.roomNumber,
-      area: form.value.area,
-      floor: form.value.floor,
-      status: form.value.status,
-      note: form.value.note,
-    };
+    const payload = Object.fromEntries(
+      Object.entries(form.value).filter(([key]) => key !== "id"),
+    );
+    payload.area = form.value.area === "" || form.value.area == null ? "" : String(form.value.area);
+    payload.floor = form.value.floor === "" || form.value.floor == null ? "" : String(form.value.floor);
 
     if (form.value.id) await api.updateRoom(form.value.id, payload);
     else await api.createRoom(payload);
@@ -326,10 +360,18 @@ const saveResource = async () => {
   }
 };
 
-const editResource = (item) => {
-  form.value = { ...item };
-  resourceModalTitle.value = labels.value.editResource;
-  showResourceModal.value = true;
+const editResource = async (item) => {
+  loading.value = true;
+  errorMessage.value = "";
+  try {
+    form.value = { ...blankForm(), ...(await api.getRoom(item.id)) };
+    resourceModalTitle.value = labels.value.editResource;
+    showResourceModal.value = true;
+  } catch (error) {
+    errorMessage.value = error.message || labels.value.loadFailed;
+  } finally {
+    loading.value = false;
+  }
 };
 
 const deleteResource = async (id) => {

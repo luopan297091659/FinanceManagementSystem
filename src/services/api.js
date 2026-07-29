@@ -128,6 +128,10 @@ export const api = {
     return request('/rooms', { method: 'POST', body: payload });
   },
 
+  async getRoom(id) {
+    return request(`/rooms/${id}`);
+  },
+
   async updateRoom(id, payload) {
     return request(`/rooms/${id}`, { method: 'PUT', body: payload });
   },
