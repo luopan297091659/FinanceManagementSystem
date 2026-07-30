@@ -187,8 +187,8 @@
           <aside class="field-library">
             <h4>{{ ui.internalFields }}</h4>
             <input v-model="fieldSearch" type="search" :placeholder="ui.searchInternal" />
-            <details v-for="source in filteredFieldMetadata" :key="source.key" open>
-              <summary>{{ source.label }} <span>{{ source.fields.length }}</span></summary>
+            <details v-for="source in filteredFieldMetadata" :key="source.key" :open="Boolean(fieldSearch)">
+              <summary><span class="source-title">{{ source.label }}</span><span class="source-count">{{ source.fields.length }}</span></summary>
               <button v-for="field in source.fields" :key="field.key" class="field-card" type="button" draggable="true" @dragstart="startFieldDrag('internal', field.key)" @click="assignSelectedField('internal', field.key)">
                 <strong>{{ field.label }}</strong><code>{{ field.key }}</code>
                 <small>{{ field.dataType }} · {{ field.normalizable ? ui.normalizable : ui.exactOnly }}<span v-if="field.aggregatable"> · Σ</span></small>
@@ -202,31 +202,46 @@
               <button class="primary-button" type="button" @click="addRuleGroup">＋ {{ ui.addGroup }}</button>
             </div>
             <article v-for="(group, groupIndex) in draftConfiguration.groups" :key="group.id" class="rule-group-card">
-              <header>
-                <input v-model="group.name" :aria-label="ui.groupName" />
-                <select v-model="group.logicalOperator"><option value="AND">AND</option><option value="OR">OR</option></select>
-                <label>{{ ui.priority }} <input v-model.number="group.priority" type="number" min="1" /></label>
-                <button class="ghost-button mini" type="button" @click="duplicateRuleGroup(groupIndex)">{{ ui.duplicate }}</button>
-                <button class="danger-button mini" type="button" @click="removeRuleGroup(groupIndex)">{{ t.action.delete }}</button>
+              <header class="rule-group-header">
+                <div class="group-identity"><span class="group-index">{{ groupIndex + 1 }}</span><input v-model="group.name" :aria-label="ui.groupName" /><span class="rule-count-badge">{{ group.rules.length }}</span></div>
+                <div class="group-controls">
+                  <select v-model="group.logicalOperator" :aria-label="ui.logic"><option value="AND">AND</option><option value="OR">OR</option></select>
+                  <label>{{ ui.priority }} <input v-model.number="group.priority" type="number" min="1" /></label>
+                  <button class="icon-text-button" type="button" @click="duplicateRuleGroup(groupIndex)">{{ ui.duplicate }}</button>
+                  <button class="icon-text-button danger-text" type="button" @click="removeRuleGroup(groupIndex)">{{ t.action.delete }}</button>
+                </div>
               </header>
               <div v-for="(rule, ruleIndex) in group.rules" :key="rule.id" class="mapping-rule" @click="activeRule = { groupIndex, ruleIndex }">
-                <div class="mapping-field" @dragover.prevent @drop="dropField(groupIndex, ruleIndex, 'internal')">
-                  <span>{{ ui.systemSide }}</span>
-                  <select v-model="rule.leftFields" multiple><option v-for="field in allInternalFields" :key="field.key" :value="field.key">{{ field.label }} ({{ field.key }})</option></select>
+                <div class="rule-main-row">
+                  <div class="mapping-field compact-field" @dragover.prevent @drop="dropField(groupIndex, ruleIndex, 'internal')">
+                    <span>{{ ui.systemSide }}</span>
+                    <div class="field-chip-box" :class="{ empty: !rule.leftFields.length }">
+                      <span v-for="key in rule.leftFields" :key="key" class="mapping-chip">{{ internalFieldLabel(key) }}<button type="button" @click.stop="removeMappedField(rule, 'leftFields', key)">×</button></span>
+                      <span v-if="!rule.leftFields.length" class="field-placeholder">{{ ui.noField }}</span>
+                    </div>
+                    <select class="field-add-select" value="" @change="appendMappedField(rule, 'leftFields', $event)"><option value="">＋ {{ ui.addInternal }}</option><option v-for="field in allInternalFields" :key="field.key" :value="field.key" :disabled="rule.leftFields.includes(field.key)">{{ field.label }} · {{ field.key }}</option></select>
+                  </div>
+                  <div class="mapping-comparator">
+                    <select v-model="rule.operator"><option v-for="operator in operators" :key="operator.value" :value="operator.value">{{ operator.label }}</option></select>
+                  </div>
+                  <div class="mapping-field compact-field" @dragover.prevent @drop="dropField(groupIndex, ruleIndex, 'excel')">
+                    <span>{{ ui.excelSide }}</span>
+                    <div class="field-chip-box" :class="{ empty: !rule.rightFields.length }">
+                      <span v-for="key in rule.rightFields" :key="key" class="mapping-chip excel-chip">{{ key }}<button type="button" @click.stop="removeMappedField(rule, 'rightFields', key)">×</button></span>
+                      <span v-if="!rule.rightFields.length" class="field-placeholder">{{ ui.noField }}</span>
+                    </div>
+                    <select class="field-add-select" value="" @change="appendMappedField(rule, 'rightFields', $event)"><option value="">＋ {{ ui.addExcel }}</option><option v-for="header in excelHeaders" :key="header.name" :value="header.name" :disabled="rule.rightFields.includes(header.name)">{{ header.name }} · {{ header.dataType }}</option></select>
+                  </div>
+                  <label class="required-toggle"><input v-model="rule.required" type="checkbox" /><span></span>{{ ui.required }}</label>
+                  <button class="rule-remove-button" type="button" :aria-label="t.action.delete" @click.stop="removeRule(groupIndex, ruleIndex)">×</button>
                 </div>
-                <div class="mapping-operator">
-                  <select v-model="rule.operator"><option v-for="operator in operators" :key="operator.value" :value="operator.value">{{ operator.label }}</option></select>
-                  <label>{{ ui.weight }} <input v-model.number="rule.weight" type="number" min="0" max="100" /></label>
-                </div>
-                <div class="mapping-field" @dragover.prevent @drop="dropField(groupIndex, ruleIndex, 'excel')">
-                  <span>{{ ui.excelSide }}</span>
-                  <select v-model="rule.rightFields" multiple><option v-for="header in excelHeaders" :key="header.name" :value="header.name">{{ header.name }} ({{ header.dataType }})</option></select>
-                </div>
-                <div class="rule-settings">
-                  <label><input v-model="rule.required" type="checkbox" /> {{ ui.required }}</label>
-                  <select v-model="rule.transformations" multiple :title="ui.transformations"><option v-for="transform in transformations" :key="transform.value" :value="transform.value">{{ transform.label }}</option></select>
-                  <button class="ghost-button mini" type="button" @click.stop="removeRule(groupIndex, ruleIndex)">×</button>
-                </div>
+                <details class="advanced-settings">
+                  <summary>{{ ui.advanced }}<span>{{ ui.weight }} {{ rule.weight }} · {{ rule.transformations.length }} {{ ui.transformsSelected }}</span></summary>
+                  <div class="advanced-content">
+                    <label class="weight-control">{{ ui.weight }}<input v-model.number="rule.weight" type="range" min="0" max="100" /><output>{{ rule.weight }}</output></label>
+                    <div class="transformation-options"><label v-for="transform in transformations" :key="transform.value"><input v-model="rule.transformations" type="checkbox" :value="transform.value" />{{ transform.label }}</label></div>
+                  </div>
+                </details>
               </div>
               <button class="add-rule-button" type="button" @click="addRule(groupIndex)">＋ {{ ui.addRule }}</button>
             </article>
@@ -236,11 +251,11 @@
           <aside class="field-library excel-library">
             <h4>{{ ui.excelFields }}</h4>
             <input v-model="excelSearch" type="search" :placeholder="ui.searchExcel" />
-            <button v-for="header in filteredExcelHeaders" :key="header.name" class="field-card excel-field-card" type="button" draggable="true" @dragstart="startFieldDrag('excel', header.name)" @click="assignSelectedField('excel', header.name)">
+            <div v-for="header in filteredExcelHeaders" :key="header.name" class="field-card excel-field-card" role="button" tabindex="0" draggable="true" @dragstart="startFieldDrag('excel', header.name)" @click="assignSelectedField('excel', header.name)" @keydown.enter="assignSelectedField('excel', header.name)">
               <strong>{{ header.name }}</strong>
               <select v-model="header.dataType" @click.stop><option v-for="type in dataTypes" :key="type" :value="type">{{ type }}</option></select>
               <small>{{ ui.nonEmpty }} {{ header.nonEmptyCount }} · {{ header.examples.join(' / ') || '—' }}</small>
-            </button>
+            </div>
           </aside>
         </div>
 
@@ -306,14 +321,14 @@ const ui = computed(() => locale.value === "zh" ? {
   dialogEyebrow: "AI 对账规则", dialogTitle: "选择匹配字段", dialogHelp: "将内部系统字段与上传的 Excel 列建立映射。支持一对一、一对多和多对一。",
   loadTemplate: "加载模板", saveTemplate: "另存为模板", reset: "重置配置", internalFields: "内部系统字段", excelFields: "上传的 Excel 字段", ruleWorkspace: "匹配规则工作区", ruleWorkspaceHelp: "点击字段或拖放到规则中；多选即可组合字段。",
   searchInternal: "搜索内部字段", searchExcel: "搜索 Excel 列", normalizable: "可标准化", exactOnly: "精确值", addGroup: "添加规则组", addRule: "添加规则", noGroups: "请添加一个规则组开始配置。",
-  groupName: "规则组名称", priority: "优先级", duplicate: "复制", systemSide: "内部字段 / 字段组", excelSide: "Excel 字段 / 字段组", weight: "权重", required: "必需", transformations: "转换规则", nonEmpty: "非空",
+  groupName: "规则组名称", logic: "组内逻辑", priority: "优先级", duplicate: "复制", systemSide: "内部字段", excelSide: "Excel 字段", weight: "权重", required: "必需", transformations: "转换规则", nonEmpty: "非空", noField: "尚未选择", addInternal: "添加内部字段", addExcel: "添加 Excel 字段", advanced: "高级设置", transformsSelected: "项转换",
   testRules: "测试匹配规则", previewPassed: "字段校验通过", missingHeaders: "缺少列", cancel: "取消", confirm: "确认配置", templateName: "请输入模板名称", templateSaved: "模板已保存", invalidTemplate: "模板中的部分 Excel 列不存在，请重新映射。",
 } : {
   selectFields: "照合フィールド選択", configure: "ルール設定", ruleRequired: "照合を実行する前に、少なくとも1つの有効な照合条件を設定してください。", rulesConfigured: "件のルール設定済み", groups: "ルールグループ",
   dialogEyebrow: "AI 照合ルール", dialogTitle: "照合フィールド選択", dialogHelp: "内部システム項目とアップロードした Excel 列を関連付けます。1対1、1対多、多対1に対応します。",
   loadTemplate: "テンプレート読込", saveTemplate: "テンプレート保存", reset: "リセット", internalFields: "内部システム項目", excelFields: "Excel 項目", ruleWorkspace: "照合ルール", ruleWorkspaceHelp: "項目をクリック、またはルールへドラッグします。複数選択で項目を結合できます。",
   searchInternal: "内部項目を検索", searchExcel: "Excel 列を検索", normalizable: "正規化可", exactOnly: "完全一致", addGroup: "グループ追加", addRule: "ルール追加", noGroups: "ルールグループを追加してください。",
-  groupName: "グループ名", priority: "優先度", duplicate: "複製", systemSide: "内部項目 / 項目グループ", excelSide: "Excel 項目 / 項目グループ", weight: "重み", required: "必須", transformations: "変換", nonEmpty: "非空",
+  groupName: "グループ名", logic: "グループ内論理", priority: "優先度", duplicate: "複製", systemSide: "内部項目", excelSide: "Excel 項目", weight: "重み", required: "必須", transformations: "変換", nonEmpty: "非空", noField: "未選択", addInternal: "内部項目を追加", addExcel: "Excel 項目を追加", advanced: "詳細設定", transformsSelected: "件の変換",
   testRules: "ルールをテスト", previewPassed: "項目検証に成功", missingHeaders: "不足列", cancel: "キャンセル", confirm: "確定", templateName: "テンプレート名を入力", templateSaved: "保存しました", invalidTemplate: "テンプレート内の Excel 列が不足しています。再設定してください。",
 });
 const roomColumnLabel = computed(() => t.value.table.room);
@@ -505,6 +520,15 @@ const assignSelectedField = (side, key) => {
   if (!rule) return;
   const target = rule[side === "internal" ? "leftFields" : "rightFields"];
   if (!target.includes(key)) target.push(key);
+};
+const internalFieldLabel = (key) => allInternalFields.value.find((field) => field.key === key)?.label || key;
+const appendMappedField = (rule, targetKey, event) => {
+  const value = event.target.value;
+  if (value && !rule[targetKey].includes(value)) rule[targetKey].push(value);
+  event.target.value = "";
+};
+const removeMappedField = (rule, targetKey, value) => {
+  rule[targetKey] = rule[targetKey].filter((item) => item !== value);
 };
 const previewRules = async () => {
   previewResult.value = await api.previewReconciliationConfiguration(activeBatchId.value, draftConfiguration.value);
@@ -1058,8 +1082,8 @@ td small {
   width: min(1540px, 96vw);
   height: min(900px, 94vh);
   overflow: hidden;
-  border-radius: 14px;
-  background: #f8fafc;
+  border-radius: 12px;
+  background: #fff;
   box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
 }
 
@@ -1075,7 +1099,7 @@ td small {
 
 .matching-modal-header {
   justify-content: space-between;
-  padding: 20px 24px 16px;
+  padding: 16px 20px 14px;
   border-bottom: 1px solid var(--line);
   background: #fff;
 }
@@ -1086,7 +1110,7 @@ td small {
 .modal-close { border: 0; background: transparent; color: #64748b; font-size: 30px; cursor: pointer; }
 
 .template-toolbar {
-  padding: 12px 20px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--line);
   background: #fff;
 }
@@ -1095,7 +1119,7 @@ td small {
 
 .matching-workspace {
   display: grid;
-  grid-template-columns: 290px minmax(520px, 1fr) 300px;
+  grid-template-columns: 260px minmax(600px, 1fr) 280px;
   min-height: 0;
   overflow: hidden;
 }
@@ -1104,65 +1128,111 @@ td small {
 .rule-workspace {
   min-width: 0;
   overflow: auto;
-  padding: 18px;
+  padding: 14px;
 }
 
 .field-library { background: #fff; }
 .field-library:first-child { border-right: 1px solid var(--line); }
 .excel-library { border-left: 1px solid var(--line); }
-.field-library > input { margin: 12px 0; }
-.field-library details { margin-bottom: 10px; }
-.field-library summary { display: flex; justify-content: space-between; padding: 8px 2px; color: #334155; font-weight: 800; cursor: pointer; }
-.field-library summary span { color: var(--muted); font-size: 12px; }
+.field-library > input { margin: 10px 0 12px; }
+.field-library details { margin-bottom: 4px; }
+.field-library summary {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+.field-library summary::-webkit-details-marker { display: none; }
+.field-library summary::before { content: "›"; margin-right: 8px; color: #94a3b8; font-size: 18px; transition: transform .16s ease; }
+.field-library details[open] summary::before { transform: rotate(90deg); }
+.field-library summary:hover { background: #f1f5f9; }
+.source-title { flex: 1; }
+.source-count { min-width: 22px; color: #94a3b8; font-size: 11px; text-align: right; }
+.field-library details[open] { margin-bottom: 8px; }
+.field-library details[open] > .field-card { margin-left: 14px; width: calc(100% - 14px); }
 
 .field-card {
   display: grid;
   gap: 3px;
   width: 100%;
-  margin-bottom: 7px;
-  padding: 9px 10px;
-  border: 1px solid #dbe4ec;
-  border-radius: 8px;
+  margin-bottom: 3px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: #fff;
   color: #1e293b;
   text-align: left;
   cursor: grab;
 }
-.field-card:hover { border-color: var(--primary); background: #f0fdfa; }
+.field-card:hover { border-color: #b9ded9; background: #f0fdfa; }
 .field-card code { overflow: hidden; color: #0f766e; font-size: 11px; text-overflow: ellipsis; }
 .field-card small { color: var(--muted); }
-.excel-field-card { grid-template-columns: minmax(0, 1fr) 90px; align-items: center; }
+.excel-field-card { grid-template-columns: minmax(0, 1fr) 82px; align-items: center; margin-bottom: 5px; border-color: #e2e8f0; }
 .excel-field-card small { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .excel-field-card select { padding: 5px; font-size: 11px; }
 
-.rule-workspace { background: #f5f8fb; }
-.rule-workspace-title { justify-content: space-between; margin-bottom: 14px; }
-.rule-group-card { margin-bottom: 14px; padding: 14px; border: 1px solid #d8e1ea; border-radius: 10px; background: #fff; }
-.rule-group-card > header { display: grid; grid-template-columns: minmax(150px, 1fr) 80px 120px auto auto; margin-bottom: 12px; }
-.rule-group-card > header label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
-.rule-group-card > header label input { width: 55px; }
+.rule-workspace { background: #f8fafc; }
+.rule-workspace-title { justify-content: space-between; margin-bottom: 10px; }
+.rule-group-card { margin-bottom: 10px; overflow: hidden; border: 1px solid #dce5ed; border-radius: 8px; background: #fff; }
+.rule-group-header { justify-content: space-between; min-height: 48px; padding: 7px 10px; border-bottom: 1px solid #edf1f5; }
+.group-identity, .group-controls { display: flex; align-items: center; gap: 8px; }
+.group-identity { min-width: 0; flex: 1; }
+.group-index { display: grid; flex: 0 0 24px; height: 24px; place-items: center; border-radius: 50%; background: #e8f6f4; color: #0f766e; font-size: 12px; font-weight: 800; }
+.group-identity input { min-width: 110px; max-width: 300px; border-color: transparent; background: transparent; font-weight: 750; }
+.group-identity input:hover, .group-identity input:focus { border-color: #cbd5e1; background: #fff; }
+.rule-count-badge { padding: 2px 7px; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 11px; }
+.group-controls select { width: 72px; padding: 6px; }
+.group-controls label { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
+.group-controls label input { width: 48px; padding: 6px; }
+.icon-text-button { border: 0; padding: 6px; background: transparent; color: #475569; font-size: 12px; cursor: pointer; }
+.icon-text-button:hover { color: var(--primary); }
+.danger-text, .icon-text-button.danger-text:hover { color: #c2413a; }
 
 .mapping-rule {
-  display: grid;
-  grid-template-columns: minmax(155px, 1fr) 130px minmax(155px, 1fr) 120px;
-  gap: 9px;
-  margin-bottom: 9px;
-  padding: 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fbfdff;
+  margin: 8px 10px;
+  border: 1px solid #e5ebf0;
+  border-radius: 7px;
+  background: #fff;
 }
 .mapping-rule:focus-within { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(13, 128, 119, 0.1); }
+.rule-main-row { display: grid; grid-template-columns: minmax(180px, 1fr) 126px minmax(180px, 1fr) auto 28px; gap: 8px; align-items: end; padding: 9px; }
 .mapping-field > span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.mapping-field select { min-height: 72px; font-size: 12px; }
-.mapping-operator { display: grid; align-content: center; gap: 6px; }
-.mapping-operator label { color: var(--muted); font-size: 11px; }
-.mapping-operator input { margin-top: 3px; }
-.rule-settings { display: grid; align-content: center; gap: 6px; }
-.rule-settings label { display: flex; align-items: center; gap: 5px; font-size: 12px; }
-.rule-settings label input { width: auto; }
-.rule-settings select { min-height: 54px; font-size: 11px; }
-.add-rule-button { width: 100%; border: 1px dashed #94a3b8; border-radius: 7px; padding: 8px; background: transparent; color: #0f766e; cursor: pointer; }
+.field-chip-box { display: flex; min-height: 34px; align-items: center; gap: 4px; overflow-x: auto; padding: 4px; border: 1px solid #d9e2ea; border-radius: 6px 6px 0 0; background: #fff; }
+.field-chip-box.empty { color: #94a3b8; }
+.mapping-chip { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; max-width: 180px; padding: 3px 6px; border-radius: 4px; background: #eaf7f5; color: #0f766e; font-size: 11px; white-space: nowrap; }
+.mapping-chip.excel-chip { background: #eef4fb; color: #315d87; }
+.mapping-chip button { border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.field-placeholder { padding-left: 4px; font-size: 11px; }
+.field-add-select { border-top: 0; border-radius: 0 0 6px 6px; padding: 5px 7px; color: #64748b; font-size: 11px; }
+.mapping-comparator { align-self: center; padding-top: 16px; }
+.mapping-comparator select { font-size: 12px; }
+.required-toggle { display: flex; align-items: center; gap: 5px; height: 34px; color: #475569; font-size: 11px; white-space: nowrap; }
+.required-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.required-toggle span { position: relative; width: 28px; height: 16px; border-radius: 999px; background: #cbd5e1; transition: .16s ease; }
+.required-toggle span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: .16s ease; }
+.required-toggle input:checked + span { background: var(--primary); }
+.required-toggle input:checked + span::after { transform: translateX(12px); }
+.rule-remove-button { align-self: end; width: 28px; height: 34px; border: 0; background: transparent; color: #94a3b8; font-size: 18px; cursor: pointer; }
+.rule-remove-button:hover { color: #c2413a; }
+.advanced-settings { border-top: 1px solid #f0f3f6; }
+.advanced-settings > summary { display: flex; justify-content: space-between; padding: 7px 10px; color: #64748b; font-size: 11px; cursor: pointer; list-style: none; }
+.advanced-settings > summary::-webkit-details-marker { display: none; }
+.advanced-settings > summary::before { content: "›"; margin-right: 6px; }
+.advanced-settings[open] > summary::before { transform: rotate(90deg); }
+.advanced-settings > summary > span { margin-left: auto; color: #94a3b8; }
+.advanced-content { display: grid; grid-template-columns: 190px 1fr; gap: 12px; padding: 4px 10px 10px; }
+.weight-control { display: grid; grid-template-columns: auto 1fr 30px; align-items: center; gap: 7px; color: #64748b; font-size: 11px; }
+.weight-control input { padding: 0; }
+.transformation-options { display: flex; flex-wrap: wrap; gap: 5px 10px; }
+.transformation-options label { display: flex; align-items: center; gap: 4px; color: #475569; font-size: 10px; }
+.transformation-options input { width: auto; }
+.add-rule-button { width: calc(100% - 20px); margin: 0 10px 10px; border: 1px dashed #b7c5d1; border-radius: 6px; padding: 7px; background: transparent; color: #0f766e; cursor: pointer; }
 .empty-rule-state { display: grid; min-height: 220px; place-items: center; border: 1px dashed #cbd5e1; border-radius: 10px; color: var(--muted); }
 
 .matching-modal-footer {
@@ -1199,6 +1269,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
   .matching-modal-backdrop { padding: 8px; }
   .matching-workspace { grid-template-columns: 230px minmax(480px, 1fr) 240px; overflow: auto; }
-  .mapping-rule { grid-template-columns: 1fr; }
+  .rule-main-row { grid-template-columns: 1fr; }
+  .mapping-comparator { padding-top: 0; }
+  .advanced-content { grid-template-columns: 1fr; }
 }
 </style>
