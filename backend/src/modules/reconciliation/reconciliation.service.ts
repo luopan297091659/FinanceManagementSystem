@@ -68,7 +68,7 @@ const RECONCILIATION_FIELD_METADATA = [
       ['contract.roomId', '部屋ID', 'string', false, false],
       ['contract.contractorName', '契約者', 'string', true, false],
       ['contract.tenantName', '入居者名', 'string', true, false],
-      ['contract.bankTransferDescription', '振込名義', 'string', true, false],
+      ['contract.bankSummaryName', '銀行摘要名義', 'string', true, false],
       ['contract.monthlyRent', '賃料', 'currency', true, true],
       ['contract.managementFee', '管理費', 'currency', true, true],
       ['contract.deposit', '敷金', 'currency', true, true],
@@ -773,7 +773,7 @@ export class ReconciliationService {
     const validAliases = useSummary ? aliases.filter(
       (alias) =>
         (!useDate || this.isContractValid(alias.contract, record.transactionDate)) &&
-        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.payerName, alias.contract.payerName, alias.contract.contractorName, alias.contract.tenant?.name]),
+        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.originalBankSummary, alias.payerName, alias.contract.bankSummaryName, alias.contract.payerName, alias.contract.contractorName, alias.contract.tenant?.name]),
     ) : [];
 
     const validCandidates = validAliases.length
@@ -785,7 +785,7 @@ export class ReconciliationService {
           .filter(
             (contract) =>
               (!useDate || this.isContractValid(contract, record.transactionDate)) &&
-              (!useSummary || this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.payerName, contract.contractorName, contract.tenant?.name])) &&
+              (!useSummary || this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.bankSummaryName, contract.payerName, contract.contractorName, contract.tenant?.name])) &&
               (!useAmount || (contract.monthlyRent != null && record.depositAmount != null && new Prisma.Decimal(record.depositAmount).equals(contract.monthlyRent))),
           )
           .map((contract) => ({
@@ -1064,7 +1064,10 @@ export class ReconciliationService {
         minimumScore: Math.max(0, Math.min(100, Number(group.minimumScore) || 0)),
         enabled: true,
         rules: (Array.isArray(group.rules) ? group.rules : []).filter((rule: any) => rule?.enabled !== false).map((rule: any, ruleIndex: number) => {
-          const leftFields = (Array.isArray(rule.leftFields) ? rule.leftFields : [rule.leftField]).map((item: unknown) => this.sanitizeText(item)).filter(Boolean);
+          const leftFields = (Array.isArray(rule.leftFields) ? rule.leftFields : [rule.leftField])
+            .map((item: unknown) => this.sanitizeText(item))
+            .map((key: string) => key === 'contract.bankTransferDescription' ? 'contract.bankSummaryName' : key)
+            .filter(Boolean);
           const rightFields = (Array.isArray(rule.rightFields) ? rule.rightFields : [rule.rightField]).map((item: unknown) => this.sanitizeText(item)).filter(Boolean);
           if (!leftFields.length || !rightFields.length) throw new BadRequestException(`Rule ${ruleIndex + 1} requires internal and Excel fields`);
           return {

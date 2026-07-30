@@ -303,6 +303,13 @@ const templateValidationMessage = ref("");
 const activeRule = ref({ groupIndex: 0, ruleIndex: 0 });
 const draggedField = ref(null);
 const emptyConfiguration = () => ({ groups: [] });
+const normalizeConfigurationFields = (configuration) => {
+  const normalized = structuredClone(configuration || emptyConfiguration());
+  normalized.groups?.forEach((group) => group.rules?.forEach((rule) => {
+    rule.leftFields = (rule.leftFields || []).map((key) => key === "contract.bankTransferDescription" ? "contract.bankSummaryName" : key);
+  }));
+  return normalized;
+};
 const matchingConfiguration = ref(emptyConfiguration());
 const draftConfiguration = ref(emptyConfiguration());
 const bankColumns = ref([
@@ -481,7 +488,7 @@ const openMatchingDialog = async () => {
     excelHeaders.value = headers;
     templates.value = ownedTemplates;
     selectedTemplateId.value = batches.value.find((item) => item.id === activeBatchId.value)?.templateId || "";
-    draftConfiguration.value = structuredClone(hasValidConfiguration.value ? matchingConfiguration.value : { groups: [newRuleGroup()] });
+    draftConfiguration.value = normalizeConfigurationFields(hasValidConfiguration.value ? matchingConfiguration.value : { groups: [newRuleGroup()] });
     activeRule.value = { groupIndex: 0, ruleIndex: 0 };
     previewResult.value = null;
     templateValidationMessage.value = "";
@@ -521,7 +528,7 @@ const assignSelectedField = (side, key) => {
   const target = rule[side === "internal" ? "leftFields" : "rightFields"];
   if (!target.includes(key)) target.push(key);
 };
-const internalFieldLabel = (key) => allInternalFields.value.find((field) => field.key === key)?.label || key;
+const internalFieldLabel = (key) => allInternalFields.value.find((field) => field.key === key)?.label || (key === "contract.bankTransferDescription" ? (locale.value === "zh" ? "银行摘要名义" : "銀行摘要名義") : key);
 const appendMappedField = (rule, targetKey, event) => {
   const value = event.target.value;
   if (value && !rule[targetKey].includes(value)) rule[targetKey].push(value);
@@ -555,7 +562,7 @@ const loadSelectedTemplate = async () => {
   templateValidationMessage.value = "";
   const template = templates.value.find((item) => item.id === selectedTemplateId.value);
   if (!template) return;
-  draftConfiguration.value = structuredClone(template.configurationJson);
+  draftConfiguration.value = normalizeConfigurationFields(template.configurationJson);
   const available = new Set(excelHeaders.value.map((header) => header.name));
   const missing = draftConfiguration.value.groups.flatMap((group) => group.rules || []).flatMap((rule) => rule.rightFields || []).filter((name) => !available.has(name));
   if (missing.length) templateValidationMessage.value = `${ui.value.invalidTemplate} ${[...new Set(missing)].join(", ")}`;
