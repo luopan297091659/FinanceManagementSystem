@@ -1,12 +1,5 @@
 <template>
   <section class="page-shell">
-    <div class="page-title-row">
-      <div>
-        <h2>{{ labels.title }}</h2>
-        <p class="subtle">{{ labels.subtitle }}</p>
-      </div>
-    </div>
-
     <div class="content-grid">
       <div class="main-column">
         <div class="panel-card upload-panel">

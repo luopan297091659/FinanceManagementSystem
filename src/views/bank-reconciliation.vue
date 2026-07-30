@@ -1,11 +1,6 @@
 <template>
   <section class="page-shell bank-reconciliation-page" @click="showTemplateChooser = false">
-    <div class="page-title-row">
-      <div>
-        <p class="eyebrow">{{ t.menu.aiReconciliation }}</p>
-        <h2>{{ t.menu.bankReconciliation }}</h2>
-        <p class="subtle">{{ t.help.subtitle }}</p>
-      </div>
+    <div class="bank-reconciliation-controls">
       <button class="secondary-button" type="button" @click="loadBatches">{{ t.action.refresh }}</button>
     </div>
 

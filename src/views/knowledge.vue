@@ -1,10 +1,7 @@
 <template>
   <section class="page-shell">
     <div class="page-title-row">
-      <div>
-        <p class="eyebrow">{{ labels.eyebrow }}</p>
-        <h2>{{ labels.heading }}</h2>
-      </div>
+      <div></div>
       <button class="primary-button" type="button">{{ labels.add }}</button>
     </div>
 

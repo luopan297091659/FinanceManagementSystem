@@ -3,7 +3,7 @@
     <!-- Users Tab -->
     <div v-if="activeTab === 'users'" class="tab-content">
       <div class="content-header">
-        <h3>{{ dict.users }}</h3>
+        <div></div>
         <button v-if="can('user:create')" @click="openNewUser" class="primary-button">{{ dict.newUser }}</button>
       </div>
       <DualScrollTable wrapper-class="table-wrapper">
@@ -42,7 +42,7 @@
     <!-- Roles Tab -->
     <div v-if="activeTab === 'roles'" class="tab-content">
       <div class="content-header">
-        <h3>{{ dict.roles }}</h3>
+        <div></div>
         <button v-if="can('role:create')" @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
       </div>
       <DualScrollTable wrapper-class="table-wrapper">
@@ -85,7 +85,7 @@
     <!-- Audit Logs Tab -->
     <div v-if="activeTab === 'logs'" class="tab-content">
       <div class="content-header">
-        <h3>{{ dict.auditLogs }}</h3>
+        <div></div>
         <button @click="loadLogs" class="secondary-button">{{ dict.refresh }}</button>
       </div>
       <DualScrollTable wrapper-class="table-wrapper">
@@ -115,7 +115,7 @@
     <!-- Email Settings Tab -->
     <div v-if="activeTab === 'email'" class="tab-content">
       <div class="content-header">
-        <h3>{{ dict.emailSettings }}</h3>
+        <div></div>
         <button @click="loadEmailSettings" class="secondary-button">{{ dict.refresh }}</button>
       </div>
       <div class="settings-form">
@@ -167,7 +167,7 @@
     <!-- Copy configuration tab -->
     <div v-if="activeTab === 'translations'" class="tab-content">
       <div class="content-header">
-        <h3>{{ dict.translationManagement }}</h3>
+        <div></div>
         <div class="header-actions">
           <button @click="loadTranslations" class="secondary-button">{{ dict.refresh }}</button>
           <button @click="openNewTranslation" class="primary-button">{{ dict.newTranslation }}</button>
@@ -1018,8 +1018,37 @@ watch(activeTab, () => {
 
 .table-wrapper {
   overflow-x: auto;
-}
+    overflow-y: hidden;
+  }
 
+  .role-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .role-table th,
+  .role-table td {
+    vertical-align: top;
+  }
+
+  .role-table .actions-cell {
+    position: sticky;
+    right: 0;
+    width: 190px;
+    min-width: 190px;
+    background: white;
+    box-shadow: -8px 0 16px rgba(32, 36, 42, 0.04);
+    z-index: 1;
+  }
+
+  .role-table thead .actions-cell {
+    z-index: 2;
+    background: #f9f9f9;
+  }
+
+  .role-table tbody tr:last-child td.actions-cell {
+    box-shadow: none;
 .data-table {
   width: 100%;
   border-collapse: collapse;

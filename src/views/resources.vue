@@ -1,12 +1,5 @@
 <template>
   <section class="page-shell data-page">
-    <div class="page-title-row">
-      <div>
-        <p class="eyebrow">{{ labels.eyebrow }}</p>
-        <h2>{{ labels.heading }}</h2>
-      </div>
-    </div>
-
     <div class="content-grid data-content-grid">
       <div class="panel-card full-panel">
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>

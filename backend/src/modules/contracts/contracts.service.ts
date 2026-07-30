@@ -27,17 +27,41 @@ export class ContractsService {
     const page = positiveInt(query.page, 1);
     const pageSize = Math.min(positiveInt(query.pageSize, 20), 200);
     const where = this.contractWhere(query.search);
+    const sortBy = String(query.sortBy || 'startDate');
+    const sortDir = String(query.sortDir).toLowerCase() === 'asc' ? 'asc' : 'desc';
     const [contracts, total] = await Promise.all([
       this.prisma.contract.findMany({
         where,
         include: { property: { select: { id: true, name: true } }, room: { select: { id: true, roomNumber: true } } },
-        orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        orderBy: this.contractOrderBy(sortBy, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.contract.count({ where }),
     ]);
     return { items: contracts.map((contract) => this.toContract(contract)), pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+  }
+
+  private contractOrderBy(sortBy: string, sortDir: Prisma.SortOrder) {
+    const sortableFields: Record<string, boolean> = {
+      startDate: true,
+      endDate: true,
+      monthlyRent: true,
+      managementFee: true,
+      deposit: true,
+      keyMoney: true,
+      guaranteeDeposit: true,
+      guaranteeFee: true,
+      keyReplacementFee: true,
+      renewalAdministrativeFee: true,
+      insuranceFee: true,
+    };
+
+    if (sortableFields[sortBy]) {
+      return [{ [sortBy]: sortDir }, { startDate: 'desc' }, { createdAt: 'desc' }];
+    }
+
+    return [{ startDate: 'desc' }, { createdAt: 'desc' }];
   }
 
   async get(id: string) {

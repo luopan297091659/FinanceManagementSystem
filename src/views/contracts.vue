@@ -1,8 +1,5 @@
 <template>
   <section class="page-shell data-page">
-    <div class="page-title-row">
-      <div><p class="eyebrow">{{ labels.eyebrow }}</p><h2>{{ labels.heading }}</h2></div>
-    </div>
     <div class="panel-card full-panel">
       <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
       <p v-if="loading" class="form-hint">{{ common.loading }}</p>
@@ -29,7 +26,12 @@
         <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ contractTotal }} {{ common.records }}</span></div>
         <DualScrollTable>
           <table class="data-table contract-table">
-            <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th>{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">{{ labels[column.labelKey] }}</th><th>{{ common.actions }}</th></tr></thead>
+            <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th>{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">
+                <button v-if="sortableContractKeys.has(column.key)" type="button" class="table-sort-button" @click="toggleSort(column.key)">
+                  {{ labels[column.labelKey] }} <span class="sort-icon">{{ sortIcon(column.key) }}</span>
+                </button>
+                <span v-else>{{ labels[column.labelKey] }}</span>
+              </th><th>{{ common.actions }}</th></tr></thead>
             <tbody>
               <tr v-for="(contract, index) in paginatedContracts" :key="contract.id">
                 <td class="select-cell"><input type="checkbox" :checked="selectedIds.includes(contract.id)" @change="toggleContractSelection(contract.id)" /></td>
@@ -159,6 +161,8 @@ const errorMessage = ref("");
 const searchQuery = ref("");
 const page = ref(1);
 const pageSize = ref(20);
+const sortBy = ref("startDate");
+const sortDir = ref("desc");
 const fileInput = ref(null);
 const detail = ref(null);
 const editForm = ref(null);
@@ -218,6 +222,8 @@ const filteredRoomOptions = computed(() => {
 const paginatedContracts = computed(() => contracts.value);
 const pageContractIds = computed(() => paginatedContracts.value.map((contract) => contract.id));
 const allPageSelected = computed(() => pageContractIds.value.length > 0 && pageContractIds.value.every((id) => selectedIds.value.includes(id)));
+const sortableContractKeys = new Set(["startDate", "endDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
+const sortIcon = (key) => sortBy.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '';
 const readyCount = computed(() => Math.max(0, (importResult.value?.batch?.totalRows || 0) - (importResult.value?.batch?.successRows || 0) - (importResult.value?.batch?.skippedRows || 0) - (importResult.value?.batch?.failedRows || 0) - (importResult.value?.batch?.conflictRows || 0)));
 let contractSearchTimer;
 let roomSearchTimer;
@@ -257,7 +263,8 @@ async function loadRoomOptions() {
   roomOptions.value = rows.map((room) => ({ ...room, searchText: room.label.toLowerCase() }));
 }
 
-async function loadContracts() { const requestId = ++contractRequestId; loading.value = true; errorMessage.value = ""; try { const result = await api.listContracts({ search: searchQuery.value.trim(), page: page.value, pageSize: pageSize.value }); if (requestId !== contractRequestId) return; const totalPages = result.pagination?.totalPages || 1; if (page.value > totalPages) { page.value = totalPages; return; } contracts.value = result.items || []; contractTotal.value = result.pagination?.total || 0; const existing = new Set(contracts.value.map((contract) => contract.id)); selectedIds.value = selectedIds.value.filter((id) => existing.has(id)); } catch (error) { if (requestId === contractRequestId) errorMessage.value = error.message || labels.value.loadFailed; } finally { if (requestId === contractRequestId) loading.value = false; } }
+async function loadContracts() { const requestId = ++contractRequestId; loading.value = true; errorMessage.value = ""; try { const result = await api.listContracts({ search: searchQuery.value.trim(), page: page.value, pageSize: pageSize.value, sortBy: sortBy.value, sortDir: sortDir.value }); if (requestId !== contractRequestId) return; const totalPages = result.pagination?.totalPages || 1; if (page.value > totalPages) { page.value = totalPages; return; } contracts.value = result.items || []; contractTotal.value = result.pagination?.total || 0; const existing = new Set(contracts.value.map((contract) => contract.id)); selectedIds.value = selectedIds.value.filter((id) => existing.has(id)); } catch (error) { if (requestId === contractRequestId) errorMessage.value = error.message || labels.value.loadFailed; } finally { if (requestId === contractRequestId) loading.value = false; } }
+function toggleSort(key) { if (sortBy.value === key) { sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'; } else { sortBy.value = key; sortDir.value = 'asc'; } page.value = 1; loadContracts(); }
 async function openDetail(id) { try { detail.value = await api.getContract(id); } catch (error) { errorMessage.value = error.message || labels.value.loadFailed; } }
 async function openCreate() {
   try {
@@ -387,6 +394,25 @@ onMounted(async () => {
 .import-history-list { display: grid; gap: 8px; }
 .history-row { display: grid; grid-template-columns: 1.2fr 2fr 1fr .8fr; gap: 12px; align-items: center; width: 100%; padding: 11px 12px; border: 1px solid #dbe3ea; border-radius: 8px; background: #fff; color: inherit; text-align: left; cursor: pointer; }
 .history-row:hover { background: #f4faf9; border-color: #9bc8c2; }
+.table-sort-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.table-sort-button:focus {
+  outline: none;
+}
+.sort-icon {
+  font-size: 0.8em;
+  opacity: 0.6;
+}
 .property-import-modal { width: min(96vw, 1500px); max-height: 92vh; overflow: auto; }
 .import-summary { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 14px; }
 .import-controls { display: flex; justify-content: flex-end; margin-bottom: 10px; }
