@@ -42,7 +42,10 @@ export class ContractsService {
     return { items: contracts.map((contract) => this.toContract(contract)), pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
-  private contractOrderBy(sortBy: string, sortDir: Prisma.SortOrder) {
+  private contractOrderBy(
+    sortBy: string,
+    sortDir: Prisma.SortOrder,
+  ): Prisma.ContractOrderByWithRelationInput[] {
     const sortableFields: Record<string, boolean> = {
       startDate: true,
       endDate: true,
@@ -58,10 +61,13 @@ export class ContractsService {
     };
 
     if (sortableFields[sortBy]) {
-      return [{ [sortBy]: sortDir }, { startDate: 'desc' }, { createdAt: 'desc' }];
+      const primaryOrder = {
+        [sortBy]: sortDir,
+      } as Prisma.ContractOrderByWithRelationInput;
+      return [primaryOrder, { startDate: Prisma.SortOrder.desc }, { createdAt: Prisma.SortOrder.desc }];
     }
 
-    return [{ startDate: 'desc' }, { createdAt: 'desc' }];
+    return [{ startDate: Prisma.SortOrder.desc }, { createdAt: Prisma.SortOrder.desc }];
   }
 
   async get(id: string) {
