@@ -1048,6 +1048,8 @@ watch(activeTab, () => {
 
   .role-table tbody tr:last-child td.actions-cell {
     box-shadow: none;
+  }
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
