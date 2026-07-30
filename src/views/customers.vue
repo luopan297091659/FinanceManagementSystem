@@ -151,6 +151,7 @@ import CustomerForm from "../components/customers/CustomerForm.vue";
 import CustomerTable from "../components/customers/CustomerTable.vue";
 import { useI18n } from "../i18n";
 import { api } from "../services/api";
+import { requestConfirm } from "../services/confirm";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const blankForm = () => ({
@@ -410,7 +411,7 @@ const editCustomer = (item) => {
 };
 
 const deleteCustomer = async (id) => {
-  if (!window.confirm(common.value.deleteConfirm)) return;
+  if (!await requestConfirm(common.value.deleteConfirm)) return;
   try {
     await api.deleteCustomer(id);
     await loadCustomers();
@@ -421,7 +422,7 @@ const deleteCustomer = async (id) => {
 
 const batchDelete = async () => {
   if (!selectedIds.value.length) return;
-  if (!window.confirm(common.value.batchDeleteConfirm.replace("{count}", selectedIds.value.length))) return;
+  if (!await requestConfirm(common.value.batchDeleteConfirm.replace("{count}", selectedIds.value.length))) return;
   try {
     await Promise.all(selectedIds.value.map((id) => api.deleteCustomer(id)));
     selectedIds.value = [];
@@ -450,7 +451,7 @@ const saveBinding = async () => {
 };
 
 const deleteBinding = async (id) => {
-  if (!window.confirm(common.value.deleteConfirm)) return;
+  if (!await requestConfirm(common.value.deleteConfirm)) return;
   try {
     await api.deleteBinding(id);
     await loadCustomers();

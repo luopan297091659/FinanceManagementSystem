@@ -180,6 +180,7 @@ import DataPagination from "../components/DataPagination.vue";
 import DualScrollTable from "../components/DualScrollTable.vue";
 import { locale, messages } from "../i18n";
 import { api } from "../services/api";
+import { requestConfirm } from "../services/confirm";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const t = computed(() => messages[locale.value].bankReconciliation);
@@ -339,7 +340,7 @@ const submitBatch = async () => {
 };
 
 const deleteBatch = async (batchId) => {
-  if (!batchId || !window.confirm(t.value.history.deleteConfirm)) return;
+  if (!batchId || !await requestConfirm(t.value.history.deleteConfirm)) return;
   loading.value = true;
   try {
     await api.deleteReconciliationBatch(batchId);

@@ -1,4 +1,5 @@
 <template>
+  <ConfirmDialog />
   <div v-if="!authChecked" class="auth-checking" role="status" aria-live="polite">
     <span class="auth-checking-spinner" />
     <span>{{ dictionary.common?.loading }}</span>
@@ -145,6 +146,7 @@ import BankReconciliationView from "./views/bank-reconciliation.vue";
 import KnowledgeView from "./views/knowledge.vue";
 import SystemAdminPanel from "./components/rbac/SystemAdminPanel.vue";
 import AppIcon from "./components/AppIcon.vue";
+import ConfirmDialog from "./components/ConfirmDialog.vue";
 import { reloadPublishedTranslations, useI18n } from "./i18n";
 import { api } from "./services/api";
 

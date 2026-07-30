@@ -408,6 +408,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { getTranslationMatrixRows, locale, messages, reloadPublishedTranslations } from '../../i18n.js';
 import { api } from '../../services/api.js';
+import { requestConfirm } from '../../services/confirm.js';
 import { exportTableXlsx, parseTableFile } from '../../utils/tableFiles.js';
 import DualScrollTable from '../DualScrollTable.vue';
 
@@ -723,7 +724,7 @@ const saveUser = async () => {
 };
 
 const deleteUser = async (id) => {
-  if (confirm(dict.value.confirmDelete)) {
+  if (await requestConfirm(dict.value.confirmDelete)) {
     try {
       await api.deleteUser(id);
       await loadUsers();
@@ -761,7 +762,7 @@ const saveRole = async () => {
 };
 
 const deleteRole = async (id) => {
-  if (confirm(dict.value.confirmDelete)) {
+  if (await requestConfirm(dict.value.confirmDelete)) {
     try {
       await api.deleteRole(id);
       await loadRoles();

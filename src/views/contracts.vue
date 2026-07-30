@@ -146,6 +146,7 @@ import DataPagination from "../components/DataPagination.vue";
 import DualScrollTable from "../components/DualScrollTable.vue";
 import { useI18n } from "../i18n";
 import { api } from "../services/api";
+import { requestConfirm } from "../services/confirm";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const { dictionary } = useI18n();
@@ -293,7 +294,7 @@ async function saveContract() {
   }
 }
 async function deleteContract(id) {
-  if (!window.confirm(labels.value.deleteConfirm)) return;
+  if (!await requestConfirm(labels.value.deleteConfirm)) return;
   try {
     await api.deleteContract(id);
     selectedIds.value = selectedIds.value.filter((selectedId) => selectedId !== id);
@@ -305,7 +306,7 @@ async function deleteContract(id) {
 }
 async function batchDeleteContracts() {
   if (!selectedIds.value.length) return;
-  if (!window.confirm(labels.value.batchDeleteConfirm.replace("{count}", selectedIds.value.length))) return;
+  if (!await requestConfirm(labels.value.batchDeleteConfirm.replace("{count}", selectedIds.value.length))) return;
   try {
     await api.batchDeleteContracts(selectedIds.value);
     selectedIds.value = [];
