@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ReconciliationRecordMatchStatus } from '@prisma/client';
 import { Request } from 'express';
 import { RequirePermission } from '../rbac/permissions.decorator';
@@ -57,6 +57,7 @@ export class ReconciliationController {
   }
 
   @Get('templates')
+  @Header('Cache-Control', 'no-store')
   @RequirePermission('reconciliation.bank.view')
   templates(@Req() request: Request) {
     return this.reconciliation.listTemplates(this.actorUserId(request));

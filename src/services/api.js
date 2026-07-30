@@ -3,8 +3,10 @@ const API_BASE = import.meta.env?.VITE_API_BASE || '/api/v1';
 async function request(path, { method = 'GET', body } = {}) {
   const options = {
     method,
+    cache: method === 'GET' ? 'no-store' : undefined,
     headers: {
       'Content-Type': 'application/json',
+      ...(method === 'GET' ? { 'Cache-Control': 'no-cache' } : {}),
     },
   };
 
@@ -42,7 +44,7 @@ async function request(path, { method = 'GET', body } = {}) {
     throw new Error(message);
   }
 
-  if (response.status === 204) return null;
+  if (response.status === 204 || response.status === 304) return null;
   return response.json();
 }
 

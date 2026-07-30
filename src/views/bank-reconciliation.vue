@@ -42,7 +42,6 @@
         <span v-for="file in selectedFiles" :key="file.name">{{ file.name }}</span>
       </div>
       <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-      <p v-if="loading" class="form-hint">{{ t.common.loading }}</p>
     </div>
 
     <div class="stats-grid">
@@ -174,11 +173,12 @@
         </header>
 
         <div class="template-toolbar">
-          <select v-model="selectedTemplateId" @change="loadSelectedTemplate">
-            <option value="">{{ ui.loadTemplate }}</option>
+          <label class="template-name-field"><span>{{ ui.templateNameLabel }}</span><input v-model.trim="templateName" type="text" maxlength="80" :placeholder="ui.templateNamePlaceholder" /></label>
+          <label class="template-load-field"><span>{{ ui.loadTemplate }}</span><select v-model="selectedTemplateId" @change="loadSelectedTemplate">
+            <option value="">{{ templates.length ? ui.noTemplateSelected : ui.noTemplates }}</option>
             <option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }} · v{{ template.version }}</option>
-          </select>
-          <button class="secondary-button" type="button" :disabled="!draftValid" @click="saveAsTemplate">{{ ui.saveTemplate }}</button>
+          </select></label>
+          <button class="secondary-button" type="button" :disabled="!draftValid || !templateName || templateSaving" @click="saveAsTemplate">{{ templateSaving ? ui.savingTemplate : ui.saveTemplate }}</button>
           <button class="ghost-button" type="button" @click="resetConfiguration">{{ ui.reset }}</button>
           <span v-if="templateValidationMessage" class="configuration-warning">{{ templateValidationMessage }}</span>
         </div>
@@ -261,7 +261,7 @@
 
         <footer class="matching-modal-footer">
           <div><button class="secondary-button" type="button" :disabled="!draftValid" @click="previewRules">{{ ui.testRules }}</button><span v-if="previewResult" :class="previewResult.valid ? 'configuration-ok' : 'configuration-warning'">{{ previewResult.valid ? ui.previewPassed : `${ui.missingHeaders}: ${previewResult.missingHeaders.join(', ')}` }}</span></div>
-          <div><button class="ghost-button" type="button" @click="closeMatchingDialog">{{ ui.cancel }}</button><button class="primary-button" type="button" :disabled="!draftValid" @click="confirmConfiguration">{{ ui.confirm }}</button></div>
+          <div><span v-if="dialogError" class="configuration-warning">{{ dialogError }}</span><button class="ghost-button" type="button" :disabled="configurationSaving" @click="closeMatchingDialog">{{ ui.cancel }}</button><button class="primary-button" type="button" :disabled="!draftValid || configurationSaving" @click="confirmConfiguration">{{ configurationSaving ? ui.savingConfiguration : ui.confirm }}</button></div>
         </footer>
       </section>
     </div>
@@ -296,6 +296,10 @@ const fieldMetadata = ref([]);
 const excelHeaders = ref([]);
 const templates = ref([]);
 const selectedTemplateId = ref("");
+const templateName = ref("");
+const templateSaving = ref(false);
+const configurationSaving = ref(false);
+const dialogError = ref("");
 const fieldSearch = ref("");
 const excelSearch = ref("");
 const previewResult = ref(null);
@@ -304,12 +308,17 @@ const activeRule = ref({ groupIndex: 0, ruleIndex: 0 });
 const draggedField = ref(null);
 const emptyConfiguration = () => ({ groups: [] });
 const normalizeConfigurationFields = (configuration) => {
-  const normalized = structuredClone(configuration || emptyConfiguration());
+  let source = configuration;
+  if (typeof source === "string") {
+    try { source = JSON.parse(source); } catch { source = emptyConfiguration(); }
+  }
+  const normalized = structuredClone(source || emptyConfiguration());
   normalized.groups?.forEach((group) => group.rules?.forEach((rule) => {
     rule.leftFields = (rule.leftFields || []).map((key) => key === "contract.bankTransferDescription" ? "contract.bankSummaryName" : key);
   }));
   return normalized;
 };
+const configurationSignature = (configuration) => JSON.stringify(normalizeConfigurationFields(configuration));
 const matchingConfiguration = ref(emptyConfiguration());
 const draftConfiguration = ref(emptyConfiguration());
 const bankColumns = ref([
@@ -326,17 +335,17 @@ const uploadDefaults = ["normalizedBankSummary", "depositAmount"];
 const ui = computed(() => locale.value === "zh" ? {
   selectFields: "选择匹配字段", configure: "配置规则", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
   dialogEyebrow: "AI 对账规则", dialogTitle: "选择匹配字段", dialogHelp: "将内部系统字段与上传的 Excel 列建立映射。支持一对一、一对多和多对一。",
-  loadTemplate: "加载模板", saveTemplate: "另存为模板", reset: "重置配置", internalFields: "内部系统字段", excelFields: "上传的 Excel 字段", ruleWorkspace: "匹配规则工作区", ruleWorkspaceHelp: "点击字段或拖放到规则中；多选即可组合字段。",
+  loadTemplate: "加载模板", noTemplateSelected: "不加载模板（使用当前配置）", noTemplates: "暂无已保存模板", templateNameLabel: "模板名称", templateNamePlaceholder: "例如：月度租金对账", saveTemplate: "保存模板", savingTemplate: "保存中…", reset: "重置配置", internalFields: "内部系统字段", excelFields: "上传的 Excel 字段", ruleWorkspace: "匹配规则工作区", ruleWorkspaceHelp: "点击字段或拖放到规则中；多选即可组合字段。",
   searchInternal: "搜索内部字段", searchExcel: "搜索 Excel 列", normalizable: "可标准化", exactOnly: "精确值", addGroup: "添加规则组", addRule: "添加规则", noGroups: "请添加一个规则组开始配置。",
   groupName: "规则组名称", logic: "组内逻辑", priority: "优先级", duplicate: "复制", systemSide: "内部字段", excelSide: "Excel 字段", weight: "权重", required: "必需", transformations: "转换规则", nonEmpty: "非空", noField: "尚未选择", addInternal: "添加内部字段", addExcel: "添加 Excel 字段", advanced: "高级设置", transformsSelected: "项转换",
-  testRules: "测试匹配规则", previewPassed: "字段校验通过", missingHeaders: "缺少列", cancel: "取消", confirm: "确认配置", templateName: "请输入模板名称", templateSaved: "模板已保存", invalidTemplate: "模板中的部分 Excel 列不存在，请重新映射。",
+  testRules: "测试匹配规则", previewPassed: "字段校验通过", missingHeaders: "缺少列", cancel: "取消", confirm: "确认配置", savingConfiguration: "保存中…", templateSaved: "模板已保存并应用到当前批次", templateUpdated: "模板已更新并应用到当前批次", templateLoadFailed: "模板列表加载失败，可继续配置并稍后重试。", configurationSaveFailed: "配置保存失败", invalidTemplate: "模板中的部分 Excel 列不存在，请重新映射。",
 } : {
   selectFields: "照合フィールド選択", configure: "ルール設定", ruleRequired: "照合を実行する前に、少なくとも1つの有効な照合条件を設定してください。", rulesConfigured: "件のルール設定済み", groups: "ルールグループ",
   dialogEyebrow: "AI 照合ルール", dialogTitle: "照合フィールド選択", dialogHelp: "内部システム項目とアップロードした Excel 列を関連付けます。1対1、1対多、多対1に対応します。",
-  loadTemplate: "テンプレート読込", saveTemplate: "テンプレート保存", reset: "リセット", internalFields: "内部システム項目", excelFields: "Excel 項目", ruleWorkspace: "照合ルール", ruleWorkspaceHelp: "項目をクリック、またはルールへドラッグします。複数選択で項目を結合できます。",
+  loadTemplate: "テンプレート読込", noTemplateSelected: "テンプレートなし（現在の設定）", noTemplates: "保存済みテンプレートなし", templateNameLabel: "テンプレート名", templateNamePlaceholder: "例：月次賃料照合", saveTemplate: "テンプレート保存", savingTemplate: "保存中…", reset: "リセット", internalFields: "内部システム項目", excelFields: "Excel 項目", ruleWorkspace: "照合ルール", ruleWorkspaceHelp: "項目をクリック、またはルールへドラッグします。複数選択で項目を結合できます。",
   searchInternal: "内部項目を検索", searchExcel: "Excel 列を検索", normalizable: "正規化可", exactOnly: "完全一致", addGroup: "グループ追加", addRule: "ルール追加", noGroups: "ルールグループを追加してください。",
   groupName: "グループ名", logic: "グループ内論理", priority: "優先度", duplicate: "複製", systemSide: "内部項目", excelSide: "Excel 項目", weight: "重み", required: "必須", transformations: "変換", nonEmpty: "非空", noField: "未選択", addInternal: "内部項目を追加", addExcel: "Excel 項目を追加", advanced: "詳細設定", transformsSelected: "件の変換",
-  testRules: "ルールをテスト", previewPassed: "項目検証に成功", missingHeaders: "不足列", cancel: "キャンセル", confirm: "確定", templateName: "テンプレート名を入力", templateSaved: "保存しました", invalidTemplate: "テンプレート内の Excel 列が不足しています。再設定してください。",
+  testRules: "ルールをテスト", previewPassed: "項目検証に成功", missingHeaders: "不足列", cancel: "キャンセル", confirm: "確定", savingConfiguration: "保存中…", templateSaved: "テンプレートを保存し、このバッチに適用しました", templateUpdated: "テンプレートを更新し、このバッチに適用しました", templateLoadFailed: "テンプレート一覧を読み込めませんでした。設定は続行できます。", configurationSaveFailed: "設定の保存に失敗しました", invalidTemplate: "テンプレート内の Excel 列が不足しています。再設定してください。",
 });
 const roomColumnLabel = computed(() => t.value.table.room);
 const contractColumnLabel = computed(() => t.value.table.contract);
@@ -453,7 +462,7 @@ const selectBatch = async (batchId) => {
   records.value = batchRecords;
   excelHeaders.value = headers;
   const batch = batches.value.find((item) => item.id === batchId);
-  matchingConfiguration.value = batch?.matchingRulesJson?.groups ? structuredClone(batch.matchingRulesJson) : emptyConfiguration();
+  matchingConfiguration.value = batch?.matchingRulesJson?.groups ? normalizeConfigurationFields(batch.matchingRulesJson) : emptyConfiguration();
 };
 
 const runMatch = async () => {
@@ -478,17 +487,30 @@ const openMatchingDialog = async () => {
   if (!activeBatchId.value) return;
   loading.value = true;
   errorMessage.value = "";
+  dialogError.value = "";
   try {
-    const [metadata, headers, ownedTemplates] = await Promise.all([
+    const [metadataResult, headersResult, templatesResult] = await Promise.allSettled([
       fieldMetadata.value.length ? fieldMetadata.value : api.reconciliationFieldMetadata(),
       api.reconciliationBatchHeaders(activeBatchId.value),
       api.listReconciliationTemplates(),
     ]);
-    fieldMetadata.value = metadata;
-    excelHeaders.value = headers;
-    templates.value = ownedTemplates;
-    selectedTemplateId.value = batches.value.find((item) => item.id === activeBatchId.value)?.templateId || "";
-    draftConfiguration.value = normalizeConfigurationFields(hasValidConfiguration.value ? matchingConfiguration.value : { groups: [newRuleGroup()] });
+    if (metadataResult.status === "rejected") throw metadataResult.reason;
+    if (headersResult.status === "rejected") throw headersResult.reason;
+    fieldMetadata.value = metadataResult.value;
+    excelHeaders.value = headersResult.value;
+    templates.value = templatesResult.status === "fulfilled" && Array.isArray(templatesResult.value) ? templatesResult.value : [];
+    if (templatesResult.status === "rejected" || templatesResult.value === null) dialogError.value = ui.value.templateLoadFailed;
+    const batch = batches.value.find((item) => item.id === activeBatchId.value);
+    const linkedTemplate = templates.value.find((item) => item.id === batch?.templateId);
+    const matchingTemplate = hasValidConfiguration.value
+      ? templates.value.find((item) => configurationSignature(item.configurationJson) === configurationSignature(matchingConfiguration.value))
+      : templates.value[0];
+    const initialTemplate = linkedTemplate || matchingTemplate;
+    selectedTemplateId.value = initialTemplate?.id || "";
+    templateName.value = initialTemplate?.name || batch?.template?.name || "";
+    draftConfiguration.value = normalizeConfigurationFields(hasValidConfiguration.value
+      ? matchingConfiguration.value
+      : initialTemplate?.configurationJson || { groups: [newRuleGroup()] });
     activeRule.value = { groupIndex: 0, ruleIndex: 0 };
     previewResult.value = null;
     templateValidationMessage.value = "";
@@ -512,7 +534,7 @@ const duplicateRuleGroup = (index) => {
 };
 const addRule = (groupIndex) => { draftConfiguration.value.groups[groupIndex].rules.push(newRule()); activeRule.value = { groupIndex, ruleIndex: draftConfiguration.value.groups[groupIndex].rules.length - 1 }; };
 const removeRule = (groupIndex, ruleIndex) => { draftConfiguration.value.groups[groupIndex].rules.splice(ruleIndex, 1); };
-const resetConfiguration = () => { draftConfiguration.value = { groups: [newRuleGroup()] }; selectedTemplateId.value = ""; previewResult.value = null; templateValidationMessage.value = ""; };
+const resetConfiguration = () => { draftConfiguration.value = { groups: [newRuleGroup()] }; selectedTemplateId.value = ""; templateName.value = ""; previewResult.value = null; templateValidationMessage.value = ""; dialogError.value = ""; };
 const startFieldDrag = (side, key) => { draggedField.value = { side, key }; };
 const dropField = (groupIndex, ruleIndex, side) => {
   if (!draggedField.value || draggedField.value.side !== side) return;
@@ -538,31 +560,85 @@ const removeMappedField = (rule, targetKey, value) => {
   rule[targetKey] = rule[targetKey].filter((item) => item !== value);
 };
 const previewRules = async () => {
-  previewResult.value = await api.previewReconciliationConfiguration(activeBatchId.value, draftConfiguration.value);
+  dialogError.value = "";
+  try {
+    previewResult.value = await api.previewReconciliationConfiguration(activeBatchId.value, draftConfiguration.value);
+  } catch (error) {
+    dialogError.value = error.message;
+  }
+};
+const missingDraftHeaders = () => {
+  const available = new Set(excelHeaders.value.map((header) => header.name));
+  return [...new Set(draftConfiguration.value.groups.flatMap((group) => group.rules || []).flatMap((rule) => rule.rightFields || []).filter((name) => !available.has(name)))];
+};
+const updateCurrentBatchTemplate = (template) => {
+  const batch = batches.value.find((item) => item.id === activeBatchId.value);
+  if (!batch) return;
+  batch.matchingRulesJson = structuredClone(draftConfiguration.value);
+  batch.templateId = template?.id || null;
+  batch.template = template ? { id: template.id, name: template.name, version: template.version } : null;
 };
 const confirmConfiguration = async () => {
   if (!draftValid.value) return;
-  const result = await api.previewReconciliationConfiguration(activeBatchId.value, draftConfiguration.value);
-  previewResult.value = result;
-  if (!result.valid) return;
-  await api.saveReconciliationConfiguration(activeBatchId.value, draftConfiguration.value, selectedTemplateId.value);
-  matchingConfiguration.value = structuredClone(draftConfiguration.value);
-  await loadBatches();
-  showMatchingDialog.value = false;
+  dialogError.value = "";
+  const missingHeaders = missingDraftHeaders();
+  if (missingHeaders.length) {
+    previewResult.value = { valid: false, missingHeaders };
+    return;
+  }
+  configurationSaving.value = true;
+  try {
+    await api.saveReconciliationConfiguration(activeBatchId.value, draftConfiguration.value, selectedTemplateId.value);
+    matchingConfiguration.value = structuredClone(draftConfiguration.value);
+    updateCurrentBatchTemplate(templates.value.find((item) => item.id === selectedTemplateId.value));
+    showMatchingDialog.value = false;
+    await loadBatches();
+  } catch (error) {
+    dialogError.value = `${ui.value.configurationSaveFailed}: ${error.message}`;
+  } finally {
+    configurationSaving.value = false;
+  }
 };
 const saveAsTemplate = async () => {
-  const name = window.prompt(ui.value.templateName);
-  if (!name?.trim()) return;
-  const template = await api.createReconciliationTemplate({ name: name.trim(), configuration: draftConfiguration.value });
-  templates.value.unshift(template);
-  selectedTemplateId.value = template.id;
-  templateValidationMessage.value = ui.value.templateSaved;
+  const name = templateName.value.trim();
+  if (!name || !draftValid.value) return;
+  templateSaving.value = true;
+  dialogError.value = "";
+  templateValidationMessage.value = "";
+  try {
+    const selected = templates.value.find((item) => item.id === selectedTemplateId.value);
+    const isUpdate = selected?.name === name;
+    const template = isUpdate
+      ? await api.updateReconciliationTemplate(selected.id, { name, configuration: draftConfiguration.value })
+      : await api.createReconciliationTemplate({ name, configuration: draftConfiguration.value });
+    if (isUpdate) templates.value.splice(templates.value.findIndex((item) => item.id === template.id), 1, template);
+    else templates.value.unshift(template);
+    selectedTemplateId.value = template.id;
+    templateName.value = template.name;
+    await api.saveReconciliationConfiguration(activeBatchId.value, draftConfiguration.value, template.id);
+    matchingConfiguration.value = structuredClone(draftConfiguration.value);
+    updateCurrentBatchTemplate(template);
+    templateValidationMessage.value = isUpdate ? ui.value.templateUpdated : ui.value.templateSaved;
+  } catch (error) {
+    dialogError.value = error.message;
+  } finally {
+    templateSaving.value = false;
+  }
 };
 const loadSelectedTemplate = async () => {
   templateValidationMessage.value = "";
+  dialogError.value = "";
   const template = templates.value.find((item) => item.id === selectedTemplateId.value);
-  if (!template) return;
+  if (!template) {
+    templateName.value = "";
+    return;
+  }
+  templateName.value = template.name;
   draftConfiguration.value = normalizeConfigurationFields(template.configurationJson);
+  if (!draftConfiguration.value.groups?.length) {
+    dialogError.value = ui.value.templateLoadFailed;
+    return;
+  }
   const available = new Set(excelHeaders.value.map((header) => header.name));
   const missing = draftConfiguration.value.groups.flatMap((group) => group.rules || []).flatMap((rule) => rule.rightFields || []).filter((name) => !available.has(name));
   if (missing.length) templateValidationMessage.value = `${ui.value.invalidTemplate} ${[...new Set(missing)].join(", ")}`;
@@ -1117,12 +1193,20 @@ td small {
 .modal-close { border: 0; background: transparent; color: #64748b; font-size: 30px; cursor: pointer; }
 
 .template-toolbar {
+  display: grid;
+  grid-template-columns: minmax(190px, 280px) minmax(220px, 340px) auto auto minmax(0, 1fr);
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
   background: #fff;
 }
 
-.template-toolbar select { width: min(360px, 35vw); }
+.template-name-field,
+.template-load-field { display: grid; gap: 4px; min-width: 0; }
+.template-name-field > span,
+.template-load-field > span { color: #64748b; font-size: 10px; font-weight: 700; }
+.template-toolbar input,
+.template-toolbar select { width: 100%; min-height: 36px; }
+.template-toolbar .configuration-warning { align-self: end; padding-bottom: 7px; font-size: 12px; }
 
 .matching-workspace {
   display: grid;
@@ -1275,6 +1359,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   }
 
   .matching-modal-backdrop { padding: 8px; }
+  .template-toolbar { grid-template-columns: 1fr 1fr auto; }
+  .template-toolbar .configuration-warning { grid-column: 1 / -1; }
   .matching-workspace { grid-template-columns: 230px minmax(480px, 1fr) 240px; overflow: auto; }
   .rule-main-row { grid-template-columns: 1fr; }
   .mapping-comparator { padding-top: 0; }
