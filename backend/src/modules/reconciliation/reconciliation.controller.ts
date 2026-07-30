@@ -23,13 +23,67 @@ export class ReconciliationController {
   @Post('batches/:batchId/match')
   @RequirePermission('reconciliation.bank.match')
   match(@Param('batchId') batchId: string, @Body() body: any, @Req() request: Request) {
-    return this.reconciliation.matchBatch(batchId, body?.matchingRules, this.actorUserId(request));
+    return this.reconciliation.matchBatch(batchId, body?.configuration ?? body?.matchingRules, this.actorUserId(request));
   }
 
   @Post('batches/:batchId/rematch')
   @RequirePermission('reconciliation.bank.match')
   rematch(@Param('batchId') batchId: string, @Body() body: any, @Req() request: Request) {
-    return this.reconciliation.matchBatch(batchId, body?.matchingRules, this.actorUserId(request));
+    return this.reconciliation.matchBatch(batchId, body?.configuration ?? body?.matchingRules, this.actorUserId(request));
+  }
+
+  @Get('field-metadata')
+  @RequirePermission('reconciliation.bank.view')
+  fieldMetadata() {
+    return this.reconciliation.getFieldMetadata();
+  }
+
+  @Get('batches/:batchId/headers')
+  @RequirePermission('reconciliation.bank.view')
+  headers(@Param('batchId') batchId: string) {
+    return this.reconciliation.getBatchHeaders(batchId);
+  }
+
+  @Post('batches/:batchId/configuration')
+  @RequirePermission('reconciliation.bank.match')
+  saveConfiguration(@Param('batchId') batchId: string, @Body() body: any, @Req() request: Request) {
+    return this.reconciliation.saveBatchConfiguration(batchId, body?.configuration, body?.templateId, this.actorUserId(request));
+  }
+
+  @Post('batches/:batchId/preview')
+  @RequirePermission('reconciliation.bank.match')
+  preview(@Param('batchId') batchId: string, @Body() body: any) {
+    return this.reconciliation.previewConfiguration(batchId, body?.configuration);
+  }
+
+  @Get('templates')
+  @RequirePermission('reconciliation.bank.view')
+  templates(@Req() request: Request) {
+    return this.reconciliation.listTemplates(this.actorUserId(request));
+  }
+
+  @Post('templates')
+  @RequirePermission('reconciliation.bank.match')
+  createTemplate(@Body() body: any, @Req() request: Request) {
+    return this.reconciliation.createTemplate(body, this.actorUserId(request));
+  }
+
+  @Patch('templates/:templateId')
+  @RequirePermission('reconciliation.bank.match')
+  updateTemplate(@Param('templateId') templateId: string, @Body() body: any, @Req() request: Request) {
+    return this.reconciliation.updateTemplate(templateId, body, this.actorUserId(request));
+  }
+
+  @Delete('templates/:templateId')
+  @RequirePermission('reconciliation.bank.match')
+  deleteTemplate(@Param('templateId') templateId: string, @Req() request: Request) {
+    return this.reconciliation.deleteTemplate(templateId, this.actorUserId(request));
+  }
+
+  @Post('templates/:templateId/duplicate')
+  @RequirePermission('reconciliation.bank.match')
+  duplicateTemplate(@Param('templateId') templateId: string, @Body() body: any, @Req() request: Request) {
+    return this.reconciliation.duplicateTemplate(templateId, body?.name, this.actorUserId(request));
   }
 
   @Post('batches/:batchId/submit')

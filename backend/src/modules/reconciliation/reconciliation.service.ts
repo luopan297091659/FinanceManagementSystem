@@ -49,13 +49,59 @@ type UpdateRecordDto = Partial<{
 
 const DEFAULT_MATCHING_RULES = ['normalizedBankSummary', 'depositAmount'];
 
+const RECONCILIATION_FIELD_METADATA = [
+  {
+    key: 'property', label: '物件テーブル', fields: [
+      ['property.id', '物件ID', 'string', false, false],
+      ['property.name', '物件名', 'string', true, false],
+      ['property.buildingName', '建物名', 'string', true, false],
+      ['property.address', '住所', 'string', true, false],
+      ['property.ownerId', 'オーナーID', 'string', false, false],
+      ['property.managementCompany', '管理会社', 'string', true, false],
+      ['room.roomNumber', '部屋番号', 'string', true, false],
+    ],
+  },
+  {
+    key: 'contract', label: '契約テーブル', fields: [
+      ['contract.id', '契約ID', 'string', false, false],
+      ['contract.propertyId', '物件ID', 'string', false, false],
+      ['contract.roomId', '部屋ID', 'string', false, false],
+      ['contract.contractorName', '契約者', 'string', true, false],
+      ['contract.tenantName', '入居者名', 'string', true, false],
+      ['contract.bankTransferDescription', '振込名義', 'string', true, false],
+      ['contract.monthlyRent', '賃料', 'currency', true, true],
+      ['contract.managementFee', '管理費', 'currency', true, true],
+      ['contract.deposit', '敷金', 'currency', true, true],
+      ['contract.startDate', '契約開始日', 'date', true, false],
+      ['contract.endDate', '契約終了日', 'date', true, false],
+      ['contract.paymentDueDay', '支払期日', 'number', true, false],
+    ],
+  },
+  {
+    key: 'financial', label: '財務テーブル', fields: [
+      ['transaction.id', '取引ID', 'string', false, false],
+      ['transaction.billingAmount', '請求金額', 'currency', true, true],
+      ['transaction.expectedAmount', '入金予定額', 'currency', true, true],
+      ['transaction.paidAmount', '入金額', 'currency', true, true],
+      ['transaction.paymentDate', '入金日', 'date', true, false],
+      ['transaction.paymentMonth', '入金月', 'month', true, false],
+      ['transaction.feeType', '費目', 'string', true, false],
+      ['transaction.status', '支払状態', 'string', false, false],
+      ['transaction.remark', '備考', 'string', true, false],
+    ],
+  },
+].map((source) => ({
+  ...source,
+  fields: source.fields.map(([key, label, dataType, normalizable, aggregatable]) => ({ key, label, dataType, source: source.key, normalizable, aggregatable })),
+}));
+
 @Injectable()
 export class ReconciliationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listBatches() {
     const batches = await this.prisma.reconciliationBatch.findMany({
-      include: { sourceFiles: true },
+      include: { sourceFiles: true, template: { select: { id: true, name: true, version: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -69,6 +115,95 @@ export class ReconciliationService {
         createdAt: file.createdAt,
       })),
     }));
+  }
+
+  getFieldMetadata() {
+    return RECONCILIATION_FIELD_METADATA;
+  }
+
+  async getBatchHeaders(batchId: string) {
+    const records = await this.prisma.reconciliationRecord.findMany({
+      where: { batchId },
+      select: { sourceDataJson: true },
+      orderBy: { sourceRow: 'asc' },
+      take: 50,
+    });
+    if (!records.length) return [];
+    const rows = records.map((record) => record.sourceDataJson as Record<string, unknown>);
+    const keys = [...new Set(rows.flatMap((row) => Object.keys(row)))];
+    return keys.map((name) => {
+      const values = rows.map((row) => row[name]).filter((value) => value !== '' && value !== null && value !== undefined);
+      return {
+        name,
+        dataType: this.detectColumnType(values),
+        examples: values.slice(0, 3).map((value) => this.sanitizeText(value)),
+        nonEmptyCount: values.length,
+      };
+    });
+  }
+
+  async saveBatchConfiguration(batchId: string, configuration: unknown, templateId?: string, actorUserId?: string) {
+    const config = this.validateConfiguration(configuration);
+    if (templateId) await this.ownedTemplate(templateId, actorUserId);
+    const batch = await this.prisma.reconciliationBatch.findUnique({ where: { id: batchId } });
+    if (!batch) throw new NotFoundException('Reconciliation batch not found');
+    if (batch.status === 'COMPLETED') throw new BadRequestException('Finalized batch cannot be reconfigured');
+    const updated = await this.prisma.reconciliationBatch.update({
+      where: { id: batchId },
+      data: {
+        matchingRulesJson: config as Prisma.InputJsonValue,
+        templateId: templateId || null,
+        templateSnapshotJson: templateId ? config as Prisma.InputJsonValue : Prisma.JsonNull,
+        status: 'PARSED',
+      },
+    });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'reconciliation.bank.configuration.update', entityType: 'ReconciliationBatch', entityId: batchId, before: { configuration: batch.matchingRulesJson }, after: { configuration: config, templateId } } });
+    return updated;
+  }
+
+  async previewConfiguration(batchId: string, configuration: unknown) {
+    const config = this.validateConfiguration(configuration);
+    const headers = await this.getBatchHeaders(batchId);
+    const available = new Set(headers.map((header) => header.name));
+    const missingHeaders = config.groups.flatMap((group: any) => group.rules).flatMap((rule: any) => rule.rightFields).filter((field: string) => !available.has(field));
+    return { valid: missingHeaders.length === 0, missingHeaders: [...new Set(missingHeaders)], sampleSize: Math.min(5, headers[0]?.nonEmptyCount ?? 0), groups: config.groups.length };
+  }
+
+  async listTemplates(actorUserId?: string) {
+    const userId = this.requireActor(actorUserId);
+    return this.prisma.reconciliationTemplate.findMany({ where: { createdByUserId: userId, isActive: true, deletedAt: null }, orderBy: { updatedAt: 'desc' } });
+  }
+
+  async createTemplate(dto: any, actorUserId?: string) {
+    const userId = this.requireActor(actorUserId);
+    const name = this.sanitizeText(dto?.name);
+    if (!name) throw new BadRequestException('Template name is required');
+    const configuration = this.validateConfiguration(dto?.configuration);
+    const template = await this.prisma.reconciliationTemplate.create({ data: { name, description: this.sanitizeOptionalText(dto?.description), createdByUserId: userId, configurationJson: configuration as Prisma.InputJsonValue } });
+    await this.prisma.auditLog.create({ data: { actorUserId: userId, action: 'reconciliation.template.create', entityType: 'ReconciliationTemplate', entityId: template.id, after: { name, configuration } } });
+    return template;
+  }
+
+  async updateTemplate(templateId: string, dto: any, actorUserId?: string) {
+    const template = await this.ownedTemplate(templateId, actorUserId);
+    const configuration = dto?.configuration === undefined ? template.configurationJson : this.validateConfiguration(dto.configuration);
+    const updated = await this.prisma.reconciliationTemplate.update({ where: { id: templateId }, data: { name: dto?.name ? this.sanitizeText(dto.name) : undefined, description: dto?.description === undefined ? undefined : this.sanitizeOptionalText(dto.description), configurationJson: configuration as Prisma.InputJsonValue, version: { increment: 1 } } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'reconciliation.template.update', entityType: 'ReconciliationTemplate', entityId: templateId, before: { name: template.name, configuration: template.configurationJson }, after: { name: updated.name, configuration: updated.configurationJson, version: updated.version } } });
+    return updated;
+  }
+
+  async deleteTemplate(templateId: string, actorUserId?: string) {
+    await this.ownedTemplate(templateId, actorUserId);
+    await this.prisma.reconciliationTemplate.update({ where: { id: templateId }, data: { isActive: false, deletedAt: new Date() } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'reconciliation.template.delete', entityType: 'ReconciliationTemplate', entityId: templateId } });
+    return { ok: true };
+  }
+
+  async duplicateTemplate(templateId: string, requestedName: unknown, actorUserId?: string) {
+    const userId = this.requireActor(actorUserId);
+    const template = await this.ownedTemplate(templateId, actorUserId);
+    const name = this.sanitizeText(requestedName) || `${template.name} copy`;
+    return this.prisma.reconciliationTemplate.create({ data: { name, description: template.description, createdByUserId: userId, configurationJson: template.configurationJson as Prisma.InputJsonValue } });
   }
 
   async getBatch(batchId: string) {
@@ -209,11 +344,15 @@ export class ReconciliationService {
     return this.getBatch(batchId);
   }
 
-  async matchBatch(batchId: string, matchingRules?: string[], actorUserId?: string) {
-    const rules = matchingRules?.length ? matchingRules : DEFAULT_MATCHING_RULES;
+  async matchBatch(batchId: string, matchingRules?: unknown, actorUserId?: string) {
+    if (Array.isArray(matchingRules) && !matchingRules.length) throw new BadRequestException('At least one matching condition is required');
+    const configuration = Array.isArray(matchingRules)
+      ? { groups: [{ id: 'legacy', name: 'Default', priority: 1, logicalOperator: 'AND', enabled: true, rules: matchingRules.map((key) => ({ leftFields: [key], operator: 'equals', rightFields: [key], transformations: [], required: true, weight: 1, enabled: true })) }] }
+      : this.validateConfiguration(matchingRules);
+    const rules = configuration.groups.flatMap((group: any) => group.rules).map((rule: any) => rule.leftFields[0]).filter(Boolean);
     await this.prisma.reconciliationBatch.update({
       where: { id: batchId },
-      data: { status: 'MATCHING', matchingRulesJson: rules },
+      data: { status: 'MATCHING', matchingRulesJson: configuration as Prisma.InputJsonValue },
     });
 
     const records = await this.prisma.reconciliationRecord.findMany({
@@ -231,7 +370,7 @@ export class ReconciliationService {
         action: 'reconciliation.bank.match',
         entityType: 'ReconciliationBatch',
         entityId: batchId,
-        after: { matchingRules: rules },
+        after: { matchingRules: configuration },
       },
     });
     await this.refreshBatchStats(batchId);
@@ -618,8 +757,12 @@ export class ReconciliationService {
   private async matchRecord(recordId: string, matchingRules: string[]) {
     const record = await this.prisma.reconciliationRecord.findUnique({ where: { id: recordId } });
     if (!record) return;
-    if (!record.normalizedBankSummary || !record.transactionDate || !record.depositAmount) {
-      await this.markManualReview(record.id, 'Missing summary, date, or amount', matchingRules);
+    const useSummary = matchingRules.some((key) => /(summary|description|contractor|tenant|payer|party|name)/i.test(key));
+    const useAmount = matchingRules.some((key) => /(amount|rent|fee|deposit|paid)/i.test(key));
+    const useDate = matchingRules.some((key) => /(date|month|start|end)/i.test(key));
+    const missing = [useSummary && !record.normalizedBankSummary ? 'summary' : '', useAmount && !record.depositAmount ? 'amount' : '', useDate && !record.transactionDate ? 'date' : ''].filter(Boolean);
+    if (missing.length) {
+      await this.markManualReview(record.id, `Missing configured field: ${missing.join(', ')}`, matchingRules);
       return;
     }
 
@@ -627,11 +770,11 @@ export class ReconciliationService {
       where: { isActive: true },
       include: { contract: { include: { room: { include: { property: true } }, tenant: true } } },
     });
-    const validAliases = aliases.filter(
+    const validAliases = useSummary ? aliases.filter(
       (alias) =>
-        this.isContractValid(alias.contract, record.transactionDate) &&
+        (!useDate || this.isContractValid(alias.contract, record.transactionDate)) &&
         this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.payerName, alias.contract.payerName, alias.contract.contractorName, alias.contract.tenant?.name]),
-    );
+    ) : [];
 
     const validCandidates = validAliases.length
       ? validAliases
@@ -641,8 +784,9 @@ export class ReconciliationService {
         }))
           .filter(
             (contract) =>
-              this.isContractValid(contract, record.transactionDate) &&
-              this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.payerName, contract.contractorName, contract.tenant?.name]),
+              (!useDate || this.isContractValid(contract, record.transactionDate)) &&
+              (!useSummary || this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.payerName, contract.contractorName, contract.tenant?.name])) &&
+              (!useAmount || (contract.monthlyRent != null && record.depositAmount != null && new Prisma.Decimal(record.depositAmount).equals(contract.monthlyRent))),
           )
           .map((contract) => ({
             contractId: contract.id,
@@ -658,11 +802,11 @@ export class ReconciliationService {
     }
 
     const candidate = validCandidates[0];
-    const amountMatches = candidate.contract.monthlyRent != null && new Prisma.Decimal(record.depositAmount).equals(candidate.contract.monthlyRent);
+    const amountMatches = candidate.contract.monthlyRent != null && record.depositAmount != null && new Prisma.Decimal(record.depositAmount).equals(candidate.contract.monthlyRent);
     const duplicate = await this.prisma.reconciliationRecord.findFirst({
       where: { recordHash: record.recordHash, submittedAt: { not: null }, NOT: { id: record.id } },
     });
-    if (!amountMatches || duplicate) {
+    if ((useAmount && !amountMatches) || duplicate) {
       await this.markManualReview(record.id, duplicate ? 'Duplicate submitted record' : 'Deposit amount differs from contract rent', matchingRules);
       return;
     }
@@ -892,6 +1036,63 @@ export class ReconciliationService {
   private sanitizeText(value?: unknown) {
     if (value === undefined || value === null) return '';
     return String(value).replace(/\u0000/g, '').trim();
+  }
+
+  private requireActor(actorUserId?: string) {
+    if (!actorUserId) throw new BadRequestException('Authenticated user is required');
+    return actorUserId;
+  }
+
+  private async ownedTemplate(templateId: string, actorUserId?: string) {
+    const userId = this.requireActor(actorUserId);
+    const template = await this.prisma.reconciliationTemplate.findFirst({ where: { id: templateId, createdByUserId: userId, isActive: true, deletedAt: null } });
+    if (!template) throw new NotFoundException('Reconciliation template not found');
+    return template;
+  }
+
+  private validateConfiguration(value: unknown): { groups: any[] } {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BadRequestException('At least one matching condition is required');
+    const rawGroups = (value as any).groups;
+    if (!Array.isArray(rawGroups)) throw new BadRequestException('At least one rule group is required');
+    const groups = rawGroups
+      .filter((group) => group?.enabled !== false)
+      .map((group, groupIndex) => ({
+        id: this.sanitizeText(group.id) || `group-${groupIndex + 1}`,
+        name: this.sanitizeText(group.name) || `Rule Group ${groupIndex + 1}`,
+        priority: Number(group.priority) || groupIndex + 1,
+        logicalOperator: group.logicalOperator === 'OR' ? 'OR' : 'AND',
+        minimumScore: Math.max(0, Math.min(100, Number(group.minimumScore) || 0)),
+        enabled: true,
+        rules: (Array.isArray(group.rules) ? group.rules : []).filter((rule: any) => rule?.enabled !== false).map((rule: any, ruleIndex: number) => {
+          const leftFields = (Array.isArray(rule.leftFields) ? rule.leftFields : [rule.leftField]).map((item: unknown) => this.sanitizeText(item)).filter(Boolean);
+          const rightFields = (Array.isArray(rule.rightFields) ? rule.rightFields : [rule.rightField]).map((item: unknown) => this.sanitizeText(item)).filter(Boolean);
+          if (!leftFields.length || !rightFields.length) throw new BadRequestException(`Rule ${ruleIndex + 1} requires internal and Excel fields`);
+          return {
+            id: this.sanitizeText(rule.id) || `rule-${groupIndex + 1}-${ruleIndex + 1}`,
+            leftFields,
+            operator: this.sanitizeText(rule.operator) || 'equals',
+            rightFields,
+            transformations: Array.isArray(rule.transformations) ? rule.transformations.map((item: unknown) => this.sanitizeText(item)).filter(Boolean) : [],
+            weight: Math.max(0, Math.min(100, Number(rule.weight) || 0)),
+            required: rule.required !== false,
+            enabled: true,
+          };
+        }),
+      }))
+      .filter((group) => group.rules.length);
+    if (!groups.length) throw new BadRequestException('At least one enabled matching condition is required');
+    return { groups };
+  }
+
+  private detectColumnType(values: unknown[]) {
+    if (!values.length) return 'unknown';
+    const texts = values.map((value) => this.sanitizeText(value));
+    const numeric = texts.filter((value) => /^[-+]?[$¥￥]?\s*\d[\d,]*(\.\d+)?$/.test(value)).length;
+    const dates = texts.filter((value) => /^\d{4}[\/-]\d{1,2}([\/-]\d{1,2})?$/.test(value)).length;
+    if (dates / texts.length >= 0.8) return texts.every((value) => /^\d{4}[\/-]\d{1,2}$/.test(value)) ? 'month' : 'date';
+    if (numeric / texts.length >= 0.8) return texts.some((value) => /[$¥￥,]/.test(value)) ? 'currency' : 'number';
+    if (texts.every((value) => /^(true|false|yes|no|0|1)$/i.test(value))) return 'boolean';
+    return 'string';
   }
 
   private parseAmount(value?: string) {

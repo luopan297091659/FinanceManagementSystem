@@ -321,8 +321,40 @@ export const api = {
     return request(`/reconciliation/bank/batches/${batchId}/parse`, { method: 'POST', body: {} });
   },
 
-  async matchReconciliationBatch(batchId, matchingRules) {
-    return request(`/reconciliation/bank/batches/${batchId}/match`, { method: 'POST', body: { matchingRules } });
+  async matchReconciliationBatch(batchId, configuration) {
+    return request(`/reconciliation/bank/batches/${batchId}/match`, { method: 'POST', body: { configuration } });
+  },
+
+  async reconciliationFieldMetadata() {
+    return request('/reconciliation/bank/field-metadata');
+  },
+
+  async reconciliationBatchHeaders(batchId) {
+    return request(`/reconciliation/bank/batches/${batchId}/headers`);
+  },
+
+  async saveReconciliationConfiguration(batchId, configuration, templateId = '') {
+    return request(`/reconciliation/bank/batches/${batchId}/configuration`, { method: 'POST', body: { configuration, templateId: templateId || undefined } });
+  },
+
+  async previewReconciliationConfiguration(batchId, configuration) {
+    return request(`/reconciliation/bank/batches/${batchId}/preview`, { method: 'POST', body: { configuration } });
+  },
+
+  async listReconciliationTemplates() {
+    return request('/reconciliation/bank/templates');
+  },
+
+  async createReconciliationTemplate(payload) {
+    return request('/reconciliation/bank/templates', { method: 'POST', body: payload });
+  },
+
+  async updateReconciliationTemplate(templateId, payload) {
+    return request(`/reconciliation/bank/templates/${templateId}`, { method: 'PATCH', body: payload });
+  },
+
+  async deleteReconciliationTemplate(templateId) {
+    return request(`/reconciliation/bank/templates/${templateId}`, { method: 'DELETE' });
   },
 
   async submitReconciliationBatch(batchId) {

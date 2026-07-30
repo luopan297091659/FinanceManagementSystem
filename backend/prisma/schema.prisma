@@ -193,6 +193,7 @@ model User {
   userRoles             UserRole[]
   passwordResetTokens   PasswordResetToken[]
   rbacAuditLogs         RbacAuditLog[]
+  reconciliationTemplates ReconciliationTemplate[]
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 }
@@ -819,6 +820,9 @@ model ReconciliationBatch {
   batchNo            String                     @unique
   status             ReconciliationBatchStatus  @default(PENDING)
   matchingRulesJson  Json?
+  templateId         String?
+  template           ReconciliationTemplate?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateSnapshotJson Json?
   totalRecords       Int                        @default(0)
   autoMatchedCount   Int                        @default(0)
   manualMatchedCount Int                        @default(0)
@@ -833,6 +837,25 @@ model ReconciliationBatch {
   updatedAt          DateTime                   @updatedAt
 
   @@index([status, createdAt])
+  @@index([templateId])
+}
+
+model ReconciliationTemplate {
+  id              String                @id @default(cuid())
+  name            String
+  description     String?
+  createdByUserId String
+  createdBy       User                  @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  version         Int                   @default(1)
+  configurationJson Json
+  isActive        Boolean               @default(true)
+  deletedAt       DateTime?
+  batches         ReconciliationBatch[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([createdByUserId, name])
+  @@index([createdByUserId, isActive])
 }
 
 model ReconciliationSourceFile {
