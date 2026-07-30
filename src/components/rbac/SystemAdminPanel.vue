@@ -1017,21 +1017,20 @@ watch(activeTab, () => {
 }
 
 .table-wrapper {
-  overflow-x: auto;
+    overflow-x: auto;
     overflow-y: hidden;
   }
 
-  .role-table {
-    width: 100%;
-    table-layout: fixed;
-    border-collapse: collapse;
-  }
+.role-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
 
-  .role-table th,
-  .role-table td {
-    vertical-align: top;
-  }
-
+.role-table th,
+.role-table td {
+  vertical-align: top;
+}
   .role-table .actions-cell {
     position: sticky;
     right: 0;
