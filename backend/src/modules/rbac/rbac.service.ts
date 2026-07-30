@@ -385,11 +385,12 @@ export class RbacService implements OnModuleInit {
   }
 
   async createUser(data: { username: string; email?: string | null; name: string; phone?: string | null; password: string; roles?: string[]; roleId?: string; isActive?: boolean; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
-    const existing = await this.prisma.user.findFirst({ where: { OR: [{ username: data.username }, ...(data.email ? [{ email: data.email }] : [])] } });
+    const email = data.email?.trim() || null;
+    const existing = await this.prisma.user.findFirst({ where: { OR: [{ username: data.username }, ...(email ? [{ email }] : [])] } });
     if (existing) throw new BadRequestException('User already exists');
     if (!data.password) throw new BadRequestException('Password is required');
     const passwordHash = await this.hashPassword(data.password);
-    const user = await this.prisma.user.create({ data: { username: data.username, email: data.email || null, name: data.name, phone: data.phone ?? null, passwordHash, isActive: data.isActive ?? true, defaultDataScope: data.defaultDataScope ?? DataScopeType.SELF, defaultDataScopeValue: data.defaultDataScopeValue ?? null } });
+    const user = await this.prisma.user.create({ data: { username: data.username, email, name: data.name, phone: data.phone ?? null, passwordHash, isActive: data.isActive ?? true, defaultDataScope: data.defaultDataScope ?? DataScopeType.SELF, defaultDataScopeValue: data.defaultDataScopeValue ?? null } });
     if (data.roleId) {
       await this.prisma.userRole.create({ data: { userId: user.id, roleId: data.roleId } });
     }
@@ -419,7 +420,7 @@ export class RbacService implements OnModuleInit {
       defaultDataScope: data.defaultDataScope,
       defaultDataScopeValue: data.defaultDataScopeValue,
     };
-    if (data.email !== undefined) updateData.email = data.email || null;
+    if (data.email !== undefined) updateData.email = data.email?.trim() || null;
     if (data.phone !== undefined) updateData.phone = data.phone || null;
     await this.prisma.user.update({ where: { id }, data: updateData });
     if (data.roleId !== undefined) {
