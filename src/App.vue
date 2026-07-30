@@ -73,9 +73,11 @@
 
     <main class="workspace">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">{{ dictionary.company }}</p>
-          <h1>{{ currentTitle }}</h1>
+        <div class="page-heading">
+          <div class="page-heading-row">
+            <h1>{{ currentTitle }}</h1>
+            <div id="page-header-actions" class="page-header-actions"></div>
+          </div>
           <p class="subtle">{{ currentSubtitle }}</p>
         </div>
         <div class="topbar-actions">
@@ -613,9 +615,24 @@ onBeforeUnmount(() => {
 }
 
 .topbar > div:first-child h1 {
-  margin: 6px 0;
+  margin: 0;
   font-size: 28px;
   color: #e5eef7;
+}
+
+.page-heading-row,
+.page-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.page-heading-row {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.page-header-actions {
+  gap: 8px;
 }
 
 .topbar > div:first-child p {

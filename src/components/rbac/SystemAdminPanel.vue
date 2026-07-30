@@ -2,10 +2,9 @@
   <div class="system-admin">
     <!-- Users Tab -->
     <div v-if="activeTab === 'users'" class="tab-content">
-      <div class="content-header">
-        <div></div>
+      <Teleport to="#page-header-actions">
         <button v-if="can('user:create')" @click="openNewUser" class="primary-button">{{ dict.newUser }}</button>
-      </div>
+      </Teleport>
       <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -41,10 +40,9 @@
 
     <!-- Roles Tab -->
     <div v-if="activeTab === 'roles'" class="tab-content">
-      <div class="content-header">
-        <div></div>
+      <Teleport to="#page-header-actions">
         <button v-if="can('role:create')" @click="openNewRole" class="primary-button">{{ dict.newRole }}</button>
-      </div>
+      </Teleport>
       <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table role-table">
           <thead>
@@ -84,10 +82,9 @@
 
     <!-- Audit Logs Tab -->
     <div v-if="activeTab === 'logs'" class="tab-content">
-      <div class="content-header">
-        <div></div>
+      <Teleport to="#page-header-actions">
         <button @click="loadLogs" class="secondary-button">{{ dict.refresh }}</button>
-      </div>
+      </Teleport>
       <DualScrollTable wrapper-class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -114,10 +111,9 @@
 
     <!-- Email Settings Tab -->
     <div v-if="activeTab === 'email'" class="tab-content">
-      <div class="content-header">
-        <div></div>
+      <Teleport to="#page-header-actions">
         <button @click="loadEmailSettings" class="secondary-button">{{ dict.refresh }}</button>
-      </div>
+      </Teleport>
       <div class="settings-form">
         <div class="form-grid">
           <div class="form-group">
@@ -166,13 +162,12 @@
 
     <!-- Copy configuration tab -->
     <div v-if="activeTab === 'translations'" class="tab-content">
-      <div class="content-header">
-        <div></div>
+      <Teleport to="#page-header-actions">
         <div class="header-actions">
           <button @click="loadTranslations" class="secondary-button">{{ dict.refresh }}</button>
           <button @click="openNewTranslation" class="primary-button">{{ dict.newTranslation }}</button>
         </div>
-      </div>
+      </Teleport>
 
       <div class="settings-form">
         <div class="form-grid">
@@ -934,20 +929,6 @@ watch(activeTab, () => {
   overflow-y: auto;
 }
 
-.content-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.content-header h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
 .header-actions {
   display: flex;
   gap: 8px;
@@ -1098,8 +1079,11 @@ watch(activeTab, () => {
 }
 
 .actions-cell {
-  display: flex;
-  gap: 8px;
+  white-space: nowrap;
+}
+
+.actions-cell .action-button + .action-button {
+  margin-left: 8px;
 }
 
 .action-button {
@@ -1371,10 +1355,6 @@ watch(activeTab, () => {
 }
 
 @media (max-width: 768px) {
-  .actions-cell {
-    flex-direction: column;
-  }
-
   .form-grid,
   .test-form {
     grid-template-columns: 1fr;
