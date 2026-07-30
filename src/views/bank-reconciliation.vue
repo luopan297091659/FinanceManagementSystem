@@ -1,5 +1,5 @@
 <template>
-  <section class="page-shell bank-reconciliation-page">
+  <section class="page-shell bank-reconciliation-page" @click="showTemplateChooser = false">
     <div class="page-title-row">
       <div>
         <p class="eyebrow">{{ t.menu.aiReconciliation }}</p>
@@ -19,7 +19,18 @@
           <span class="step-arrow" aria-hidden="true">→</span>
           <button class="primary-button step-button" type="button" :disabled="!selectedFiles.length || loading" @click="uploadRows">{{ t.action.createBatch }}</button>
           <span class="step-arrow" aria-hidden="true">→</span>
-          <button class="primary-button step-button" type="button" :disabled="!activeBatchId || loading" @click="openMatchingDialog">{{ ui.selectFields }}</button>
+          <div class="matching-entry" @click.stop>
+            <button class="primary-button step-button" type="button" :disabled="!activeBatchId || loading" @click="toggleTemplateChooser">{{ ui.selectFields }} <span class="button-caret">▾</span></button>
+            <div v-if="showTemplateChooser" class="template-chooser" role="menu">
+              <div class="template-chooser-title">{{ ui.chooseTemplate }}</div>
+              <button class="template-choice new-choice" type="button" @click="createNewTemplate"><span>＋</span><div><strong>{{ ui.newTemplate }}</strong><small>{{ ui.newTemplateHelp }}</small></div></button>
+              <button v-if="hasValidConfiguration" class="template-choice" type="button" @click="editCurrentConfiguration"><span>●</span><div><strong>{{ ui.currentConfiguration }}</strong><small>{{ enabledRuleCount }} {{ ui.rulesConfigured }}</small></div></button>
+              <button v-for="template in templates" :key="template.id" class="template-choice" type="button" @click="openSavedTemplate(template)"><span>◇</span><div><strong>{{ template.name }}</strong><small>v{{ template.version }}</small></div></button>
+              <div v-if="chooserLoading" class="template-chooser-state">{{ ui.loadingTemplates }}</div>
+              <div v-else-if="chooserError" class="template-chooser-error">{{ chooserError }}</div>
+              <div v-else-if="!templates.length" class="template-chooser-state">{{ ui.noTemplatesHint }}</div>
+            </div>
+          </div>
           <span class="step-arrow" aria-hidden="true">→</span>
           <button class="primary-button step-button" type="button" :disabled="!activeBatchId || !hasValidConfiguration || loading" @click="runMatch">{{ t.action.match }}</button>
           <span class="step-arrow" aria-hidden="true">→</span>
@@ -35,7 +46,6 @@
         <strong>{{ t.matching.title }}</strong>
         <span v-if="hasValidConfiguration" class="configuration-ok">{{ enabledRuleCount }} {{ ui.rulesConfigured }} · {{ matchingConfiguration.groups.length }} {{ ui.groups }}</span>
         <span v-else class="configuration-warning">{{ ui.ruleRequired }}</span>
-        <button class="secondary-button" type="button" :disabled="!activeBatchId" @click="openMatchingDialog">{{ ui.configure }}</button>
       </div>
 
       <div v-if="selectedFiles.length" class="file-list">
@@ -261,7 +271,7 @@
 
         <footer class="matching-modal-footer">
           <div><button class="secondary-button" type="button" :disabled="!draftValid" @click="previewRules">{{ ui.testRules }}</button><span v-if="previewResult" :class="previewResult.valid ? 'configuration-ok' : 'configuration-warning'">{{ previewResult.valid ? ui.previewPassed : `${ui.missingHeaders}: ${previewResult.missingHeaders.join(', ')}` }}</span></div>
-          <div><span v-if="dialogError" class="configuration-warning">{{ dialogError }}</span><button class="ghost-button" type="button" :disabled="configurationSaving" @click="closeMatchingDialog">{{ ui.cancel }}</button><button class="primary-button" type="button" :disabled="!draftValid || configurationSaving" @click="confirmConfiguration">{{ configurationSaving ? ui.savingConfiguration : ui.confirm }}</button></div>
+          <div><span v-if="dialogError" class="configuration-warning">{{ dialogError }}</span><button class="ghost-button" type="button" :disabled="configurationSaving" @click="closeMatchingDialog">{{ ui.cancel }}</button><button class="primary-button" type="button" :disabled="!draftValid || configurationSaving || (templateMode === 'new' && !templateName)" @click="confirmConfiguration">{{ configurationSaving ? ui.savingConfiguration : ui.confirm }}</button></div>
         </footer>
       </section>
     </div>
@@ -292,6 +302,10 @@ const errorMessage = ref("");
 const loading = ref(false);
 const showColumnPanel = ref(false);
 const showMatchingDialog = ref(false);
+const showTemplateChooser = ref(false);
+const chooserLoading = ref(false);
+const chooserError = ref("");
+const templateMode = ref("new");
 const fieldMetadata = ref([]);
 const excelHeaders = ref([]);
 const templates = ref([]);
@@ -307,18 +321,18 @@ const templateValidationMessage = ref("");
 const activeRule = ref({ groupIndex: 0, ruleIndex: 0 });
 const draggedField = ref(null);
 const emptyConfiguration = () => ({ groups: [] });
+const clonePlain = (value) => JSON.parse(JSON.stringify(value));
 const normalizeConfigurationFields = (configuration) => {
   let source = configuration;
   if (typeof source === "string") {
     try { source = JSON.parse(source); } catch { source = emptyConfiguration(); }
   }
-  const normalized = structuredClone(source || emptyConfiguration());
+  const normalized = clonePlain(source || emptyConfiguration());
   normalized.groups?.forEach((group) => group.rules?.forEach((rule) => {
     rule.leftFields = (rule.leftFields || []).map((key) => key === "contract.bankTransferDescription" ? "contract.bankSummaryName" : key);
   }));
   return normalized;
 };
-const configurationSignature = (configuration) => JSON.stringify(normalizeConfigurationFields(configuration));
 const matchingConfiguration = ref(emptyConfiguration());
 const draftConfiguration = ref(emptyConfiguration());
 const bankColumns = ref([
@@ -333,14 +347,14 @@ const bankColumns = ref([
 ]);
 const uploadDefaults = ["normalizedBankSummary", "depositAmount"];
 const ui = computed(() => locale.value === "zh" ? {
-  selectFields: "选择匹配字段", configure: "配置规则", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
+  selectFields: "选择匹配字段", chooseTemplate: "选择匹配模板", newTemplate: "新建模板", newTemplateHelp: "从空白规则开始并保存到数据库", currentConfiguration: "当前批次配置", loadingTemplates: "正在加载模板…", noTemplatesHint: "尚无模板，请选择“新建模板”。", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
   dialogEyebrow: "AI 对账规则", dialogTitle: "选择匹配字段", dialogHelp: "将内部系统字段与上传的 Excel 列建立映射。支持一对一、一对多和多对一。",
   loadTemplate: "加载模板", noTemplateSelected: "不加载模板（使用当前配置）", noTemplates: "暂无已保存模板", templateNameLabel: "模板名称", templateNamePlaceholder: "例如：月度租金对账", saveTemplate: "保存模板", savingTemplate: "保存中…", reset: "重置配置", internalFields: "内部系统字段", excelFields: "上传的 Excel 字段", ruleWorkspace: "匹配规则工作区", ruleWorkspaceHelp: "点击字段或拖放到规则中；多选即可组合字段。",
   searchInternal: "搜索内部字段", searchExcel: "搜索 Excel 列", normalizable: "可标准化", exactOnly: "精确值", addGroup: "添加规则组", addRule: "添加规则", noGroups: "请添加一个规则组开始配置。",
   groupName: "规则组名称", logic: "组内逻辑", priority: "优先级", duplicate: "复制", systemSide: "内部字段", excelSide: "Excel 字段", weight: "权重", required: "必需", transformations: "转换规则", nonEmpty: "非空", noField: "尚未选择", addInternal: "添加内部字段", addExcel: "添加 Excel 字段", advanced: "高级设置", transformsSelected: "项转换",
   testRules: "测试匹配规则", previewPassed: "字段校验通过", missingHeaders: "缺少列", cancel: "取消", confirm: "确认配置", savingConfiguration: "保存中…", templateSaved: "模板已保存并应用到当前批次", templateUpdated: "模板已更新并应用到当前批次", templateLoadFailed: "模板列表加载失败，可继续配置并稍后重试。", configurationSaveFailed: "配置保存失败", invalidTemplate: "模板中的部分 Excel 列不存在，请重新映射。",
 } : {
-  selectFields: "照合フィールド選択", configure: "ルール設定", ruleRequired: "照合を実行する前に、少なくとも1つの有効な照合条件を設定してください。", rulesConfigured: "件のルール設定済み", groups: "ルールグループ",
+  selectFields: "照合フィールド選択", chooseTemplate: "照合テンプレート選択", newTemplate: "新規テンプレート", newTemplateHelp: "空のルールから作成してデータベースへ保存", currentConfiguration: "現在のバッチ設定", loadingTemplates: "テンプレート読込中…", noTemplatesHint: "テンプレートがありません。「新規テンプレート」を選択してください。", ruleRequired: "照合を実行する前に、少なくとも1つの有効な照合条件を設定してください。", rulesConfigured: "件のルール設定済み", groups: "ルールグループ",
   dialogEyebrow: "AI 照合ルール", dialogTitle: "照合フィールド選択", dialogHelp: "内部システム項目とアップロードした Excel 列を関連付けます。1対1、1対多、多対1に対応します。",
   loadTemplate: "テンプレート読込", noTemplateSelected: "テンプレートなし（現在の設定）", noTemplates: "保存済みテンプレートなし", templateNameLabel: "テンプレート名", templateNamePlaceholder: "例：月次賃料照合", saveTemplate: "テンプレート保存", savingTemplate: "保存中…", reset: "リセット", internalFields: "内部システム項目", excelFields: "Excel 項目", ruleWorkspace: "照合ルール", ruleWorkspaceHelp: "項目をクリック、またはルールへドラッグします。複数選択で項目を結合できます。",
   searchInternal: "内部項目を検索", searchExcel: "Excel 列を検索", normalizable: "正規化可", exactOnly: "完全一致", addGroup: "グループ追加", addRule: "ルール追加", noGroups: "ルールグループを追加してください。",
@@ -483,34 +497,60 @@ const runMatch = async () => {
 const newRule = () => ({ id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, leftFields: [], operator: "equals", rightFields: [], transformations: [], weight: 50, required: true, enabled: true });
 const newRuleGroup = (index = 0) => ({ id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: `Rule Group ${index + 1}`, priority: index + 1, logicalOperator: "AND", minimumScore: 80, enabled: true, rules: [newRule()] });
 
-const openMatchingDialog = async () => {
+const loadTemplateChoices = async () => {
+  chooserLoading.value = true;
+  chooserError.value = "";
+  try {
+    const result = await api.listReconciliationTemplates();
+    templates.value = Array.isArray(result) ? result : [];
+  } catch (error) {
+    templates.value = [];
+    chooserError.value = error.message;
+  } finally {
+    chooserLoading.value = false;
+  }
+};
+const toggleTemplateChooser = async () => {
+  showTemplateChooser.value = !showTemplateChooser.value;
+  if (showTemplateChooser.value) await loadTemplateChoices();
+};
+const createNewTemplate = () => {
+  showTemplateChooser.value = false;
+  templateMode.value = "new";
+  selectedTemplateId.value = "";
+  templateName.value = "";
+  openMatchingDialog({ groups: [newRuleGroup()] });
+};
+const editCurrentConfiguration = () => {
+  showTemplateChooser.value = false;
+  templateMode.value = "current";
+  const batch = batches.value.find((item) => item.id === activeBatchId.value);
+  selectedTemplateId.value = batch?.templateId || "";
+  templateName.value = batch?.template?.name || templates.value.find((item) => item.id === selectedTemplateId.value)?.name || "";
+  openMatchingDialog(matchingConfiguration.value);
+};
+const openSavedTemplate = (template) => {
+  showTemplateChooser.value = false;
+  templateMode.value = "existing";
+  selectedTemplateId.value = template.id;
+  templateName.value = template.name;
+  openMatchingDialog(template.configurationJson);
+};
+const openMatchingDialog = async (initialConfiguration) => {
   if (!activeBatchId.value) return;
   loading.value = true;
   errorMessage.value = "";
   dialogError.value = "";
   try {
-    const [metadataResult, headersResult, templatesResult] = await Promise.allSettled([
+    const [metadataResult, headersResult] = await Promise.allSettled([
       fieldMetadata.value.length ? fieldMetadata.value : api.reconciliationFieldMetadata(),
       api.reconciliationBatchHeaders(activeBatchId.value),
-      api.listReconciliationTemplates(),
     ]);
     if (metadataResult.status === "rejected") throw metadataResult.reason;
     if (headersResult.status === "rejected") throw headersResult.reason;
     fieldMetadata.value = metadataResult.value;
     excelHeaders.value = headersResult.value;
-    templates.value = templatesResult.status === "fulfilled" && Array.isArray(templatesResult.value) ? templatesResult.value : [];
-    if (templatesResult.status === "rejected" || templatesResult.value === null) dialogError.value = ui.value.templateLoadFailed;
-    const batch = batches.value.find((item) => item.id === activeBatchId.value);
-    const linkedTemplate = templates.value.find((item) => item.id === batch?.templateId);
-    const matchingTemplate = hasValidConfiguration.value
-      ? templates.value.find((item) => configurationSignature(item.configurationJson) === configurationSignature(matchingConfiguration.value))
-      : templates.value[0];
-    const initialTemplate = linkedTemplate || matchingTemplate;
-    selectedTemplateId.value = initialTemplate?.id || "";
-    templateName.value = initialTemplate?.name || batch?.template?.name || "";
-    draftConfiguration.value = normalizeConfigurationFields(hasValidConfiguration.value
-      ? matchingConfiguration.value
-      : initialTemplate?.configurationJson || { groups: [newRuleGroup()] });
+    draftConfiguration.value = normalizeConfigurationFields(initialConfiguration || { groups: [newRuleGroup()] });
     activeRule.value = { groupIndex: 0, ruleIndex: 0 };
     previewResult.value = null;
     templateValidationMessage.value = "";
@@ -525,7 +565,7 @@ const closeMatchingDialog = () => { showMatchingDialog.value = false; };
 const addRuleGroup = () => { draftConfiguration.value.groups.push(newRuleGroup(draftConfiguration.value.groups.length)); activeRule.value = { groupIndex: draftConfiguration.value.groups.length - 1, ruleIndex: 0 }; };
 const removeRuleGroup = (index) => { draftConfiguration.value.groups.splice(index, 1); };
 const duplicateRuleGroup = (index) => {
-  const copy = structuredClone(draftConfiguration.value.groups[index]);
+  const copy = clonePlain(draftConfiguration.value.groups[index]);
   copy.id = `group-${Date.now()}`;
   copy.name = `${copy.name} Copy`;
   copy.priority = draftConfiguration.value.groups.length + 1;
@@ -574,7 +614,7 @@ const missingDraftHeaders = () => {
 const updateCurrentBatchTemplate = (template) => {
   const batch = batches.value.find((item) => item.id === activeBatchId.value);
   if (!batch) return;
-  batch.matchingRulesJson = structuredClone(draftConfiguration.value);
+  batch.matchingRulesJson = clonePlain(draftConfiguration.value);
   batch.templateId = template?.id || null;
   batch.template = template ? { id: template.id, name: template.name, version: template.version } : null;
 };
@@ -588,9 +628,16 @@ const confirmConfiguration = async () => {
   }
   configurationSaving.value = true;
   try {
+    let selectedTemplate = templates.value.find((item) => item.id === selectedTemplateId.value);
+    if (templateMode.value === "new") {
+      selectedTemplate = await api.createReconciliationTemplate({ name: templateName.value.trim(), configuration: draftConfiguration.value });
+      templates.value.unshift(selectedTemplate);
+      selectedTemplateId.value = selectedTemplate.id;
+      templateMode.value = "existing";
+    }
     await api.saveReconciliationConfiguration(activeBatchId.value, draftConfiguration.value, selectedTemplateId.value);
-    matchingConfiguration.value = structuredClone(draftConfiguration.value);
-    updateCurrentBatchTemplate(templates.value.find((item) => item.id === selectedTemplateId.value));
+    matchingConfiguration.value = clonePlain(draftConfiguration.value);
+    updateCurrentBatchTemplate(selectedTemplate);
     showMatchingDialog.value = false;
     await loadBatches();
   } catch (error) {
@@ -615,8 +662,9 @@ const saveAsTemplate = async () => {
     else templates.value.unshift(template);
     selectedTemplateId.value = template.id;
     templateName.value = template.name;
+    templateMode.value = "existing";
     await api.saveReconciliationConfiguration(activeBatchId.value, draftConfiguration.value, template.id);
-    matchingConfiguration.value = structuredClone(draftConfiguration.value);
+    matchingConfiguration.value = clonePlain(draftConfiguration.value);
     updateCurrentBatchTemplate(template);
     templateValidationMessage.value = isUpdate ? ui.value.templateUpdated : ui.value.templateSaved;
   } catch (error) {
@@ -631,8 +679,10 @@ const loadSelectedTemplate = async () => {
   const template = templates.value.find((item) => item.id === selectedTemplateId.value);
   if (!template) {
     templateName.value = "";
+    templateMode.value = "new";
     return;
   }
+  templateMode.value = "existing";
   templateName.value = template.name;
   draftConfiguration.value = normalizeConfigurationFields(template.configurationJson);
   if (!draftConfiguration.value.groups?.length) {
@@ -827,6 +877,33 @@ onMounted(async () => {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+.matching-entry { position: relative; }
+.button-caret { margin-left: 5px; font-size: 10px; }
+.template-chooser {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 50;
+  width: 310px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 7px;
+  border: 1px solid #d8e1ea;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, .16);
+}
+.template-chooser-title { padding: 7px 9px; color: #64748b; font-size: 11px; font-weight: 750; }
+.template-choice { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 7px; width: 100%; padding: 9px; border: 0; border-radius: 6px; background: transparent; color: #1e293b; text-align: left; cursor: pointer; }
+.template-choice:hover { background: #f0fdfa; }
+.template-choice > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; background: #edf5f4; color: #0f766e; font-weight: 800; }
+.template-choice div { display: grid; gap: 2px; min-width: 0; }
+.template-choice strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.template-choice small { color: #94a3b8; font-size: 10px; }
+.new-choice { margin-bottom: 4px; border-bottom: 1px solid #edf1f5; border-radius: 6px 6px 0 0; }
+.template-chooser-state, .template-chooser-error { padding: 9px; color: #94a3b8; font-size: 11px; }
+.template-chooser-error { color: #b45309; }
 
 .toolbar-exports {
   margin-left: auto;
@@ -1142,7 +1219,7 @@ td small {
 }
 
 .rule-summary-panel {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   min-height: 46px;
 }
 
