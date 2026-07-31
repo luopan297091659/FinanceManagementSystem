@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ReconciliationRecordMatchStatus } from '@prisma/client';
 import { Request } from 'express';
@@ -54,6 +54,16 @@ export class ReconciliationController {
   @RequirePermission('reconciliation.bank.view')
   bankStatementScans(@Req() request: Request) {
     return this.reconciliation.listBankStatementScans(this.actorUserId(request));
+  }
+
+  @Get('scans/:scanId/source')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  async bankStatementScanSource(@Param('scanId') scanId: string, @Query('expires') expires: string, @Query('signature') signature: string) {
+    const source = await this.reconciliation.getSignedBankStatementSource(scanId, expires, signature);
+    return new StreamableFile(source.buffer, {
+      type: 'application/pdf',
+      disposition: `inline; filename="bank-statement.pdf"`,
+    });
   }
 
   @Get('scans/:scanId')

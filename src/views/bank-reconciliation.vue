@@ -669,7 +669,10 @@ const newProvider = () => {
 
 const applyProviderTypeDefaults = () => {
   const verifiedOpenAi = providerForm.value.providerType === "OPENAI";
-  providerForm.value.supportsPdfInput = verifiedOpenAi;
+  const qwen = providerForm.value.providerType === "QWEN";
+  if (verifiedOpenAi) providerForm.value.apiPath = "/v1/responses";
+  if (qwen) providerForm.value.apiPath = "/compatible-mode/v1/responses";
+  providerForm.value.supportsPdfInput = verifiedOpenAi || qwen;
   providerForm.value.supportsStructuredJson = verifiedOpenAi;
   providerForm.value.supportsJapanese = true;
 };

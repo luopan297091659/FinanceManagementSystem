@@ -1,7 +1,7 @@
-import { BadGatewayException, BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, ReconciliationRecordMatchStatus } from '@prisma/client';
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { join, relative, resolve } from 'path';
 import * as XLSX from 'xlsx';
@@ -228,7 +228,7 @@ export class ReconciliationService implements OnModuleInit {
     const task = await this.ownedBankStatementScan(id, actorUserId);
     if (task.status !== 'READY') throw new BadRequestException('只有已完成 PDF 校验的任务可以开始 AI 扫描');
     const provider = await this.bankStatementAiProviderStore.findFirst({
-      where: { enabled: true, supportsPdfInput: true, supportsStructuredJson: true, supportsJapanese: true },
+      where: { enabled: true, supportsPdfInput: true, supportsJapanese: true },
       orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
     });
     if (!provider) throw new BadRequestException('请先配置并启用支持 PDF、日文和结构化输出的 AI 模型');
@@ -262,7 +262,10 @@ export class ReconciliationService implements OnModuleInit {
     const providerType = this.sanitizeText(dto?.providerType);
     const transport = this.sanitizeText(dto?.transport) || 'OPENAI_RESPONSES';
     const baseUrl = this.validateProviderUrl(dto?.baseUrl);
-    const apiPath = this.sanitizeText(dto?.apiPath) || '/v1/responses';
+    let apiPath = this.sanitizeText(dto?.apiPath) || '/v1/responses';
+    if (providerType === 'QWEN' && /^\/compatible-mode\/v1\/?$/i.test(apiPath)) {
+      apiPath = '/compatible-mode/v1/responses';
+    }
     const modelName = this.sanitizeText(dto?.modelName);
     if (!displayName || !providerType || !modelName) throw new BadRequestException('模型名称、Provider 类型和模型 ID 为必填项');
     if (transport !== 'OPENAI_RESPONSES') throw new BadRequestException('当前仅支持 OPENAI_RESPONSES 传输协议');
@@ -342,6 +345,9 @@ export class ReconciliationService implements OnModuleInit {
       if (!task || task.status === 'CANCELLED') return;
       const provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: task.providerProfileId } });
       if (!provider?.enabled) throw new Error('配置的 AI Provider 不可用');
+      if (provider.providerType === 'QWEN' && task.pageCount && task.pageCount > 50) {
+        throw new Error('Qwen3.5-OCR 单个 PDF 最多支持 50 页，请拆分后重新上传');
+      }
 
       await this.bankStatementScanTaskStore.update({
         where: { id: scanId },
@@ -355,8 +361,10 @@ export class ReconciliationService implements OnModuleInit {
         'Preserve source order and Japanese text. Never invent missing values; use null.',
         'Keep withdrawal and deposit amounts separate. Amounts must be numbers without currency symbols or commas.',
         'Dates must be YYYY-MM-DD when confidently known, otherwise null.',
+        'Return only one valid JSON object with a rows array. Each row must contain sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, and confidence.',
       ].join(' ');
-      const outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename);
+      const signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
+      const outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
       const rows = this.validateExtractedRows(this.parseProviderJson(outputText));
       if (!rows.length) throw new Error('AI Provider 未返回任何银行交易记录');
 
@@ -424,13 +432,20 @@ export class ReconciliationService implements OnModuleInit {
     }
   }
 
-  private async callResponsesProvider(provider: any, pdf: Buffer | null, prompt: string, structured: boolean, filename = 'bank-statement.pdf') {
+  private async callResponsesProvider(provider: any, pdf: Buffer | null, prompt: string, structured: boolean, filename = 'bank-statement.pdf', fileUrl?: string) {
     if (pdf && !provider.supportsPdfInput) throw new Error('所选 AI Provider 不支持 PDF 输入');
     const content: any[] = [];
-    if (pdf) content.push({ type: 'input_file', filename, file_data: `data:application/pdf;base64,${pdf.toString('base64')}`, detail: 'high' });
+    if (pdf) {
+      content.push(fileUrl
+        ? { type: 'input_file', file_url: fileUrl }
+        : { type: 'input_file', filename, file_data: `data:application/pdf;base64,${pdf.toString('base64')}` });
+    }
     content.push({ type: 'input_text', text: prompt });
     const body: any = { model: provider.modelName, input: [{ role: 'user', content }] };
-    if (structured) body.text = { format: { type: 'json_schema', name: 'bank_statement_transactions', strict: true, schema: this.bankStatementExtractionSchema() } };
+    if (pdf && provider.providerType === 'QWEN') body.ocr_options = {};
+    if (structured && provider.supportsStructuredJson) {
+      body.text = { format: { type: 'json_schema', name: 'bank_statement_transactions', strict: true, schema: this.bankStatementExtractionSchema() } };
+    }
 
     const endpoint = new URL(provider.apiPath, provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`).toString();
     const apiKey = provider.encryptedApiKey ? this.decryptProviderSecret(provider.encryptedApiKey) : '';
@@ -458,8 +473,48 @@ export class ReconciliationService implements OnModuleInit {
 
   private extractResponsesText(payload: any) {
     if (typeof payload?.output_text === 'string') return payload.output_text;
-    const texts = (payload?.output || []).flatMap((item: any) => item?.content || []).map((item: any) => item?.text).filter((value: unknown) => typeof value === 'string');
+    const texts = (payload?.output || [])
+      .flatMap((item: any) => item?.content || [])
+      .map((item: any) => item?.text ?? item?.ocr_result)
+      .filter((value: unknown) => typeof value === 'string');
     return texts.join('');
+  }
+
+  private createSignedScanSourceUrl(scanId: string) {
+    const configuredBaseUrl = this.config.get<string>('BANK_STATEMENT_PUBLIC_BASE_URL');
+    if (!configuredBaseUrl) throw new Error('服务器未配置 BANK_STATEMENT_PUBLIC_BASE_URL，Qwen 无法读取银行账单 PDF');
+    let url: URL;
+    try {
+      url = new URL(`/api/v1/reconciliation/bank/scans/${encodeURIComponent(scanId)}/source`, configuredBaseUrl);
+    } catch {
+      throw new Error('BANK_STATEMENT_PUBLIC_BASE_URL 配置无效');
+    }
+    const expires = Math.floor(Date.now() / 1000) + 15 * 60;
+    url.searchParams.set('expires', String(expires));
+    url.searchParams.set('signature', this.signScanSource(scanId, expires));
+    return url.toString();
+  }
+
+  async getSignedBankStatementSource(scanId: string, expiresValue: unknown, signatureValue: unknown) {
+    const expires = Number(expiresValue);
+    const signature = typeof signatureValue === 'string' ? signatureValue : '';
+    const now = Math.floor(Date.now() / 1000);
+    if (!Number.isInteger(expires) || expires < now || expires > now + 20 * 60 || !signature) {
+      throw new ForbiddenException('银行账单临时访问链接无效或已过期');
+    }
+    const expected = this.signScanSource(scanId, expires);
+    const providedBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expected);
+    if (providedBuffer.length !== expectedBuffer.length || !timingSafeEqual(providedBuffer, expectedBuffer)) {
+      throw new ForbiddenException('银行账单临时访问签名无效');
+    }
+    const task = await this.bankStatementScanTaskStore.findUnique({ where: { id: scanId } });
+    if (!task) throw new NotFoundException('银行账单扫描任务不存在');
+    return { buffer: await readFile(this.resolvePrivateStoragePath(task.storageKey)), filename: task.originalFilename };
+  }
+
+  private signScanSource(scanId: string, expires: number) {
+    return createHmac('sha256', this.providerMasterKey()).update(`${scanId}.${expires}`).digest('base64url');
   }
 
   private bankStatementExtractionSchema() {
