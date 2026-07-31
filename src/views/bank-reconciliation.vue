@@ -362,7 +362,12 @@ import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const t = computed(() => messages[locale.value].bankReconciliation);
 const canManageAiProviders = computed(() => {
-  try { return JSON.parse(localStorage.getItem("permissions") || "[]").includes("reconciliation.bank.ai-provider.manage"); } catch { return false; }
+  try {
+    const permissions = JSON.parse(localStorage.getItem("permissions") || "[]");
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    const roleCodes = (user?.userRoles || []).map((item) => item?.role?.code);
+    return permissions.includes("reconciliation.bank.ai-provider.manage") || roleCodes.includes("SUPER_ADMIN") || roleCodes.includes("ADMIN");
+  } catch { return false; }
 });
 const selectedFiles = ref([]);
 const selectedPdf = ref(null);
