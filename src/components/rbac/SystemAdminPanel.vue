@@ -14,7 +14,7 @@
               <th>{{ dict.email }}</th>
               <th>{{ dict.role }}</th>
               <th>{{ dict.status }}</th>
-              <th>{{ dict.actions }}</th>
+              <th class="actions-cell">{{ dict.actions }}</th>
             </tr>
           </thead>
           <tbody>
@@ -51,7 +51,7 @@
               <th>{{ dict.code }}</th>
               <th>{{ dict.description }}</th>
               <th>{{ uiText.menuPermissions }}</th>
-              <th>{{ dict.actions }}</th>
+              <th class="actions-cell">{{ dict.actions }}</th>
             </tr>
           </thead>
           <tbody>

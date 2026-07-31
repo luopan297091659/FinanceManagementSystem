@@ -1,12 +1,42 @@
-import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ReconciliationRecordMatchStatus } from '@prisma/client';
 import { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { RequirePermission } from '../rbac/permissions.decorator';
 import { ReconciliationService } from './reconciliation.service';
 
 @Controller('reconciliation/bank')
 export class ReconciliationController {
   constructor(private readonly reconciliation: ReconciliationService) {}
+
+  @Post('scans/upload')
+  @RequirePermission('reconciliation.bank.upload')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { files: 1, fileSize: 100 * 1024 * 1024 },
+  }))
+  uploadBankStatementPdf(@UploadedFile() file: Express.Multer.File, @Req() request: Request) {
+    return this.reconciliation.uploadBankStatementPdf(file, this.actorUserId(request));
+  }
+
+  @Get('scans')
+  @RequirePermission('reconciliation.bank.view')
+  bankStatementScans(@Req() request: Request) {
+    return this.reconciliation.listBankStatementScans(this.actorUserId(request));
+  }
+
+  @Get('scans/:scanId')
+  @RequirePermission('reconciliation.bank.view')
+  bankStatementScan(@Param('scanId') scanId: string, @Req() request: Request) {
+    return this.reconciliation.getBankStatementScan(scanId, this.actorUserId(request));
+  }
+
+  @Post('scans/:scanId/start')
+  @RequirePermission('reconciliation.bank.upload')
+  startBankStatementScan(@Param('scanId') scanId: string, @Req() request: Request) {
+    return this.reconciliation.startBankStatementScan(scanId, this.actorUserId(request));
+  }
 
   @Post('upload')
   @RequirePermission('reconciliation.bank.upload')

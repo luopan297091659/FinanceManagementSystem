@@ -1,11 +1,12 @@
 const API_BASE = import.meta.env?.VITE_API_BASE || '/api/v1';
 
 async function request(path, { method = 'GET', body } = {}) {
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const options = {
     method,
     cache: method === 'GET' ? 'no-store' : undefined,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(method === 'GET' ? { 'Cache-Control': 'no-cache' } : {}),
     },
   };
@@ -16,7 +17,7 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 
   if (body !== undefined) {
-    options.body = JSON.stringify(body);
+    options.body = isFormData ? body : JSON.stringify(body);
   }
 
   const response = await fetch(`${API_BASE}${path}`, options);
@@ -300,6 +301,20 @@ export const api = {
 
   async uploadBankReconciliation(payload) {
     return request('/reconciliation/bank/upload', { method: 'POST', body: payload });
+  },
+
+  async uploadBankStatementPdf(file) {
+    const body = new FormData();
+    body.append('file', file, file.name);
+    return request('/reconciliation/bank/scans/upload', { method: 'POST', body });
+  },
+
+  async listBankStatementScans() {
+    return request('/reconciliation/bank/scans');
+  },
+
+  async startBankStatementScan(scanId) {
+    return request(`/reconciliation/bank/scans/${scanId}/start`, { method: 'POST', body: {} });
   },
 
   async listReconciliationBatches() {

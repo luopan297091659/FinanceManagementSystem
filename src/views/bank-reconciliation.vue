@@ -5,12 +5,46 @@
     </div>
 
     <div class="panel-card">
+      <div class="input-choice-bar">
+        <div>
+          <p class="eyebrow">{{ scanUi.inputTitle }}</p>
+          <strong>{{ scanUi.inputHelp }}</strong>
+        </div>
+        <div class="input-choice-actions">
+          <label class="secondary-button file-button">
+            {{ scanUi.excelOption }}
+            <input type="file" multiple accept=".csv,.tsv,.txt,.html,.xls,.xlsx" @change="selectFiles" />
+          </label>
+          <label class="secondary-button file-button pdf-file-button">
+            {{ scanUi.pdfOption }}
+            <input type="file" accept=".pdf,application/pdf" @change="selectPdf" />
+          </label>
+        </div>
+      </div>
+
+      <div v-if="selectedPdf || activeScanTask" class="pdf-scan-panel">
+        <div class="pdf-scan-summary">
+          <div>
+            <strong>{{ selectedPdf?.name || activeScanTask?.originalFilename }}</strong>
+            <small v-if="selectedPdf">{{ formatFileSize(selectedPdf.size) }}</small>
+            <small v-if="activeScanTask">{{ activeScanTask.scanNo }} · {{ scanStatusLabel(activeScanTask.status) }}</small>
+          </div>
+          <div class="pdf-scan-actions">
+            <button class="secondary-button" type="button" :disabled="!selectedPdf || pdfLoading" @click="uploadPdf">
+              {{ pdfLoading ? scanUi.uploading : scanUi.uploadPdf }}
+            </button>
+            <button class="primary-button" type="button" :disabled="activeScanTask?.status !== 'READY' || pdfLoading" @click="startPdfScan">
+              {{ scanUi.aiScan }}
+            </button>
+          </div>
+        </div>
+        <div class="scan-progress-track"><span :style="{ width: `${activeScanTask?.progress || 0}%` }"></span></div>
+        <p class="scan-hint">{{ scanStageMessage }}</p>
+      </div>
+
       <div class="toolbar">
         <div class="workflow-actions">
-          <label class="file-button step-button">
-            {{ selectedFiles.length ? t.action.addFiles : t.action.upload }}
-            <input ref="fileInput" type="file" multiple accept=".csv,.tsv,.txt,.html,.xls,.xlsx" @change="selectFiles" />
-          </label>
+          <span class="step-button file-step-status">{{ selectedFiles.length ? `${selectedFiles.length} ${t.action.addFiles}` : scanUi.excelOption }}</span>
           <span class="step-arrow" aria-hidden="true">→</span>
           <button class="primary-button step-button" type="button" :disabled="!selectedFiles.length || loading" @click="uploadRows">{{ t.action.createBatch }}</button>
           <span class="step-arrow" aria-hidden="true">→</span>
@@ -284,6 +318,10 @@ import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const t = computed(() => messages[locale.value].bankReconciliation);
 const selectedFiles = ref([]);
+const selectedPdf = ref(null);
+const activeScanTask = ref(null);
+const scanTasks = ref([]);
+const pdfLoading = ref(false);
 const batches = ref([]);
 const records = ref([]);
 const rooms = ref([]);
@@ -341,6 +379,29 @@ const bankColumns = ref([
   { key: "remark", visible: true },
 ]);
 const uploadDefaults = ["normalizedBankSummary", "depositAmount"];
+const scanUi = computed(() => locale.value === "zh" ? {
+  inputTitle: "银行账单来源",
+  inputHelp: "选择现有 Excel/CSV，或上传银行账单 PDF 进行 AI 扫描",
+  excelOption: "选择 Excel / CSV",
+  pdfOption: "上传银行账单 PDF",
+  uploadPdf: "校验并上传 PDF",
+  uploading: "上传中…",
+  aiScan: "开始 AI 扫描",
+  ready: "PDF 校验完成，可以开始 AI 扫描。",
+  queued: "任务已进入后台队列，可离开当前页面后再返回查看进度。",
+  pendingWorker: "扫描任务基础流程已建立，正在等待银行账单 AI Provider 处理器。",
+} : {
+  inputTitle: "銀行明細の入力元",
+  inputHelp: "既存の Excel/CSV、または AI スキャン用の銀行明細 PDF を選択します",
+  excelOption: "Excel / CSV を選択",
+  pdfOption: "銀行明細 PDF をアップロード",
+  uploadPdf: "PDF を検証してアップロード",
+  uploading: "アップロード中…",
+  aiScan: "AI スキャンを開始",
+  ready: "PDF の検証が完了しました。AI スキャンを開始できます。",
+  queued: "バックグラウンドキューに登録しました。後から進捗を確認できます。",
+  pendingWorker: "銀行明細 AI Provider の処理待ちです。",
+});
 const ui = computed(() => locale.value === "zh" ? {
   selectFields: "选择匹配字段", chooseTemplate: "选择匹配模板", newTemplate: "新建模板", newTemplateHelp: "从空白规则开始并保存到数据库", currentConfiguration: "当前批次配置", loadingTemplates: "正在加载模板…", noTemplatesHint: "尚无模板，请选择“新建模板”。", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
   dialogEyebrow: "AI 对账规则", dialogTitle: "选择匹配字段", dialogHelp: "将内部系统字段与上传的 Excel 列建立映射。支持一对一、一对多和多对一。",
@@ -421,6 +482,13 @@ const paginatedRecords = computed(() => {
   const start = (recordPage.value - 1) * recordPageSize.value;
   return filteredRecords.value.slice(start, start + recordPageSize.value);
 });
+const scanStageMessage = computed(() => {
+  if (!activeScanTask.value) return selectedPdf.value ? scanUi.value.uploadPdf : "";
+  if (activeScanTask.value.status === "READY") return scanUi.value.ready;
+  if (activeScanTask.value.currentStage === "WAITING_FOR_PROVIDER_WORKER") return scanUi.value.pendingWorker;
+  if (activeScanTask.value.status === "QUEUED") return scanUi.value.queued;
+  return activeScanTask.value.currentStage || scanStatusLabel(activeScanTask.value.status);
+});
 
 watch([searchQuery, activeTab, activeBatchId], () => {
   recordPage.value = 1;
@@ -430,8 +498,80 @@ watch(() => filteredRecords.value.length, (total) => {
 });
 
 const selectFiles = (event) => {
-  selectedFiles.value.push(...Array.from(event.target.files || []));
+  const files = Array.from(event.target.files || []);
+  if (files.length) {
+    selectedPdf.value = null;
+    activeScanTask.value = null;
+    selectedFiles.value.push(...files);
+  }
   event.target.value = "";
+};
+
+const selectPdf = (event) => {
+  const [file] = Array.from(event.target.files || []);
+  event.target.value = "";
+  if (!file) return;
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    errorMessage.value = locale.value === "zh" ? "请选择 PDF 文件。" : "PDF ファイルを選択してください。";
+    return;
+  }
+  selectedFiles.value = [];
+  selectedPdf.value = file;
+  activeScanTask.value = null;
+  errorMessage.value = "";
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / (1024 ** unitIndex)).toFixed(unitIndex ? 1 : 0)} ${units[unitIndex]}`;
+};
+
+const scanStatusLabel = (status) => ({
+  VALIDATING: locale.value === "zh" ? "校验中" : "検証中",
+  READY: locale.value === "zh" ? "待扫描" : "スキャン待ち",
+  DUPLICATE: locale.value === "zh" ? "重复文件" : "重複ファイル",
+  QUEUED: locale.value === "zh" ? "已排队" : "キュー済み",
+  PREPROCESSING: locale.value === "zh" ? "预处理中" : "前処理中",
+  OCR_RUNNING: locale.value === "zh" ? "AI 扫描中" : "AI スキャン中",
+  REVIEW_REQUIRED: locale.value === "zh" ? "需要复核" : "確認が必要",
+  COMPLETED: locale.value === "zh" ? "已完成" : "完了",
+  FAILED: locale.value === "zh" ? "失败" : "失敗",
+  CANCELLED: locale.value === "zh" ? "已取消" : "キャンセル済み",
+})[status] || status;
+
+const uploadPdf = async () => {
+  if (!selectedPdf.value || pdfLoading.value) return;
+  pdfLoading.value = true;
+  errorMessage.value = "";
+  try {
+    activeScanTask.value = await api.uploadBankStatementPdf(selectedPdf.value);
+    selectedPdf.value = null;
+    scanTasks.value = [activeScanTask.value, ...scanTasks.value.filter((item) => item.id !== activeScanTask.value.id)];
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    pdfLoading.value = false;
+  }
+};
+
+const startPdfScan = async () => {
+  if (!activeScanTask.value || pdfLoading.value) return;
+  pdfLoading.value = true;
+  errorMessage.value = "";
+  try {
+    activeScanTask.value = await api.startBankStatementScan(activeScanTask.value.id);
+    scanTasks.value = scanTasks.value.map((item) => item.id === activeScanTask.value.id ? activeScanTask.value : item);
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    pdfLoading.value = false;
+  }
+};
+
+const loadScanTasks = async () => {
+  scanTasks.value = await api.listBankStatementScans();
 };
 
 const uploadRows = async () => {
@@ -795,8 +935,11 @@ const statusLabel = (status) => t.value.status[status] || status;
 const matchStatusLabel = (record) => record.matchStatus === "AUTO_MATCHED" ? "100%" : statusLabel(record.matchStatus);
 
 onMounted(async () => {
-  rooms.value = await api.reconciliationRooms();
-  await loadBatches();
+  await Promise.all([
+    api.reconciliationRooms().then((items) => { rooms.value = items; }),
+    loadBatches(),
+    loadScanTasks(),
+  ]);
 });
 </script>
 
@@ -805,6 +948,41 @@ onMounted(async () => {
   display: grid;
   gap: 18px;
 }
+
+.input-choice-bar,
+.input-choice-actions,
+.pdf-scan-summary,
+.pdf-scan-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.input-choice-bar {
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.input-choice-bar .eyebrow { margin: 0 0 4px; }
+.input-choice-actions .file-button { margin: 0; }
+.pdf-file-button { border-color: #99c9c3; color: #0f766e; }
+
+.pdf-scan-panel {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid #b9ded9;
+  border-radius: 10px;
+  background: #f0fdfa;
+}
+
+.pdf-scan-summary { justify-content: space-between; }
+.pdf-scan-summary small { display: block; margin-top: 4px; color: #64748b; }
+.scan-hint { margin: 8px 0 0; color: #475569; font-size: 12px; }
+.scan-progress-track { height: 5px; margin-top: 12px; overflow: hidden; border-radius: 99px; background: #dcebea; }
+.scan-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width .2s ease; }
+.file-step-status { display: inline-flex; align-items: center; color: #475569; background: #f8fafc; }
 
 .page-title-row,
 .toolbar,
@@ -1410,6 +1588,10 @@ td small {
 button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 @media (max-width: 960px) {
+  .input-choice-bar,
+  .pdf-scan-summary { align-items: stretch; flex-direction: column; }
+  .input-choice-actions,
+  .pdf-scan-actions { flex-wrap: wrap; }
   .stats-grid,
   .content-grid {
     grid-template-columns: 1fr;

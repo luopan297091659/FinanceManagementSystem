@@ -1,6 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, ReconciliationRecordMatchStatus } from '@prisma/client';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
+import { mkdir, unlink, writeFile } from 'fs/promises';
+import { join } from 'path';
 import { PrismaService } from '../../database/prisma.service';
 
 type BankUploadRow = Record<string, unknown>;
@@ -97,7 +100,125 @@ const RECONCILIATION_FIELD_METADATA = [
 
 @Injectable()
 export class ReconciliationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  // The generated Prisma client is refreshed by the normal backend prebuild step.
+  // Keep this narrow bridge so type-checking can still run while a local dev server
+  // has the generated client files locked on Windows.
+  private get bankStatementScanTaskStore(): any {
+    return (this.prisma as any).bankStatementScanTask;
+  }
+
+  async uploadBankStatementPdf(file: Express.Multer.File | undefined, actorUserId?: string) {
+    if (!file?.buffer?.length) throw new BadRequestException('请选择一个银行账单 PDF 文件');
+
+    const maxBytes = this.config.get<number>('BANK_STATEMENT_PDF_MAX_MB', 25) * 1024 * 1024;
+    if (file.size > maxBytes) throw new BadRequestException('PDF 超过系统允许的文件大小');
+    if (file.buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      throw new BadRequestException('上传文件不是有效的 PDF');
+    }
+
+    const pdfText = file.buffer.toString('latin1');
+    if (!pdfText.slice(-4096).includes('%%EOF')) throw new BadRequestException('PDF 文件不完整或已损坏');
+    if (/\/Encrypt\b/.test(pdfText)) throw new BadRequestException('PDF 已加密或受密码保护，暂时无法处理');
+
+    const pageCount = (pdfText.match(/\/Type\s*\/Page\b/g) || []).length || null;
+    const maxPages = this.config.get<number>('BANK_STATEMENT_PDF_MAX_PAGES', 100);
+    if (pageCount && pageCount > maxPages) throw new BadRequestException('PDF 页数超过系统限制');
+
+    const checksum = createHash('sha256').update(file.buffer).digest('hex');
+    const duplicate = await this.bankStatementScanTaskStore.findFirst({
+      where: {
+        checksum,
+        ...(actorUserId ? { createdByUserId: actorUserId } : {}),
+        status: { notIn: ['FAILED', 'CANCELLED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (duplicate) {
+      throw new ConflictException(`该 PDF 已上传，请继续使用扫描任务 ${duplicate.scanNo}`);
+    }
+
+    const storageDirectory = join(process.cwd(), 'uploads', 'bank-statements');
+    const storedName = `${randomUUID()}.pdf`;
+    const absolutePath = join(storageDirectory, storedName);
+    const storageKey = `uploads/bank-statements/${storedName}`;
+    await mkdir(storageDirectory, { recursive: true });
+    await writeFile(absolutePath, file.buffer, { flag: 'wx' });
+
+    try {
+      const scanNo = `BANK-OCR-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${randomUUID().slice(0, 8).toUpperCase()}`;
+      const task = await this.bankStatementScanTaskStore.create({
+        data: {
+          scanNo,
+          originalFilename: file.originalname,
+          storageKey,
+          fileSize: file.size,
+          checksum,
+          pageCount,
+          createdByUserId: actorUserId,
+          status: 'READY',
+          progress: 10,
+          currentStage: 'PDF_VALIDATED',
+        },
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.bank.pdf.upload',
+          entityType: 'BankStatementScanTask',
+          entityId: task.id,
+          after: { scanNo, originalFilename: file.originalname, fileSize: file.size, pageCount, checksum },
+        },
+      });
+      return this.toPublicScanTask(task);
+    } catch (error) {
+      await unlink(absolutePath).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async listBankStatementScans(actorUserId?: string) {
+    const tasks = await this.bankStatementScanTaskStore.findMany({
+      where: actorUserId ? { createdByUserId: actorUserId } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return tasks.map((task: { storageKey: string; checksum: string }) => this.toPublicScanTask(task));
+  }
+
+  async getBankStatementScan(id: string, actorUserId?: string) {
+    return this.toPublicScanTask(await this.ownedBankStatementScan(id, actorUserId));
+  }
+
+  async startBankStatementScan(id: string, actorUserId?: string) {
+    const task = await this.ownedBankStatementScan(id, actorUserId);
+    if (task.status !== 'READY') throw new BadRequestException('只有已完成 PDF 校验的任务可以开始 AI 扫描');
+    const updated = await this.bankStatementScanTaskStore.update({
+      where: { id },
+      data: { status: 'QUEUED', progress: 15, currentStage: 'WAITING_FOR_PROVIDER_WORKER', startedAt: new Date() },
+    });
+    await this.prisma.auditLog.create({
+      data: { actorUserId, action: 'reconciliation.bank.scan.queued', entityType: 'BankStatementScanTask', entityId: id, after: { status: 'QUEUED' } },
+    });
+    return this.toPublicScanTask(updated);
+  }
+
+  private async ownedBankStatementScan(id: string, actorUserId?: string) {
+    const task = await this.bankStatementScanTaskStore.findFirst({
+      where: { id, ...(actorUserId ? { createdByUserId: actorUserId } : {}) },
+    });
+    if (!task) throw new NotFoundException('银行账单扫描任务不存在');
+    return task;
+  }
+
+  private toPublicScanTask<T extends { storageKey: string; checksum: string }>(task: T) {
+    const { storageKey: _storageKey, checksum: _checksum, ...publicTask } = task;
+    return publicTask;
+  }
 
   async listBatches() {
     const batches = await this.prisma.reconciliationBatch.findMany({

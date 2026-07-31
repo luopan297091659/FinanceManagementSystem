@@ -877,6 +877,56 @@ model ReconciliationSourceFile {
   @@index([fileHash])
 }
 
+enum BankStatementScanStatus {
+  VALIDATING
+  READY
+  DUPLICATE
+  QUEUED
+  PREPROCESSING
+  OCR_RUNNING
+  TABLE_ANALYSIS
+  DATA_NORMALIZATION
+  VALIDATING_RESULTS
+  REVIEW_REQUIRED
+  GENERATING_EXCEL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model BankStatementScanTask {
+  id                 String                  @id @default(cuid())
+  scanNo             String                  @unique
+  originalFilename   String
+  storageKey         String
+  mimeType           String                  @default("application/pdf")
+  fileSize           Int
+  checksum           String
+  pageCount          Int?
+  createdByUserId    String?
+  status             BankStatementScanStatus @default(VALIDATING)
+  progress           Int                     @default(0)
+  processedPageCount Int                     @default(0)
+  extractedRowCount  Int                     @default(0)
+  warningCount       Int                     @default(0)
+  currentStage       String?
+  providerProfileId  String?
+  providerType       String?
+  providerModel      String?
+  providerSnapshot   Json?
+  generatedFileId    String?
+  errorCode          String?
+  errorMessage       String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([createdByUserId, createdAt])
+  @@index([checksum])
+  @@index([status, createdAt])
+}
+
 model ReconciliationRecord {
   id                        String                          @id @default(cuid())
   batchId                   String
