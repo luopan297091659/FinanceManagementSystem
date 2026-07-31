@@ -10,6 +10,36 @@ import { ReconciliationService } from './reconciliation.service';
 export class ReconciliationController {
   constructor(private readonly reconciliation: ReconciliationService) {}
 
+  @Get('ai-providers')
+  @RequirePermission('reconciliation.bank.ai-provider.manage')
+  bankStatementAiProviders() {
+    return this.reconciliation.listBankStatementAiProviders();
+  }
+
+  @Post('ai-providers')
+  @RequirePermission('reconciliation.bank.ai-provider.manage')
+  createBankStatementAiProvider(@Body() body: any, @Req() request: Request) {
+    return this.reconciliation.saveBankStatementAiProvider(body, this.actorUserId(request));
+  }
+
+  @Patch('ai-providers/:providerId')
+  @RequirePermission('reconciliation.bank.ai-provider.manage')
+  updateBankStatementAiProvider(@Param('providerId') providerId: string, @Body() body: any, @Req() request: Request) {
+    return this.reconciliation.saveBankStatementAiProvider(body, this.actorUserId(request), providerId);
+  }
+
+  @Post('ai-providers/:providerId/test')
+  @RequirePermission('reconciliation.bank.ai-provider.manage')
+  testBankStatementAiProvider(@Param('providerId') providerId: string) {
+    return this.reconciliation.testBankStatementAiProvider(providerId);
+  }
+
+  @Delete('ai-providers/:providerId')
+  @RequirePermission('reconciliation.bank.ai-provider.manage')
+  deleteBankStatementAiProvider(@Param('providerId') providerId: string, @Req() request: Request) {
+    return this.reconciliation.deleteBankStatementAiProvider(providerId, this.actorUserId(request));
+  }
+
   @Post('scans/upload')
   @RequirePermission('reconciliation.bank.upload')
   @UseInterceptors(FileInterceptor('file', {
@@ -163,6 +193,12 @@ export class ReconciliationController {
   @RequirePermission('reconciliation.bank.edit')
   updateRecord(@Param('recordId') recordId: string, @Body() body: any, @Req() request: Request) {
     return this.reconciliation.updateRecord(recordId, body, this.actorUserId(request));
+  }
+
+  @Delete('records/:recordId')
+  @RequirePermission('reconciliation.bank.edit')
+  deleteRecord(@Param('recordId') recordId: string, @Req() request: Request) {
+    return this.reconciliation.deleteRecord(recordId, this.actorUserId(request));
   }
 
   @Post('records/:recordId/manual-match')

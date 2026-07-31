@@ -164,6 +164,7 @@ export class RbacService implements OnModuleInit {
       { key: 'i18n.translation.export', module: 'i18n', description: '导出文案配置' },
       { key: 'i18n.translation.publish', module: 'i18n', description: '发布文案配置' },
     ];
+    permissions.push({ key: 'reconciliation.bank.ai-provider.manage', module: 'reconciliation', description: 'Manage bank statement AI providers' });
     for (const permission of permissions) {
       await this.prisma.permission.upsert({
         where: { key: permission.key },
@@ -188,6 +189,7 @@ export class RbacService implements OnModuleInit {
       } else if (role.code === 'BUSINESS') {
         ['overview:view','gis:view','knowledge:view','property:view','property:create','property:update','property.view','property.create','property.edit','property.import','property.owner.view','property.owner.edit','room.view','room.create','room.edit','contract.view','contract.create','contract.edit','contract.import','contract.status.edit','contract.charge.view','contract.charge.edit','integrated-import.preview','integrated-import.commit','tenant:view','tenant:create','tenant:update','payment:view','reconciliation:view'].forEach((p) => desired.add(p));
       }
+      if (role.code === 'ADMIN' || role.code === 'SUPER_ADMIN') desired.add('reconciliation.bank.ai-provider.manage');
       const existing = await this.prisma.rolePermission.findMany({ where: { roleId: role.id } });
       const existingKeys = new Set(existing.map((entry: { permissionId: string }) => permissions.find((p: { id: string }) => p.id === entry.permissionId)?.key));
       for (const key of desired) {

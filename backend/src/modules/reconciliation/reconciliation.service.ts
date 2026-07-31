@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, ReconciliationRecordMatchStatus } from '@prisma/client';
-import { createHash, randomUUID } from 'crypto';
-import { mkdir, unlink, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
+import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
+import { join, relative, resolve } from 'path';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../../database/prisma.service';
 
 type BankUploadRow = Record<string, unknown>;
@@ -49,6 +50,18 @@ type UpdateRecordDto = Partial<{
   paymentMonth: string;
   remark: string;
 }>;
+
+type ExtractedBankStatementRow = {
+  sourcePageNumber: number | null;
+  sourceRowNumber: number;
+  transactionDate: string | null;
+  withdrawalAmount: number | null;
+  depositAmount: number | null;
+  transactionType: string | null;
+  bankDescription: string | null;
+  remarks: string | null;
+  confidence: number;
+};
 
 const DEFAULT_MATCHING_RULES = ['normalizedBankSummary', 'depositAmount'];
 
@@ -99,7 +112,7 @@ const RECONCILIATION_FIELD_METADATA = [
 }));
 
 @Injectable()
-export class ReconciliationService {
+export class ReconciliationService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -110,6 +123,23 @@ export class ReconciliationService {
   // has the generated client files locked on Windows.
   private get bankStatementScanTaskStore(): any {
     return (this.prisma as any).bankStatementScanTask;
+  }
+
+  private get bankStatementAiProviderStore(): any {
+    return (this.prisma as any).bankStatementAiProvider;
+  }
+
+  async onModuleInit() {
+    try {
+      const pending = await this.bankStatementScanTaskStore.findMany({
+        where: { status: { in: ['QUEUED', 'OCR_RUNNING', 'GENERATING_EXCEL'] } },
+        orderBy: { createdAt: 'asc' },
+        take: 10,
+      });
+      pending.forEach((task: { id: string }) => setImmediate(() => void this.processBankStatementScan(task.id).catch(() => undefined)));
+    } catch {
+      // Database migrations may still be pending during the first application startup.
+    }
   }
 
   async uploadBankStatementPdf(file: Express.Multer.File | undefined, actorUserId?: string) {
@@ -197,14 +227,377 @@ export class ReconciliationService {
   async startBankStatementScan(id: string, actorUserId?: string) {
     const task = await this.ownedBankStatementScan(id, actorUserId);
     if (task.status !== 'READY') throw new BadRequestException('只有已完成 PDF 校验的任务可以开始 AI 扫描');
+    const provider = await this.bankStatementAiProviderStore.findFirst({
+      where: { enabled: true, supportsPdfInput: true, supportsStructuredJson: true, supportsJapanese: true },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    });
+    if (!provider) throw new BadRequestException('请先配置并启用支持 PDF、日文和结构化输出的 AI 模型');
     const updated = await this.bankStatementScanTaskStore.update({
       where: { id },
-      data: { status: 'QUEUED', progress: 15, currentStage: 'WAITING_FOR_PROVIDER_WORKER', startedAt: new Date() },
+      data: {
+        status: 'QUEUED',
+        progress: 15,
+        currentStage: 'QUEUED',
+        startedAt: new Date(),
+        providerProfileId: provider.id,
+        providerType: provider.providerType,
+        providerModel: provider.modelName,
+        providerSnapshot: this.providerSnapshot(provider),
+      },
     });
     await this.prisma.auditLog.create({
       data: { actorUserId, action: 'reconciliation.bank.scan.queued', entityType: 'BankStatementScanTask', entityId: id, after: { status: 'QUEUED' } },
     });
+    setImmediate(() => void this.processBankStatementScan(id).catch(() => undefined));
     return this.toPublicScanTask(updated);
+  }
+
+  async listBankStatementAiProviders() {
+    const providers = await this.bankStatementAiProviderStore.findMany({ orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }] });
+    return providers.map((provider: any) => this.toPublicProvider(provider));
+  }
+
+  async saveBankStatementAiProvider(dto: any, actorUserId?: string, providerId?: string) {
+    const displayName = this.sanitizeText(dto?.displayName);
+    const providerType = this.sanitizeText(dto?.providerType);
+    const transport = this.sanitizeText(dto?.transport) || 'OPENAI_RESPONSES';
+    const baseUrl = this.validateProviderUrl(dto?.baseUrl);
+    const apiPath = this.sanitizeText(dto?.apiPath) || '/v1/responses';
+    const modelName = this.sanitizeText(dto?.modelName);
+    if (!displayName || !providerType || !modelName) throw new BadRequestException('模型名称、Provider 类型和模型 ID 为必填项');
+    if (transport !== 'OPENAI_RESPONSES') throw new BadRequestException('当前仅支持 OPENAI_RESPONSES 传输协议');
+
+    const existing = providerId ? await this.bankStatementAiProviderStore.findUnique({ where: { id: providerId } }) : null;
+    if (providerId && !existing) throw new NotFoundException('AI 模型配置不存在');
+    const apiKey = typeof dto?.apiKey === 'string' ? dto.apiKey.trim() : '';
+    const isDefault = dto?.isDefault === true;
+    if (isDefault) await this.bankStatementAiProviderStore.updateMany({ where: { isDefault: true }, data: { isDefault: false } });
+
+    const data: any = {
+      displayName,
+      providerType,
+      transport,
+      baseUrl,
+      apiPath,
+      modelName,
+      supportsPdfInput: dto?.supportsPdfInput === true || (dto?.supportsPdfInput === undefined && providerType === 'OPENAI'),
+      supportsStructuredJson: dto?.supportsStructuredJson === true || (dto?.supportsStructuredJson === undefined && providerType === 'OPENAI'),
+      supportsJapanese: dto?.supportsJapanese === true || (dto?.supportsJapanese === undefined && providerType === 'OPENAI'),
+      enabled: dto?.enabled !== false,
+      isDefault,
+      timeoutMs: this.clampInteger(dto?.timeoutMs, 10000, 600000, 120000),
+      maxRetries: this.clampInteger(dto?.maxRetries, 0, 5, 2),
+    };
+    if (apiKey) {
+      data.encryptedApiKey = this.encryptProviderSecret(apiKey);
+      data.apiKeyLastFour = apiKey.slice(-4);
+    } else if (!existing?.encryptedApiKey) {
+      throw new BadRequestException('首次创建模型配置时必须填写 API Key');
+    }
+
+    const provider = providerId
+      ? await this.bankStatementAiProviderStore.update({ where: { id: providerId }, data })
+      : await this.bankStatementAiProviderStore.create({ data: { ...data, createdByUserId: actorUserId } });
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId,
+        action: providerId ? 'reconciliation.bank.ai-provider.update' : 'reconciliation.bank.ai-provider.create',
+        entityType: 'BankStatementAiProvider',
+        entityId: provider.id,
+        after: this.toPublicProvider(provider),
+      },
+    });
+    return this.toPublicProvider(provider);
+  }
+
+  async testBankStatementAiProvider(providerId: string) {
+    const provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: providerId } });
+    if (!provider) throw new NotFoundException('AI 模型配置不存在');
+    const startedAt = Date.now();
+    const response = await this.callResponsesProvider(provider, null, 'Return exactly: OK', false);
+    return { ok: true, latencyMs: Date.now() - startedAt, model: provider.modelName, response: response.slice(0, 80) };
+  }
+
+  async deleteBankStatementAiProvider(providerId: string, actorUserId?: string) {
+    const provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: providerId } });
+    if (!provider) throw new NotFoundException('AI 模型配置不存在');
+    const inUse = await this.bankStatementScanTaskStore.count({ where: { providerProfileId: providerId } });
+    if (inUse) {
+      await this.bankStatementAiProviderStore.update({ where: { id: providerId }, data: { enabled: false, isDefault: false } });
+    } else {
+      await this.bankStatementAiProviderStore.delete({ where: { id: providerId } });
+    }
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'reconciliation.bank.ai-provider.delete', entityType: 'BankStatementAiProvider', entityId: providerId } });
+    return { ok: true, disabled: Boolean(inUse) };
+  }
+
+  private async processBankStatementScan(scanId: string) {
+    try {
+      const task = await this.bankStatementScanTaskStore.findUnique({ where: { id: scanId } });
+      if (!task || task.status === 'CANCELLED') return;
+      const provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: task.providerProfileId } });
+      if (!provider?.enabled) throw new Error('配置的 AI Provider 不可用');
+
+      await this.bankStatementScanTaskStore.update({
+        where: { id: scanId },
+        data: { status: 'OCR_RUNNING', progress: 30, currentStage: 'AI_PDF_EXTRACTION' },
+      });
+      const sourcePath = this.resolvePrivateStoragePath(task.storageKey);
+      const pdf = await readFile(sourcePath);
+      const prompt = [
+        'Analyze this Japanese bank transaction statement PDF.',
+        'Extract only transaction rows. Ignore titles, account metadata, repeated headers, footers, page numbers, and report timestamps.',
+        'Preserve source order and Japanese text. Never invent missing values; use null.',
+        'Keep withdrawal and deposit amounts separate. Amounts must be numbers without currency symbols or commas.',
+        'Dates must be YYYY-MM-DD when confidently known, otherwise null.',
+      ].join(' ');
+      const outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename);
+      const rows = this.validateExtractedRows(this.parseProviderJson(outputText));
+      if (!rows.length) throw new Error('AI Provider 未返回任何银行交易记录');
+
+      await this.bankStatementScanTaskStore.update({
+        where: { id: scanId },
+        data: { status: 'GENERATING_EXCEL', progress: 75, currentStage: 'GENERATING_LOCAL_EXCEL', extractedRowCount: rows.length },
+      });
+      const generated = await this.generateBankStatementWorkbook(task, provider, rows);
+      const batchRows = rows.map((row) => ({
+        sourcePage: row.sourcePageNumber,
+        sourceRow: row.sourceRowNumber,
+        transactionDate: row.transactionDate,
+        withdrawalAmount: row.withdrawalAmount,
+        depositAmount: row.depositAmount,
+        transactionType: row.transactionType,
+        summary: row.bankDescription,
+        normalizedBankSummary: row.bankDescription,
+        remarks: row.remarks,
+        ocrConfidence: row.confidence,
+      }));
+      const batch = await this.uploadBankRows({
+        files: [{ fileName: generated.filename, fileType: 'xlsx', fileSize: generated.fileSize, rows: batchRows }],
+        matchingRules: DEFAULT_MATCHING_RULES,
+        remark: `Generated from bank statement scan ${task.scanNo}`,
+      }, task.createdByUserId);
+      const sourceFile = await this.prisma.reconciliationSourceFile.findFirst({ where: { batchId: batch.id } });
+      if (sourceFile) {
+        await this.prisma.reconciliationSourceFile.update({
+          where: { id: sourceFile.id },
+          data: {
+            storageKey: generated.storageKey,
+            rawMetadata: { sourceType: 'AI_PDF_SCAN', scanTaskId: scanId, originalPdfFilename: task.originalFilename, provider: provider.displayName },
+          },
+        });
+      }
+      await this.bankStatementScanTaskStore.update({
+        where: { id: scanId },
+        data: {
+          status: 'COMPLETED',
+          progress: 100,
+          currentStage: 'BATCH_CREATED',
+          processedPageCount: task.pageCount || 0,
+          generatedFileId: sourceFile?.id,
+          generatedFilename: generated.filename,
+          generatedStorageKey: generated.storageKey,
+          reconciliationBatchId: batch.id,
+          completedAt: new Date(),
+        },
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: task.createdByUserId,
+          action: 'reconciliation.bank.scan.completed',
+          entityType: 'BankStatementScanTask',
+          entityId: scanId,
+          after: { generatedFilename: generated.filename, reconciliationBatchId: batch.id, extractedRowCount: rows.length },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '银行账单 AI 扫描失败';
+      await this.bankStatementScanTaskStore.update({
+        where: { id: scanId },
+        data: { status: 'FAILED', currentStage: 'FAILED', errorCode: 'SCAN_PROCESSING_FAILED', errorMessage: message.slice(0, 1000), completedAt: new Date() },
+      }).catch(() => undefined);
+    }
+  }
+
+  private async callResponsesProvider(provider: any, pdf: Buffer | null, prompt: string, structured: boolean, filename = 'bank-statement.pdf') {
+    if (pdf && !provider.supportsPdfInput) throw new Error('所选 AI Provider 不支持 PDF 输入');
+    const content: any[] = [];
+    if (pdf) content.push({ type: 'input_file', filename, file_data: `data:application/pdf;base64,${pdf.toString('base64')}`, detail: 'high' });
+    content.push({ type: 'input_text', text: prompt });
+    const body: any = { model: provider.modelName, input: [{ role: 'user', content }] };
+    if (structured) body.text = { format: { type: 'json_schema', name: 'bank_statement_transactions', strict: true, schema: this.bankStatementExtractionSchema() } };
+
+    const endpoint = new URL(provider.apiPath, provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`).toString();
+    const apiKey = provider.encryptedApiKey ? this.decryptProviderSecret(provider.encryptedApiKey) : '';
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= provider.maxRetries; attempt += 1) {
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(provider.timeoutMs),
+        });
+        const payload: any = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(`AI Provider 请求失败 (${response.status}): ${this.sanitizeText(payload?.error?.message || payload?.message || response.statusText)}`);
+        const text = this.extractResponsesText(payload);
+        if (!text) throw new Error('AI Provider 返回了空结果');
+        return text;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('AI Provider 请求失败');
+        if (attempt < provider.maxRetries) await new Promise((resolveDelay) => setTimeout(resolveDelay, 500 * (2 ** attempt)));
+      }
+    }
+    throw lastError || new Error('AI Provider 请求失败');
+  }
+
+  private extractResponsesText(payload: any) {
+    if (typeof payload?.output_text === 'string') return payload.output_text;
+    const texts = (payload?.output || []).flatMap((item: any) => item?.content || []).map((item: any) => item?.text).filter((value: unknown) => typeof value === 'string');
+    return texts.join('');
+  }
+
+  private bankStatementExtractionSchema() {
+    const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] };
+    const nullableNumber = { anyOf: [{ type: 'number' }, { type: 'null' }] };
+    return {
+      type: 'object',
+      properties: {
+        rows: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              sourcePageNumber: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
+              sourceRowNumber: { type: 'integer' },
+              transactionDate: nullableString,
+              withdrawalAmount: nullableNumber,
+              depositAmount: nullableNumber,
+              transactionType: nullableString,
+              bankDescription: nullableString,
+              remarks: nullableString,
+              confidence: { type: 'number', minimum: 0, maximum: 1 },
+            },
+            required: ['sourcePageNumber', 'sourceRowNumber', 'transactionDate', 'withdrawalAmount', 'depositAmount', 'transactionType', 'bankDescription', 'remarks', 'confidence'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['rows'],
+      additionalProperties: false,
+    };
+  }
+
+  private parseProviderJson(text: string) {
+    const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    try { return JSON.parse(cleaned); } catch { throw new Error('AI Provider 返回的 JSON 无法解析'); }
+  }
+
+  private validateExtractedRows(payload: any): ExtractedBankStatementRow[] {
+    if (!payload || !Array.isArray(payload.rows) || payload.rows.length > 10000) throw new Error('AI Provider 返回的交易结构无效');
+    return payload.rows.map((row: any, index: number) => {
+      const transactionDate = typeof row.transactionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.transactionDate) ? row.transactionDate : null;
+      const numberOrNull = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+      return {
+        sourcePageNumber: Number.isInteger(row.sourcePageNumber) && row.sourcePageNumber > 0 ? row.sourcePageNumber : null,
+        sourceRowNumber: Number.isInteger(row.sourceRowNumber) && row.sourceRowNumber > 0 ? row.sourceRowNumber : index + 1,
+        transactionDate,
+        withdrawalAmount: numberOrNull(row.withdrawalAmount),
+        depositAmount: numberOrNull(row.depositAmount),
+        transactionType: this.sanitizeOptionalText(row.transactionType),
+        bankDescription: this.sanitizeOptionalText(row.bankDescription),
+        remarks: this.sanitizeOptionalText(row.remarks),
+        confidence: typeof row.confidence === 'number' ? Math.min(1, Math.max(0, row.confidence)) : 0,
+      };
+    });
+  }
+
+  private async generateBankStatementWorkbook(task: any, provider: any, rows: ExtractedBankStatementRow[]) {
+    const safeText = (value: string | null) => value && /^[=+\-@]/.test(value) ? `'${value}` : value;
+    const transactionRows = rows.map((row) => ({
+      'Source File': task.originalFilename,
+      'Scan Task ID': task.scanNo,
+      'Source Page': row.sourcePageNumber,
+      'Source Row': row.sourceRowNumber,
+      'Transaction Date': row.transactionDate,
+      'Withdrawal Amount': row.withdrawalAmount,
+      'Deposit Amount': row.depositAmount,
+      'Transaction Type': safeText(row.transactionType),
+      'Bank Description': safeText(row.bankDescription),
+      Remarks: safeText(row.remarks),
+      'OCR Confidence': row.confidence,
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(transactionRows), 'BankTransactions');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([
+      { Field: 'Original PDF Filename', Value: task.originalFilename },
+      { Field: 'Total Pages', Value: task.pageCount },
+      { Field: 'Total Extracted Rows', Value: rows.length },
+      { Field: 'AI Provider', Value: provider.displayName },
+      { Field: 'AI Model', Value: provider.modelName },
+      { Field: 'Generated At', Value: new Date().toISOString() },
+    ]), 'DocumentMetadata');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows.filter((row) => row.confidence < 0.8).map((row) => ({ SourcePage: row.sourcePageNumber, SourceRow: row.sourceRowNumber, Confidence: row.confidence, Warning: 'Low confidence' }))), 'OcrWarnings');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx', compression: true }) as Buffer;
+    const directory = join(process.cwd(), 'uploads', 'bank-statements', 'generated');
+    await mkdir(directory, { recursive: true });
+    const baseName = task.originalFilename.replace(/\.pdf$/i, '').replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || 'bank_statement';
+    const filename = `${baseName}_ocr_${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}.xlsx`;
+    const storedName = `${randomUUID()}.xlsx`;
+    await writeFile(join(directory, storedName), buffer, { flag: 'wx' });
+    return { filename, storageKey: `uploads/bank-statements/generated/${storedName}`, fileSize: buffer.length };
+  }
+
+  private providerSnapshot(provider: any) {
+    return { id: provider.id, displayName: provider.displayName, providerType: provider.providerType, transport: provider.transport, modelName: provider.modelName, supportsPdfInput: provider.supportsPdfInput, supportsStructuredJson: provider.supportsStructuredJson, supportsJapanese: provider.supportsJapanese };
+  }
+
+  private toPublicProvider(provider: any) {
+    const { encryptedApiKey: _secret, ...publicProvider } = provider;
+    return { ...publicProvider, apiKeyConfigured: Boolean(provider.encryptedApiKey), apiKeyMasked: provider.apiKeyLastFour ? `****${provider.apiKeyLastFour}` : null };
+  }
+
+  private validateProviderUrl(value: unknown) {
+    const text = this.sanitizeText(value);
+    try {
+      const url = new URL(text);
+      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname))) throw new Error();
+      return url.toString().replace(/\/$/, '');
+    } catch { throw new BadRequestException('Provider Base URL 必须是 HTTPS 地址；本地服务可使用 localhost HTTP'); }
+  }
+
+  private providerMasterKey() {
+    const configured = this.config.get<string>('AI_PROVIDER_MASTER_KEY');
+    if (!configured || configured.length < 16) throw new BadRequestException('服务器未配置 AI_PROVIDER_MASTER_KEY，无法安全保存 API Key');
+    return createHash('sha256').update(configured).digest();
+  }
+
+  private encryptProviderSecret(secret: string) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', this.providerMasterKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+    return [iv.toString('base64'), cipher.getAuthTag().toString('base64'), encrypted.toString('base64')].join('.');
+  }
+
+  private decryptProviderSecret(value: string) {
+    const [ivValue, tagValue, encryptedValue] = value.split('.');
+    if (!ivValue || !tagValue || !encryptedValue) throw new Error('AI Provider 密钥格式无效');
+    const decipher = createDecipheriv('aes-256-gcm', this.providerMasterKey(), Buffer.from(ivValue, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagValue, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedValue, 'base64')), decipher.final()]).toString('utf8');
+  }
+
+  private clampInteger(value: unknown, min: number, max: number, fallback: number) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+  }
+
+  private resolvePrivateStoragePath(storageKey: string) {
+    const projectRoot = resolve(process.cwd());
+    const absolutePath = resolve(projectRoot, storageKey);
+    const pathFromRoot = relative(projectRoot, absolutePath);
+    if (!pathFromRoot || pathFromRoot.startsWith('..') || resolve(projectRoot, pathFromRoot) !== absolutePath) throw new Error('文件存储路径无效');
+    return absolutePath;
   }
 
   private async ownedBankStatementScan(id: string, actorUserId?: string) {
@@ -526,6 +919,26 @@ export class ReconciliationService {
     });
     await this.refreshBatchStats(after.batchId);
     return after;
+  }
+
+  async deleteRecord(recordId: string, actorUserId?: string) {
+    const record = await this.prisma.reconciliationRecord.findUnique({ where: { id: recordId } });
+    if (!record) throw new NotFoundException('Reconciliation record not found');
+    if (record.submittedAt || record.matchStatus === 'SUBMITTED') throw new BadRequestException('已提交的记录不能删除');
+    await this.prisma.$transaction([
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.bank.record.delete',
+          entityType: 'ReconciliationRecord',
+          entityId: recordId,
+          before: this.auditRecord(record),
+        },
+      }),
+      this.prisma.reconciliationRecord.delete({ where: { id: recordId } }),
+    ]);
+    await this.refreshBatchStats(record.batchId);
+    return { ok: true, batchId: record.batchId };
   }
 
   async manualMatch(recordId: string, dto: ManualMatchDto, actorUserId?: string) {

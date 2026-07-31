@@ -1,6 +1,7 @@
 <template>
   <section class="page-shell bank-reconciliation-page" @click="showTemplateChooser = false">
     <div class="bank-reconciliation-controls">
+      <button v-if="canManageAiProviders" class="secondary-button" type="button" @click="openProviderDialog">{{ scanUi.modelSettings }}</button>
       <button class="secondary-button" type="button" @click="loadBatches">{{ t.action.refresh }}</button>
     </div>
 
@@ -38,6 +39,9 @@
             </button>
           </div>
         </div>
+        <p v-if="activeScanTask?.generatedFilename" class="generated-file-result">
+          {{ scanUi.generatedFile }}：<strong>{{ activeScanTask.generatedFilename }}</strong>
+        </p>
         <div class="scan-progress-track"><span :style="{ width: `${activeScanTask?.progress || 0}%` }"></span></div>
         <p class="scan-hint">{{ scanStageMessage }}</p>
       </div>
@@ -185,8 +189,10 @@
                 </td>
                 <td v-if="isBankColumnVisible('remark')"><textarea v-model="record.remark" rows="2" @change="saveRecord(record)" /></td>
                 <td class="row-actions">
+                  <button class="primary-button mini" type="button" @click="saveRecord(record)">{{ scanUi.saveRecord }}</button>
                   <button class="secondary-button mini" type="button" @click="manualMatch(record)">{{ t.action.manualMatch }}</button>
                   <button class="ghost-button mini" type="button" @click="unmatch(record)">{{ t.action.unmatch }}</button>
+                  <button class="danger-button mini" type="button" :disabled="record.matchStatus === 'SUBMITTED'" @click="deleteRecord(record)">{{ scanUi.deleteRecord }}</button>
                 </td>
               </tr>
               <tr v-if="!paginatedRecords.length">
@@ -201,6 +207,44 @@
           :total="filteredRecords.length"
           :labels="t.pagination"
         />
+      </section>
+    </div>
+
+    <div v-if="showProviderDialog" class="matching-modal-backdrop" @click.self="showProviderDialog = false">
+      <section class="provider-modal" role="dialog" aria-modal="true" :aria-label="scanUi.modelSettings">
+        <header class="matching-modal-header">
+          <div><p class="eyebrow">AI Provider</p><h3>{{ scanUi.modelSettings }}</h3><p class="subtle">{{ scanUi.modelSettingsHelp }}</p></div>
+          <button class="modal-close" type="button" @click="showProviderDialog = false">×</button>
+        </header>
+        <div class="provider-modal-body">
+          <aside class="provider-list">
+            <button type="button" class="secondary-button" @click="newProvider">{{ scanUi.newProvider }}</button>
+            <button v-for="provider in aiProviders" :key="provider.id" type="button" class="provider-list-item" :class="{ active: providerForm.id === provider.id }" @click="editProvider(provider)">
+              <strong>{{ provider.displayName }}</strong><small>{{ provider.providerType }} · {{ provider.modelName }}</small><span>{{ provider.enabled ? scanUi.enabled : scanUi.disabled }}<template v-if="provider.isDefault"> · {{ scanUi.defaultProvider }}</template></span>
+            </button>
+          </aside>
+          <form class="provider-form" @submit.prevent="saveProvider">
+            <label>{{ scanUi.displayName }}<input v-model.trim="providerForm.displayName" required maxlength="80" /></label>
+            <label>{{ scanUi.providerType }}<select v-model="providerForm.providerType" @change="applyProviderTypeDefaults"><option value="OPENAI">OpenAI</option><option value="QWEN">Qwen / Alibaba</option><option value="OPENAI_COMPATIBLE">OpenAI-compatible</option></select></label>
+            <label>{{ scanUi.baseUrl }}<input v-model.trim="providerForm.baseUrl" required placeholder="https://api.openai.com" /></label>
+            <label>{{ scanUi.apiPath }}<input v-model.trim="providerForm.apiPath" required placeholder="/v1/responses" /></label>
+            <label>{{ scanUi.modelName }}<input v-model.trim="providerForm.modelName" required placeholder="gpt-4.1" /></label>
+            <label>{{ scanUi.apiKey }}<input v-model="providerForm.apiKey" type="password" :required="!providerForm.id" :placeholder="providerForm.apiKeyMasked || 'sk-…'" autocomplete="new-password" /></label>
+            <div class="provider-capabilities">
+              <label><input v-model="providerForm.supportsPdfInput" type="checkbox" />{{ scanUi.pdfCapability }}</label>
+              <label><input v-model="providerForm.supportsStructuredJson" type="checkbox" />{{ scanUi.jsonCapability }}</label>
+              <label><input v-model="providerForm.supportsJapanese" type="checkbox" />{{ scanUi.japaneseCapability }}</label>
+              <label><input v-model="providerForm.enabled" type="checkbox" />{{ scanUi.enabled }}</label>
+              <label><input v-model="providerForm.isDefault" type="checkbox" />{{ scanUi.defaultProvider }}</label>
+            </div>
+            <p v-if="providerMessage" class="scan-hint">{{ providerMessage }}</p>
+            <footer class="provider-form-actions">
+              <button v-if="providerForm.id" class="danger-button" type="button" @click="removeProvider">{{ scanUi.deleteProvider }}</button>
+              <button v-if="providerForm.id" class="secondary-button" type="button" @click="testProvider">{{ scanUi.testConnection }}</button>
+              <button class="primary-button" type="submit" :disabled="providerLoading">{{ scanUi.saveProvider }}</button>
+            </footer>
+          </form>
+        </div>
       </section>
     </div>
 
@@ -317,11 +361,20 @@ import { requestConfirm } from "../services/confirm";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const t = computed(() => messages[locale.value].bankReconciliation);
+const canManageAiProviders = computed(() => {
+  try { return JSON.parse(localStorage.getItem("permissions") || "[]").includes("reconciliation.bank.ai-provider.manage"); } catch { return false; }
+});
 const selectedFiles = ref([]);
 const selectedPdf = ref(null);
 const activeScanTask = ref(null);
 const scanTasks = ref([]);
 const pdfLoading = ref(false);
+const showProviderDialog = ref(false);
+const aiProviders = ref([]);
+const providerLoading = ref(false);
+const providerMessage = ref("");
+const emptyProviderForm = () => ({ id: "", displayName: "", providerType: "OPENAI", transport: "OPENAI_RESPONSES", baseUrl: "https://api.openai.com", apiPath: "/v1/responses", modelName: "", apiKey: "", apiKeyMasked: "", supportsPdfInput: true, supportsStructuredJson: true, supportsJapanese: true, enabled: true, isDefault: false, timeoutMs: 120000, maxRetries: 2 });
+const providerForm = ref(emptyProviderForm());
 const batches = ref([]);
 const records = ref([]);
 const rooms = ref([]);
@@ -390,6 +443,8 @@ const scanUi = computed(() => locale.value === "zh" ? {
   ready: "PDF 校验完成，可以开始 AI 扫描。",
   queued: "任务已进入后台队列，可离开当前页面后再返回查看进度。",
   pendingWorker: "扫描任务基础流程已建立，正在等待银行账单 AI Provider 处理器。",
+  processingPdf: "AI 正在读取并提取银行账单交易。", generatingExcel: "正在生成本地 Excel 并创建对账批次。", batchCreated: "Excel 已生成，对账批次已自动创建。",
+  modelSettings: "AI 模型配置", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "Responses API 路径", modelName: "模型 ID", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
 } : {
   inputTitle: "銀行明細の入力元",
   inputHelp: "既存の Excel/CSV、または AI スキャン用の銀行明細 PDF を選択します",
@@ -401,6 +456,8 @@ const scanUi = computed(() => locale.value === "zh" ? {
   ready: "PDF の検証が完了しました。AI スキャンを開始できます。",
   queued: "バックグラウンドキューに登録しました。後から進捗を確認できます。",
   pendingWorker: "銀行明細 AI Provider の処理待ちです。",
+  processingPdf: "AI が銀行明細を読み取り、取引を抽出しています。", generatingExcel: "ローカル Excel を生成し、照合バッチを作成しています。", batchCreated: "Excel と照合バッチを作成しました。",
+  modelSettings: "AI モデル設定", modelSettingsHelp: "銀行明細 PDF 用モデルを設定します。API Key は暗号化され、バックエンドのみで使用されます。", newProvider: "新規モデル", displayName: "設定名", providerType: "Provider 種別", baseUrl: "Base URL", apiPath: "Responses API パス", modelName: "モデル ID", apiKey: "API Key", pdfCapability: "PDF 入力対応", jsonCapability: "構造化 JSON 対応", japaneseCapability: "日本語対応", enabled: "有効", disabled: "無効", defaultProvider: "既定モデル", saveProvider: "設定を保存", deleteProvider: "設定を削除", testConnection: "接続テスト", generatedFile: "生成済みローカル Excel", saveRecord: "保存", deleteRecord: "削除",
 });
 const ui = computed(() => locale.value === "zh" ? {
   selectFields: "选择匹配字段", chooseTemplate: "选择匹配模板", newTemplate: "新建模板", newTemplateHelp: "从空白规则开始并保存到数据库", currentConfiguration: "当前批次配置", loadingTemplates: "正在加载模板…", noTemplatesHint: "尚无模板，请选择“新建模板”。", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
@@ -487,6 +544,10 @@ const scanStageMessage = computed(() => {
   if (activeScanTask.value.status === "READY") return scanUi.value.ready;
   if (activeScanTask.value.currentStage === "WAITING_FOR_PROVIDER_WORKER") return scanUi.value.pendingWorker;
   if (activeScanTask.value.status === "QUEUED") return scanUi.value.queued;
+  if (activeScanTask.value.status === "OCR_RUNNING") return scanUi.value.processingPdf;
+  if (activeScanTask.value.status === "GENERATING_EXCEL") return scanUi.value.generatingExcel;
+  if (activeScanTask.value.status === "COMPLETED") return scanUi.value.batchCreated;
+  if (activeScanTask.value.status === "FAILED") return activeScanTask.value.errorMessage || scanStatusLabel("FAILED");
   return activeScanTask.value.currentStage || scanStatusLabel(activeScanTask.value.status);
 });
 
@@ -563,6 +624,7 @@ const startPdfScan = async () => {
   try {
     activeScanTask.value = await api.startBankStatementScan(activeScanTask.value.id);
     scanTasks.value = scanTasks.value.map((item) => item.id === activeScanTask.value.id ? activeScanTask.value : item);
+    void pollScanTask(activeScanTask.value.id);
   } catch (error) {
     errorMessage.value = error.message;
   } finally {
@@ -572,6 +634,92 @@ const startPdfScan = async () => {
 
 const loadScanTasks = async () => {
   scanTasks.value = await api.listBankStatementScans();
+};
+
+const pollScanTask = async (scanId) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
+    const task = await api.getBankStatementScan(scanId);
+    activeScanTask.value = task;
+    scanTasks.value = scanTasks.value.map((item) => item.id === scanId ? task : item);
+    if (task.status === "COMPLETED") {
+      await loadBatches();
+      if (task.reconciliationBatchId) await selectBatch(task.reconciliationBatchId);
+      return;
+    }
+    if (["FAILED", "CANCELLED"].includes(task.status)) {
+      if (task.errorMessage) errorMessage.value = task.errorMessage;
+      return;
+    }
+  }
+};
+
+const openProviderDialog = async () => {
+  showProviderDialog.value = true;
+  providerMessage.value = "";
+  try {
+    aiProviders.value = await api.listBankStatementAiProviders();
+    if (aiProviders.value[0]) editProvider(aiProviders.value[0]); else newProvider();
+  } catch (error) {
+    providerMessage.value = error.message;
+  }
+};
+
+const newProvider = () => {
+  providerForm.value = emptyProviderForm();
+  providerMessage.value = "";
+};
+
+const applyProviderTypeDefaults = () => {
+  const verifiedOpenAi = providerForm.value.providerType === "OPENAI";
+  providerForm.value.supportsPdfInput = verifiedOpenAi;
+  providerForm.value.supportsStructuredJson = verifiedOpenAi;
+  providerForm.value.supportsJapanese = true;
+};
+
+const editProvider = (provider) => {
+  providerForm.value = { ...emptyProviderForm(), ...provider, apiKey: "" };
+  providerMessage.value = "";
+};
+
+const saveProvider = async () => {
+  providerLoading.value = true;
+  providerMessage.value = "";
+  try {
+    const saved = await api.saveBankStatementAiProvider(providerForm.value, providerForm.value.id);
+    aiProviders.value = await api.listBankStatementAiProviders();
+    editProvider(saved);
+    providerMessage.value = locale.value === "zh" ? "AI 模型配置已保存。" : "AI モデル設定を保存しました。";
+  } catch (error) {
+    providerMessage.value = error.message;
+  } finally {
+    providerLoading.value = false;
+  }
+};
+
+const testProvider = async () => {
+  if (!providerForm.value.id) return;
+  providerLoading.value = true;
+  try {
+    const result = await api.testBankStatementAiProvider(providerForm.value.id);
+    providerMessage.value = `${locale.value === "zh" ? "连接成功" : "接続成功"} · ${result.latencyMs} ms · ${result.model}`;
+  } catch (error) {
+    providerMessage.value = error.message;
+  } finally {
+    providerLoading.value = false;
+  }
+};
+
+const removeProvider = async () => {
+  if (!providerForm.value.id || !await requestConfirm(locale.value === "zh" ? "确定删除该 AI 模型配置吗？" : "この AI モデル設定を削除しますか？")) return;
+  providerLoading.value = true;
+  try {
+    await api.deleteBankStatementAiProvider(providerForm.value.id);
+    aiProviders.value = await api.listBankStatementAiProviders();
+    if (aiProviders.value[0]) editProvider(aiProviders.value[0]); else newProvider();
+  } finally {
+    providerLoading.value = false;
+  }
 };
 
 const uploadRows = async () => {
@@ -891,13 +1039,29 @@ const exportUnmatchedJson = async () => {
 };
 
 const saveRecord = async (record) => {
-  await api.updateReconciliationRecord(record.id, {
-    transactionDate: record.transactionDate,
-    depositAmount: record.depositAmount,
-    normalizedBankSummary: record.normalizedBankSummary,
-    paymentMonth: record.paymentMonth,
-    remark: record.remark,
-  });
+  errorMessage.value = "";
+  try {
+    await api.updateReconciliationRecord(record.id, {
+      transactionDate: record.transactionDate,
+      depositAmount: record.depositAmount,
+      normalizedBankSummary: record.normalizedBankSummary,
+      paymentMonth: record.paymentMonth,
+      remark: record.remark,
+    });
+  } catch (error) {
+    errorMessage.value = error.message;
+  }
+};
+
+const deleteRecord = async (record) => {
+  const message = locale.value === "zh" ? "确定删除这条银行账单记录吗？" : "この銀行明細レコードを削除しますか？";
+  if (!await requestConfirm(message)) return;
+  try {
+    await api.deleteReconciliationRecord(record.id);
+    await Promise.all([selectBatch(activeBatchId.value), loadBatches()]);
+  } catch (error) {
+    errorMessage.value = error.message;
+  }
 };
 
 const loadContracts = async (record) => {
@@ -983,6 +1147,21 @@ onMounted(async () => {
 .scan-progress-track { height: 5px; margin-top: 12px; overflow: hidden; border-radius: 99px; background: #dcebea; }
 .scan-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width .2s ease; }
 .file-step-status { display: inline-flex; align-items: center; color: #475569; background: #f8fafc; }
+.generated-file-result { margin: 10px 0 0; color: #0f766e; }
+
+.provider-modal { width: min(980px, 94vw); max-height: 90vh; overflow: hidden; border-radius: 12px; background: #fff; box-shadow: 0 28px 80px rgba(15, 23, 42, .28); }
+.provider-modal-body { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 520px; max-height: calc(90vh - 86px); }
+.provider-list { display: grid; align-content: start; gap: 8px; overflow: auto; padding: 16px; border-right: 1px solid var(--line); background: #f8fafc; }
+.provider-list-item { display: grid; gap: 4px; padding: 11px; border: 1px solid #dce5ed; border-radius: 8px; background: #fff; color: #334155; text-align: left; cursor: pointer; }
+.provider-list-item.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(13, 128, 119, .1); }
+.provider-list-item small, .provider-list-item span { color: #64748b; }
+.provider-form { display: grid; align-content: start; grid-template-columns: 1fr 1fr; gap: 14px; overflow: auto; padding: 20px; }
+.provider-form > label { display: grid; gap: 6px; color: #475569; font-size: 12px; font-weight: 700; }
+.provider-form > label:nth-of-type(1), .provider-form > label:nth-of-type(3), .provider-form > label:nth-of-type(6), .provider-capabilities, .provider-form > .scan-hint, .provider-form-actions { grid-column: 1 / -1; }
+.provider-capabilities, .provider-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.provider-capabilities label { display: flex; align-items: center; gap: 5px; color: #475569; font-size: 12px; }
+.provider-capabilities input { width: auto; }
+.provider-form-actions { justify-content: flex-end; padding-top: 8px; }
 
 .page-title-row,
 .toolbar,
@@ -1592,6 +1771,10 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   .pdf-scan-summary { align-items: stretch; flex-direction: column; }
   .input-choice-actions,
   .pdf-scan-actions { flex-wrap: wrap; }
+  .provider-modal-body { grid-template-columns: 1fr; overflow: auto; }
+  .provider-list { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .provider-form { grid-template-columns: 1fr; overflow: visible; }
+  .provider-form > * { grid-column: 1 !important; }
   .stats-grid,
   .content-grid {
     grid-template-columns: 1fr;

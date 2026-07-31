@@ -313,8 +313,28 @@ export const api = {
     return request('/reconciliation/bank/scans');
   },
 
+  async getBankStatementScan(scanId) {
+    return request(`/reconciliation/bank/scans/${scanId}`);
+  },
+
   async startBankStatementScan(scanId) {
     return request(`/reconciliation/bank/scans/${scanId}/start`, { method: 'POST', body: {} });
+  },
+
+  async listBankStatementAiProviders() {
+    return request('/reconciliation/bank/ai-providers');
+  },
+
+  async saveBankStatementAiProvider(payload, providerId = '') {
+    return request(`/reconciliation/bank/ai-providers${providerId ? `/${providerId}` : ''}`, { method: providerId ? 'PATCH' : 'POST', body: payload });
+  },
+
+  async testBankStatementAiProvider(providerId) {
+    return request(`/reconciliation/bank/ai-providers/${providerId}/test`, { method: 'POST', body: {} });
+  },
+
+  async deleteBankStatementAiProvider(providerId) {
+    return request(`/reconciliation/bank/ai-providers/${providerId}`, { method: 'DELETE' });
   },
 
   async listReconciliationBatches() {
@@ -388,6 +408,10 @@ export const api = {
 
   async updateReconciliationRecord(recordId, payload) {
     return request(`/reconciliation/bank/records/${recordId}`, { method: 'PATCH', body: payload });
+  },
+
+  async deleteReconciliationRecord(recordId) {
+    return request(`/reconciliation/bank/records/${recordId}`, { method: 'DELETE' });
   },
 
   async manualMatchReconciliationRecord(recordId, payload) {

@@ -915,6 +915,9 @@ model BankStatementScanTask {
   providerModel      String?
   providerSnapshot   Json?
   generatedFileId    String?
+  generatedFilename  String?
+  generatedStorageKey String?
+  reconciliationBatchId String?
   errorCode          String?
   errorMessage       String?
   startedAt          DateTime?
@@ -925,6 +928,31 @@ model BankStatementScanTask {
   @@index([createdByUserId, createdAt])
   @@index([checksum])
   @@index([status, createdAt])
+}
+
+model BankStatementAiProvider {
+  id                     String   @id @default(cuid())
+  displayName            String
+  providerType           String
+  transport              String   @default("OPENAI_RESPONSES")
+  baseUrl                String
+  apiPath                String   @default("/v1/responses")
+  modelName              String
+  encryptedApiKey        String?
+  apiKeyLastFour         String?
+  supportsPdfInput       Boolean  @default(true)
+  supportsStructuredJson Boolean  @default(true)
+  supportsJapanese       Boolean  @default(true)
+  enabled                Boolean  @default(true)
+  isDefault              Boolean  @default(false)
+  timeoutMs              Int      @default(120000)
+  maxRetries             Int      @default(2)
+  createdByUserId        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([enabled, isDefault])
+  @@index([providerType])
 }
 
 model ReconciliationRecord {
