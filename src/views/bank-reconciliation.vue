@@ -1,7 +1,7 @@
 <template>
   <section class="page-shell bank-reconciliation-page" @click="showTemplateChooser = false">
     <div class="bank-reconciliation-controls">
-      <button v-if="canManageAiProviders" class="secondary-button" type="button" @click="openProviderDialog">{{ scanUi.modelSettings }}</button>
+      <button class="secondary-button" type="button" @click="openProviderDialog">{{ scanUi.modelSettings }}</button>
       <button class="secondary-button" type="button" @click="loadBatches">{{ t.action.refresh }}</button>
     </div>
 
@@ -361,14 +361,6 @@ import { requestConfirm } from "../services/confirm";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const t = computed(() => messages[locale.value].bankReconciliation);
-const canManageAiProviders = computed(() => {
-  try {
-    const permissions = JSON.parse(localStorage.getItem("permissions") || "[]");
-    const user = JSON.parse(localStorage.getItem("user") || "null");
-    const roleCodes = (user?.userRoles || []).map((item) => item?.role?.code);
-    return permissions.includes("reconciliation.bank.ai-provider.manage") || roleCodes.includes("SUPER_ADMIN") || roleCodes.includes("ADMIN");
-  } catch { return false; }
-});
 const selectedFiles = ref([]);
 const selectedPdf = ref(null);
 const activeScanTask = ref(null);
@@ -449,7 +441,7 @@ const scanUi = computed(() => locale.value === "zh" ? {
   queued: "任务已进入后台队列，可离开当前页面后再返回查看进度。",
   pendingWorker: "扫描任务基础流程已建立，正在等待银行账单 AI Provider 处理器。",
   processingPdf: "AI 正在读取并提取银行账单交易。", generatingExcel: "正在生成本地 Excel 并创建对账批次。", batchCreated: "Excel 已生成，对账批次已自动创建。",
-  modelSettings: "AI 模型配置", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "Responses API 路径", modelName: "模型 ID", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
+  modelSettings: "AI 模型配置 / API Key", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "Responses API 路径", modelName: "模型 ID", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
 } : {
   inputTitle: "銀行明細の入力元",
   inputHelp: "既存の Excel/CSV、または AI スキャン用の銀行明細 PDF を選択します",

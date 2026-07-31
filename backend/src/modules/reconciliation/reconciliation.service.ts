@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, ReconciliationRecordMatchStatus } from '@prisma/client';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
@@ -314,8 +314,13 @@ export class ReconciliationService implements OnModuleInit {
     const provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: providerId } });
     if (!provider) throw new NotFoundException('AI 模型配置不存在');
     const startedAt = Date.now();
-    const response = await this.callResponsesProvider(provider, null, 'Return exactly: OK', false);
-    return { ok: true, latencyMs: Date.now() - startedAt, model: provider.modelName, response: response.slice(0, 80) };
+    try {
+      const response = await this.callResponsesProvider(provider, null, 'Return exactly: OK', false);
+      return { ok: true, latencyMs: Date.now() - startedAt, model: provider.modelName, response: response.slice(0, 80) };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '未知的上游服务错误';
+      throw new BadGatewayException(`AI 模型连接测试失败：${detail}`);
+    }
   }
 
   async deleteBankStatementAiProvider(providerId: string, actorUserId?: string) {
