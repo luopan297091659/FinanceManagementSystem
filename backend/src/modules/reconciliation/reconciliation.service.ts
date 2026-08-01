@@ -260,15 +260,20 @@ export class ReconciliationService implements OnModuleInit {
   async saveBankStatementAiProvider(dto: any, actorUserId?: string, providerId?: string) {
     const displayName = this.sanitizeText(dto?.displayName);
     const providerType = this.sanitizeText(dto?.providerType);
-    const transport = this.sanitizeText(dto?.transport) || 'OPENAI_RESPONSES';
+    const transport = providerType === 'DEEPSEEK'
+      ? 'OPENAI_CHAT_COMPLETIONS'
+      : (this.sanitizeText(dto?.transport) || 'OPENAI_RESPONSES');
     const baseUrl = this.validateProviderUrl(dto?.baseUrl);
     let apiPath = this.sanitizeText(dto?.apiPath) || '/v1/responses';
     if (providerType === 'QWEN' && /^\/compatible-mode\/v1\/?$/i.test(apiPath)) {
       apiPath = '/compatible-mode/v1/responses';
     }
+    if (providerType === 'DEEPSEEK') apiPath = '/chat/completions';
     const modelName = this.sanitizeText(dto?.modelName);
     if (!displayName || !providerType || !modelName) throw new BadRequestException('模型名称、Provider 类型和模型 ID 为必填项');
-    if (transport !== 'OPENAI_RESPONSES') throw new BadRequestException('当前仅支持 OPENAI_RESPONSES 传输协议');
+    if (!['OPENAI_RESPONSES', 'OPENAI_CHAT_COMPLETIONS'].includes(transport)) {
+      throw new BadRequestException('当前仅支持 Responses 或 Chat Completions 传输协议');
+    }
 
     const existing = providerId ? await this.bankStatementAiProviderStore.findUnique({ where: { id: providerId } }) : null;
     if (providerId && !existing) throw new NotFoundException('AI 模型配置不存在');
@@ -283,8 +288,8 @@ export class ReconciliationService implements OnModuleInit {
       baseUrl,
       apiPath,
       modelName,
-      supportsPdfInput: dto?.supportsPdfInput === true || (dto?.supportsPdfInput === undefined && providerType === 'OPENAI'),
-      supportsStructuredJson: dto?.supportsStructuredJson === true || (dto?.supportsStructuredJson === undefined && providerType === 'OPENAI'),
+      supportsPdfInput: providerType !== 'DEEPSEEK' && (dto?.supportsPdfInput === true || (dto?.supportsPdfInput === undefined && providerType === 'OPENAI')),
+      supportsStructuredJson: dto?.supportsStructuredJson === true || (dto?.supportsStructuredJson === undefined && ['OPENAI', 'DEEPSEEK'].includes(providerType)),
       supportsJapanese: dto?.supportsJapanese === true || (dto?.supportsJapanese === undefined && providerType === 'OPENAI'),
       enabled: dto?.enabled !== false,
       isDefault,
@@ -343,7 +348,7 @@ export class ReconciliationService implements OnModuleInit {
     try {
       const task = await this.bankStatementScanTaskStore.findUnique({ where: { id: scanId } });
       if (!task || task.status === 'CANCELLED') return;
-      const provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: task.providerProfileId } });
+      let provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: task.providerProfileId } });
       if (!provider?.enabled) throw new Error('配置的 AI Provider 不可用');
       if (provider.providerType === 'QWEN' && task.pageCount && task.pageCount > 50) {
         throw new Error('Qwen3.5-OCR 单个 PDF 最多支持 50 页，请拆分后重新上传');
@@ -363,8 +368,30 @@ export class ReconciliationService implements OnModuleInit {
         'Dates must be YYYY-MM-DD when confidently known, otherwise null.',
         'Return only one valid JSON object with a rows array. Each row must contain sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, and confidence.',
       ].join(' ');
-      const signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
-      const outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
+      let signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
+      let outputText: string;
+      try {
+        outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
+      } catch (error) {
+        if (!this.isProviderDataInspectionFailure(error)) throw error;
+        const fallbackProvider = await this.findBankStatementFallbackProvider(provider.id);
+        if (!fallbackProvider) {
+          throw new Error('Qwen 内容安全检查拒绝了该 PDF。请确认文件内容合规；如属误判，请在阿里云提交工单，或配置一个支持 PDF 的非 Qwen 模型作为回退后重新扫描');
+        }
+        provider = fallbackProvider;
+        signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
+        await this.bankStatementScanTaskStore.update({
+          where: { id: scanId },
+          data: {
+            currentStage: 'AI_PROVIDER_FALLBACK',
+            providerProfileId: provider.id,
+            providerType: provider.providerType,
+            providerModel: provider.modelName,
+            providerSnapshot: this.providerSnapshot(provider),
+          },
+        });
+        outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
+      }
       const rows = this.validateExtractedRows(this.parseProviderJson(outputText));
       if (!rows.length) throw new Error('AI Provider 未返回任何银行交易记录');
 
@@ -434,6 +461,9 @@ export class ReconciliationService implements OnModuleInit {
 
   private async callResponsesProvider(provider: any, pdf: Buffer | null, prompt: string, structured: boolean, filename = 'bank-statement.pdf', fileUrl?: string) {
     if (pdf && !provider.supportsPdfInput) throw new Error('所选 AI Provider 不支持 PDF 输入');
+    if (provider.transport === 'OPENAI_CHAT_COMPLETIONS' && pdf) {
+      throw new Error('DeepSeek Chat API 不支持 PDF 输入，不能直接用于银行账单 OCR');
+    }
     const content: any[] = [];
     if (pdf) {
       content.push(fileUrl
@@ -441,10 +471,14 @@ export class ReconciliationService implements OnModuleInit {
         : { type: 'input_file', filename, file_data: `data:application/pdf;base64,${pdf.toString('base64')}` });
     }
     content.push({ type: 'input_text', text: prompt });
-    const body: any = { model: provider.modelName, input: [{ role: 'user', content }] };
-    if (pdf && provider.providerType === 'QWEN') body.ocr_options = {};
+    const isChatCompletions = provider.transport === 'OPENAI_CHAT_COMPLETIONS';
+    const body: any = isChatCompletions
+      ? { model: provider.modelName, messages: [{ role: 'user', content: prompt }], stream: false }
+      : { model: provider.modelName, input: [{ role: 'user', content }] };
+    if (pdf && provider.providerType === 'QWEN') body.ocr_options = { task: 'document_parsing' };
     if (structured && provider.supportsStructuredJson) {
-      body.text = { format: { type: 'json_schema', name: 'bank_statement_transactions', strict: true, schema: this.bankStatementExtractionSchema() } };
+      if (isChatCompletions) body.response_format = { type: 'json_object' };
+      else body.text = { format: { type: 'json_schema', name: 'bank_statement_transactions', strict: true, schema: this.bankStatementExtractionSchema() } };
     }
 
     const endpoint = new URL(provider.apiPath, provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`).toString();
@@ -459,20 +493,50 @@ export class ReconciliationService implements OnModuleInit {
           signal: AbortSignal.timeout(provider.timeoutMs),
         });
         const payload: any = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(`AI Provider 请求失败 (${response.status}): ${this.sanitizeText(payload?.error?.message || payload?.message || response.statusText)}`);
+        if (!response.ok) {
+          const providerCode = this.sanitizeText(payload?.error?.code || payload?.code);
+          const providerMessage = this.sanitizeText(payload?.error?.message || payload?.message || response.statusText);
+          const detail = [providerCode, providerMessage].filter(Boolean).join(': ');
+          const providerError = new Error(`AI Provider 请求失败 (${response.status}): ${detail}`);
+          if (response.status === 400 && this.isProviderDataInspectionFailure(providerError)) throw providerError;
+          throw providerError;
+        }
         const text = this.extractResponsesText(payload);
         if (!text) throw new Error('AI Provider 返回了空结果');
         return text;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('AI Provider 请求失败');
+        if (this.isProviderDataInspectionFailure(lastError)) break;
         if (attempt < provider.maxRetries) await new Promise((resolveDelay) => setTimeout(resolveDelay, 500 * (2 ** attempt)));
       }
     }
     throw lastError || new Error('AI Provider 请求失败');
   }
 
+  private isProviderDataInspectionFailure(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return /DataInspectionFailed|data_inspection_failed|inappropriate content/i.test(message);
+  }
+
+  private async findBankStatementFallbackProvider(excludedProviderId: string) {
+    const candidates = await this.bankStatementAiProviderStore.findMany({
+      where: {
+        id: { not: excludedProviderId },
+        enabled: true,
+        supportsPdfInput: true,
+        supportsStructuredJson: true,
+        supportsJapanese: true,
+        providerType: { not: 'QWEN' },
+      },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+      take: 1,
+    });
+    return candidates[0] || null;
+  }
+
   private extractResponsesText(payload: any) {
     if (typeof payload?.output_text === 'string') return payload.output_text;
+    if (typeof payload?.choices?.[0]?.message?.content === 'string') return payload.choices[0].message.content;
     const texts = (payload?.output || [])
       .flatMap((item: any) => item?.content || [])
       .map((item: any) => item?.text ?? item?.ocr_result)

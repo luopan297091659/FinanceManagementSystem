@@ -225,18 +225,19 @@
           </aside>
           <form class="provider-form" @submit.prevent="saveProvider">
             <label>{{ scanUi.displayName }}<input v-model.trim="providerForm.displayName" required maxlength="80" /></label>
-            <label>{{ scanUi.providerType }}<select v-model="providerForm.providerType" @change="applyProviderTypeDefaults"><option value="OPENAI">OpenAI</option><option value="QWEN">Qwen / Alibaba</option><option value="OPENAI_COMPATIBLE">OpenAI-compatible</option></select></label>
+            <label>{{ scanUi.providerType }}<select v-model="providerForm.providerType" @change="applyProviderTypeDefaults"><option value="OPENAI">OpenAI</option><option value="QWEN">Qwen / Alibaba</option><option value="DEEPSEEK">DeepSeek</option><option value="OPENAI_COMPATIBLE">OpenAI-compatible</option></select></label>
             <label>{{ scanUi.baseUrl }}<input v-model.trim="providerForm.baseUrl" required placeholder="https://api.openai.com" /></label>
-            <label>{{ scanUi.apiPath }}<input v-model.trim="providerForm.apiPath" required placeholder="/v1/responses" /></label>
-            <label>{{ scanUi.modelName }}<input v-model.trim="providerForm.modelName" required placeholder="gpt-4.1" /></label>
+            <label>{{ scanUi.apiPath }}<input v-model.trim="providerForm.apiPath" required :placeholder="providerForm.transport === 'OPENAI_CHAT_COMPLETIONS' ? '/chat/completions' : '/v1/responses'" /></label>
+            <label>{{ scanUi.modelName }}<input v-model.trim="providerForm.modelName" required :placeholder="providerForm.providerType === 'DEEPSEEK' ? 'deepseek-v4-flash' : 'gpt-5.6-terra'" /></label>
             <label>{{ scanUi.apiKey }}<input v-model="providerForm.apiKey" type="password" :required="!providerForm.id" :placeholder="providerForm.apiKeyMasked || 'sk-…'" autocomplete="new-password" /></label>
             <div class="provider-capabilities">
-              <label><input v-model="providerForm.supportsPdfInput" type="checkbox" />{{ scanUi.pdfCapability }}</label>
+              <label><input v-model="providerForm.supportsPdfInput" type="checkbox" :disabled="providerForm.providerType === 'DEEPSEEK'" />{{ scanUi.pdfCapability }}</label>
               <label><input v-model="providerForm.supportsStructuredJson" type="checkbox" />{{ scanUi.jsonCapability }}</label>
               <label><input v-model="providerForm.supportsJapanese" type="checkbox" />{{ scanUi.japaneseCapability }}</label>
               <label><input v-model="providerForm.enabled" type="checkbox" />{{ scanUi.enabled }}</label>
               <label><input v-model="providerForm.isDefault" type="checkbox" />{{ scanUi.defaultProvider }}</label>
             </div>
+            <p v-if="providerForm.providerType === 'DEEPSEEK'" class="scan-hint">{{ scanUi.deepseekPdfNotice }}</p>
             <p v-if="providerMessage" class="scan-hint">{{ providerMessage }}</p>
             <footer class="provider-form-actions">
               <button v-if="providerForm.id" class="danger-button" type="button" @click="removeProvider">{{ scanUi.deleteProvider }}</button>
@@ -441,7 +442,7 @@ const scanUi = computed(() => locale.value === "zh" ? {
   queued: "任务已进入后台队列，可离开当前页面后再返回查看进度。",
   pendingWorker: "扫描任务基础流程已建立，正在等待银行账单 AI Provider 处理器。",
   processingPdf: "AI 正在读取并提取银行账单交易。", generatingExcel: "正在生成本地 Excel 并创建对账批次。", batchCreated: "Excel 已生成，对账批次已自动创建。",
-  modelSettings: "AI 模型配置 / API Key", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "Responses API 路径", modelName: "模型 ID", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
+  modelSettings: "AI 模型配置 / API Key", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "API 路径", modelName: "模型 ID", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", deepseekPdfNotice: "DeepSeek 官方 Chat API 当前不支持 PDF 或图片输入，可保存并测试文本/JSON 能力，但不会被选作银行账单 OCR 模型。", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
 } : {
   inputTitle: "銀行明細の入力元",
   inputHelp: "既存の Excel/CSV、または AI スキャン用の銀行明細 PDF を選択します",
@@ -454,7 +455,7 @@ const scanUi = computed(() => locale.value === "zh" ? {
   queued: "バックグラウンドキューに登録しました。後から進捗を確認できます。",
   pendingWorker: "銀行明細 AI Provider の処理待ちです。",
   processingPdf: "AI が銀行明細を読み取り、取引を抽出しています。", generatingExcel: "ローカル Excel を生成し、照合バッチを作成しています。", batchCreated: "Excel と照合バッチを作成しました。",
-  modelSettings: "AI モデル設定", modelSettingsHelp: "銀行明細 PDF 用モデルを設定します。API Key は暗号化され、バックエンドのみで使用されます。", newProvider: "新規モデル", displayName: "設定名", providerType: "Provider 種別", baseUrl: "Base URL", apiPath: "Responses API パス", modelName: "モデル ID", apiKey: "API Key", pdfCapability: "PDF 入力対応", jsonCapability: "構造化 JSON 対応", japaneseCapability: "日本語対応", enabled: "有効", disabled: "無効", defaultProvider: "既定モデル", saveProvider: "設定を保存", deleteProvider: "設定を削除", testConnection: "接続テスト", generatedFile: "生成済みローカル Excel", saveRecord: "保存", deleteRecord: "削除",
+  modelSettings: "AI モデル設定", modelSettingsHelp: "銀行明細 PDF 用モデルを設定します。API Key は暗号化され、バックエンドのみで使用されます。", newProvider: "新規モデル", displayName: "設定名", providerType: "Provider 種別", baseUrl: "Base URL", apiPath: "API パス", modelName: "モデル ID", apiKey: "API Key", pdfCapability: "PDF 入力対応", jsonCapability: "構造化 JSON 対応", japaneseCapability: "日本語対応", deepseekPdfNotice: "DeepSeek 公式 Chat API は現在 PDF・画像入力に対応していません。テキスト/JSON 接続の保存とテストはできますが、銀行明細 OCR モデルには選択されません。", enabled: "有効", disabled: "無効", defaultProvider: "既定モデル", saveProvider: "設定を保存", deleteProvider: "設定を削除", testConnection: "接続テスト", generatedFile: "生成済みローカル Excel", saveRecord: "保存", deleteRecord: "削除",
 });
 const ui = computed(() => locale.value === "zh" ? {
   selectFields: "选择匹配字段", chooseTemplate: "选择匹配模板", newTemplate: "新建模板", newTemplateHelp: "从空白规则开始并保存到数据库", currentConfiguration: "当前批次配置", loadingTemplates: "正在加载模板…", noTemplatesHint: "尚无模板，请选择“新建模板”。", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
@@ -670,10 +671,25 @@ const newProvider = () => {
 const applyProviderTypeDefaults = () => {
   const verifiedOpenAi = providerForm.value.providerType === "OPENAI";
   const qwen = providerForm.value.providerType === "QWEN";
-  if (verifiedOpenAi) providerForm.value.apiPath = "/v1/responses";
-  if (qwen) providerForm.value.apiPath = "/compatible-mode/v1/responses";
+  const deepseek = providerForm.value.providerType === "DEEPSEEK";
+  if (verifiedOpenAi) {
+    providerForm.value.transport = "OPENAI_RESPONSES";
+    providerForm.value.baseUrl = "https://api.openai.com";
+    providerForm.value.apiPath = "/v1/responses";
+    providerForm.value.modelName ||= "gpt-5.6-terra";
+  }
+  if (qwen) {
+    providerForm.value.transport = "OPENAI_RESPONSES";
+    providerForm.value.apiPath = "/compatible-mode/v1/responses";
+  }
+  if (deepseek) {
+    providerForm.value.transport = "OPENAI_CHAT_COMPLETIONS";
+    providerForm.value.baseUrl = "https://api.deepseek.com";
+    providerForm.value.apiPath = "/chat/completions";
+    providerForm.value.modelName = "deepseek-v4-flash";
+  }
   providerForm.value.supportsPdfInput = verifiedOpenAi || qwen;
-  providerForm.value.supportsStructuredJson = verifiedOpenAi;
+  providerForm.value.supportsStructuredJson = verifiedOpenAi || deepseek;
   providerForm.value.supportsJapanese = true;
 };
 
