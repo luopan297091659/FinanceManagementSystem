@@ -606,7 +606,7 @@ export const messages = reactive({
       enterUsername: "请输入用户名",
       send: "发送",
       cancel: "取消",
-      demoAccount: "演示账号",
+      // demoAccount: "演示账号",
       loginFailed: "登录失败",
       loginError: "登录错误: ",
       resetSent: "重置邮件已发送",

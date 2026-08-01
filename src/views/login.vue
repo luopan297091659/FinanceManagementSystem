@@ -42,10 +42,10 @@
       </form>
 
       <div v-if="error" class="error-message">{{ error }}</div>
-
+<!-- 
       <div class="login-footer">
         <p class="hint">{{ dict.demoAccount }}: admin / admin123</p>
-      </div>
+      </div> -->
 
       <div class="locale-switch">
         <button

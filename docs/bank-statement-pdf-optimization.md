@@ -36,7 +36,12 @@ POST /api/v1/reconciliation/bank/scans/:scanId/start
 ```text
 BANK_STATEMENT_PDF_MAX_MB=25
 BANK_STATEMENT_PDF_MAX_PAGES=100
+BANK_STATEMENT_PUBLIC_BASE_URL=https://your-public-finance-host.example.com
 ```
+
+Qwen 需要通过该公网基址读取短期签名 PDF。该值只填写站点 origin，
+不要追加 `/api/v1`。PM2 配置允许使用同名环境变量覆盖部署默认值；修改后需使用
+`pm2 restart ecosystem.config.cjs --update-env` 让运行进程加载新环境。
 
 ## 后续阶段
 
