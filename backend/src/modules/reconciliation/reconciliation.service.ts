@@ -226,7 +226,7 @@ export class ReconciliationService implements OnModuleInit {
 
   async startBankStatementScan(id: string, actorUserId?: string) {
     const task = await this.ownedBankStatementScan(id, actorUserId);
-    if (task.status !== 'READY') throw new BadRequestException('只有已完成 PDF 校验的任务可以开始 AI 扫描');
+    if (!['READY', 'FAILED'].includes(task.status)) throw new BadRequestException('只有待扫描或扫描失败的任务可以开始 AI 扫描');
     const provider = await this.bankStatementAiProviderStore.findFirst({
       where: { enabled: true, supportsPdfInput: true, supportsJapanese: true },
       orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
@@ -238,6 +238,9 @@ export class ReconciliationService implements OnModuleInit {
         status: 'QUEUED',
         progress: 15,
         currentStage: 'QUEUED',
+        errorCode: null,
+        errorMessage: null,
+        completedAt: null,
         startedAt: new Date(),
         providerProfileId: provider.id,
         providerType: provider.providerType,
@@ -373,10 +376,14 @@ export class ReconciliationService implements OnModuleInit {
       try {
         outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
       } catch (error) {
-        if (!this.isProviderDataInspectionFailure(error)) throw error;
-        const fallbackProvider = await this.findBankStatementFallbackProvider(provider.id);
+        const dataInspectionFailure = this.isProviderDataInspectionFailure(error);
+        if (!dataInspectionFailure && !this.isProviderNetworkFailure(error)) throw error;
+        const fallbackProvider = await this.findBankStatementFallbackProvider(provider.id, dataInspectionFailure && provider.providerType === 'QWEN');
         if (!fallbackProvider) {
-          throw new Error('Qwen 内容安全检查拒绝了该 PDF。请确认文件内容合规；如属误判，请在阿里云提交工单，或配置一个支持 PDF 的非 Qwen 模型作为回退后重新扫描');
+          if (dataInspectionFailure) {
+            throw new Error('Qwen 内容安全检查拒绝了该 PDF。请确认文件内容合规；如属误判，请在阿里云提交工单，或配置一个支持 PDF 的非 Qwen 模型作为回退后重新扫描');
+          }
+          throw error;
         }
         provider = fallbackProvider;
         signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
@@ -505,7 +512,7 @@ export class ReconciliationService implements OnModuleInit {
         if (!text) throw new Error('AI Provider 返回了空结果');
         return text;
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error('AI Provider 请求失败');
+        lastError = this.describeProviderRequestError(error, provider, endpoint);
         if (this.isProviderDataInspectionFailure(lastError)) break;
         if (attempt < provider.maxRetries) await new Promise((resolveDelay) => setTimeout(resolveDelay, 500 * (2 ** attempt)));
       }
@@ -518,7 +525,26 @@ export class ReconciliationService implements OnModuleInit {
     return /DataInspectionFailed|data_inspection_failed|inappropriate content/i.test(message);
   }
 
-  private async findBankStatementFallbackProvider(excludedProviderId: string) {
+  private isProviderNetworkFailure(error: unknown) {
+    const candidate = error as any;
+    const message = [candidate?.message, candidate?.cause?.code, candidate?.cause?.message].filter(Boolean).join(' ');
+    return /fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|连接失败/i.test(message);
+  }
+
+  private describeProviderRequestError(error: unknown, provider: any, endpoint: string) {
+    const original = error instanceof Error ? error : new Error('AI Provider 请求失败');
+    if (!this.isProviderNetworkFailure(error)) return original;
+    const candidate = error as any;
+    const causeDetail = [candidate?.cause?.code, candidate?.cause?.message]
+      .map((value) => this.sanitizeText(value))
+      .filter(Boolean)
+      .join(': ');
+    let host = provider.baseUrl;
+    try { host = new URL(endpoint).host; } catch { /* keep the configured URL */ }
+    return new Error(`AI Provider ${provider.displayName} (${host}) 连接失败${causeDetail ? `：${causeDetail}` : '，请检查服务器外网、DNS、防火墙及 Base URL 配置'}`);
+  }
+
+  private async findBankStatementFallbackProvider(excludedProviderId: string, excludeQwen = false) {
     const candidates = await this.bankStatementAiProviderStore.findMany({
       where: {
         id: { not: excludedProviderId },
@@ -526,7 +552,7 @@ export class ReconciliationService implements OnModuleInit {
         supportsPdfInput: true,
         supportsStructuredJson: true,
         supportsJapanese: true,
-        providerType: { not: 'QWEN' },
+        ...(excludeQwen ? { providerType: { not: 'QWEN' } } : {}),
       },
       orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
       take: 1,

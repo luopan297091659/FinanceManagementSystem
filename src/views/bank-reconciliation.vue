@@ -34,8 +34,8 @@
             <button class="secondary-button" type="button" :disabled="!selectedPdf || pdfLoading" @click="uploadPdf">
               {{ pdfLoading ? scanUi.uploading : scanUi.uploadPdf }}
             </button>
-            <button class="primary-button" type="button" :disabled="activeScanTask?.status !== 'READY' || pdfLoading" @click="startPdfScan">
-              {{ scanUi.aiScan }}
+            <button class="primary-button" type="button" :disabled="!['READY', 'FAILED'].includes(activeScanTask?.status) || pdfLoading" @click="startPdfScan">
+              {{ activeScanTask?.status === 'FAILED' ? scanUi.retryScan : scanUi.aiScan }}
             </button>
           </div>
         </div>
@@ -437,7 +437,7 @@ const scanUi = computed(() => locale.value === "zh" ? {
   pdfOption: "上传银行账单 PDF",
   uploadPdf: "校验并上传 PDF",
   uploading: "上传中…",
-  aiScan: "开始 AI 扫描",
+  aiScan: "开始 AI 扫描", retryScan: "重新扫描",
   ready: "PDF 校验完成，可以开始 AI 扫描。",
   queued: "任务已进入后台队列，可离开当前页面后再返回查看进度。",
   pendingWorker: "扫描任务基础流程已建立，正在等待银行账单 AI Provider 处理器。",
@@ -450,7 +450,7 @@ const scanUi = computed(() => locale.value === "zh" ? {
   pdfOption: "銀行明細 PDF をアップロード",
   uploadPdf: "PDF を検証してアップロード",
   uploading: "アップロード中…",
-  aiScan: "AI スキャンを開始",
+  aiScan: "AI スキャンを開始", retryScan: "再スキャン",
   ready: "PDF の検証が完了しました。AI スキャンを開始できます。",
   queued: "バックグラウンドキューに登録しました。後から進捗を確認できます。",
   pendingWorker: "銀行明細 AI Provider の処理待ちです。",
@@ -646,7 +646,6 @@ const pollScanTask = async (scanId) => {
       return;
     }
     if (["FAILED", "CANCELLED"].includes(task.status)) {
-      if (task.errorMessage) errorMessage.value = task.errorMessage;
       return;
     }
   }
