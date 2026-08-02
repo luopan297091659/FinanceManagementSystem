@@ -5,8 +5,10 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { join, relative, resolve } from 'path';
 import * as JSON5 from 'json5';
+import { PDFParse } from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../database/prisma.service';
+import { QWEN3_VL_MIZUHO_BANK_STATEMENT_PROMPT } from './qwen3-vl-mizuho.prompt';
 
 type BankUploadRow = Record<string, unknown>;
 
@@ -264,20 +266,18 @@ export class ReconciliationService implements OnModuleInit {
   async saveBankStatementAiProvider(dto: any, actorUserId?: string, providerId?: string) {
     const displayName = this.sanitizeText(dto?.displayName);
     const providerType = this.sanitizeText(dto?.providerType);
-    const transport = providerType === 'DEEPSEEK'
+    const transport = ['DEEPSEEK', 'QWEN'].includes(providerType)
       ? 'OPENAI_CHAT_COMPLETIONS'
       : (this.sanitizeText(dto?.transport) || 'OPENAI_RESPONSES');
     const baseUrl = this.validateProviderUrl(dto?.baseUrl);
     let apiPath = this.sanitizeText(dto?.apiPath) || '/v1/responses';
-    if (providerType === 'QWEN' && /^\/compatible-mode\/v1\/?$/i.test(apiPath)) {
-      apiPath = '/compatible-mode/v1/responses';
-    }
+    if (providerType === 'QWEN') apiPath = '/compatible-mode/v1/chat/completions';
     if (providerType === 'DEEPSEEK') apiPath = '/chat/completions';
     const modelName = this.sanitizeText(dto?.modelName);
-    const structuringModelName = this.sanitizeText(dto?.structuringModelName) || (providerType === 'QWEN' ? 'qwen3.7-plus' : '');
-    const structuringApiPath = this.sanitizeText(dto?.structuringApiPath) || (providerType === 'QWEN' ? '/compatible-mode/v1/chat/completions' : '');
+    const structuringModelName = '';
+    const structuringApiPath = '';
     if (!displayName || !providerType || !modelName) throw new BadRequestException('模型名称、Provider 类型和模型 ID 为必填项');
-    if (providerType === 'QWEN' && (!structuringModelName || !structuringApiPath)) throw new BadRequestException('千问流水线必须配置 OCR 模型和 JSON 整理模型');
+    if (providerType === 'QWEN' && !/^qwen3-vl-/i.test(modelName)) throw new BadRequestException('千问银行账单模型必须使用 qwen3-vl 系列，例如 qwen3-vl-plus');
     if (!['OPENAI_RESPONSES', 'OPENAI_CHAT_COMPLETIONS'].includes(transport)) {
       throw new BadRequestException('当前仅支持 Responses 或 Chat Completions 传输协议');
     }
@@ -332,7 +332,7 @@ export class ReconciliationService implements OnModuleInit {
     if (!provider) throw new NotFoundException('AI 模型配置不存在');
     const startedAt = Date.now();
     try {
-      const testProvider = provider.providerType === 'QWEN' ? this.qwenStructuringProvider(provider) : provider;
+      const testProvider = provider;
       const response = await this.callResponsesProvider(testProvider, null, 'Return one valid JSON object exactly: {"ok":true}', provider.providerType === 'QWEN');
       if (provider.providerType === 'QWEN') this.parseProviderJson(response);
       return { ok: true, latencyMs: Date.now() - startedAt, model: testProvider.modelName, response: response.slice(0, 80) };
@@ -361,13 +361,14 @@ export class ReconciliationService implements OnModuleInit {
       if (!task || task.status === 'CANCELLED') return;
       let provider = await this.bankStatementAiProviderStore.findUnique({ where: { id: task.providerProfileId } });
       if (!provider?.enabled) throw new Error('配置的 AI Provider 不可用');
-      if (provider.providerType === 'QWEN' && task.pageCount && task.pageCount > 50) {
-        throw new Error('Qwen3.5-OCR 单个 PDF 最多支持 50 页，请拆分后重新上传');
-      }
-
       await this.bankStatementScanTaskStore.update({
         where: { id: scanId },
-        data: { status: 'OCR_RUNNING', progress: 30, currentStage: 'AI_PDF_EXTRACTION' },
+        data: {
+          status: 'OCR_RUNNING',
+          progress: 30,
+          currentStage: provider.providerType === 'QWEN' ? 'AI_VISUAL_EXTRACTION' : 'AI_PDF_EXTRACTION',
+          providerModel: provider.modelName,
+        },
       });
       const sourcePath = this.resolvePrivateStoragePath(task.storageKey);
       const pdf = await readFile(sourcePath);
@@ -379,10 +380,9 @@ export class ReconciliationService implements OnModuleInit {
         'Dates must be YYYY-MM-DD when confidently known, otherwise null.',
         'Return only one valid JSON object with a rows array. Each row must contain sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, and confidence.',
       ].join(' ');
-      let signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
       let outputText: string;
       try {
-        outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
+        outputText = await this.extractBankStatementWithProvider(provider, pdf, prompt, task.originalFilename);
       } catch (error) {
         const dataInspectionFailure = this.isProviderDataInspectionFailure(error);
         if (!dataInspectionFailure && !this.isProviderNetworkFailure(error)) throw error;
@@ -394,7 +394,6 @@ export class ReconciliationService implements OnModuleInit {
           throw error;
         }
         provider = fallbackProvider;
-        signedFileUrl = provider.providerType === 'QWEN' ? this.createSignedScanSourceUrl(task.id) : undefined;
         await this.bankStatementScanTaskStore.update({
           where: { id: scanId },
           data: {
@@ -405,7 +404,7 @@ export class ReconciliationService implements OnModuleInit {
             providerSnapshot: this.providerSnapshot(provider),
           },
         });
-        outputText = await this.callResponsesProvider(provider, pdf, prompt, true, task.originalFilename, signedFileUrl);
+        outputText = await this.extractBankStatementWithProvider(provider, pdf, prompt, task.originalFilename);
       }
       const rows = await this.parseAndValidateProviderRows(outputText, provider, scanId);
       if (!rows.length) throw new Error('AI Provider 未返回任何银行交易记录');
@@ -474,7 +473,42 @@ export class ReconciliationService implements OnModuleInit {
     }
   }
 
-  private async callResponsesProvider(provider: any, pdf: Buffer | null, prompt: string, structured: boolean, filename = 'bank-statement.pdf', fileUrl?: string) {
+  private async extractBankStatementWithProvider(provider: any, pdf: Buffer, prompt: string, filename: string) {
+    if (provider.providerType !== 'QWEN') {
+      return this.callResponsesProvider(provider, pdf, prompt, true, filename);
+    }
+    const pageImages = await this.renderPdfPagesForVision(pdf);
+    return this.callResponsesProvider(
+      provider,
+      null,
+      QWEN3_VL_MIZUHO_BANK_STATEMENT_PROMPT,
+      true,
+      filename,
+      undefined,
+      pageImages,
+    );
+  }
+
+  private async renderPdfPagesForVision(pdf: Buffer) {
+    const parser = new PDFParse({ data: new Uint8Array(pdf) });
+    try {
+      const screenshots = await parser.getScreenshot({
+        desiredWidth: 1800,
+        imageDataUrl: true,
+        imageBuffer: false,
+      });
+      const images = screenshots.pages
+        .sort((left, right) => left.pageNumber - right.pageNumber)
+        .map((page) => page.dataUrl)
+        .filter(Boolean);
+      if (!images.length) throw new Error('PDF 页面无法渲染为视觉模型输入');
+      return images;
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  private async callResponsesProvider(provider: any, pdf: Buffer | null, prompt: string, structured: boolean, filename = 'bank-statement.pdf', fileUrl?: string, imageDataUrls: string[] = []) {
     if (pdf && !provider.supportsPdfInput) throw new Error('所选 AI Provider 不支持 PDF 输入');
     if (provider.transport === 'OPENAI_CHAT_COMPLETIONS' && pdf) {
       throw new Error('DeepSeek Chat API 不支持 PDF 输入，不能直接用于银行账单 OCR');
@@ -487,11 +521,22 @@ export class ReconciliationService implements OnModuleInit {
     }
     content.push({ type: 'input_text', text: prompt });
     const isChatCompletions = provider.transport === 'OPENAI_CHAT_COMPLETIONS';
+    const chatContent = imageDataUrls.length
+      ? [
+          ...imageDataUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
+          { type: 'text', text: prompt },
+        ]
+      : prompt;
     const body: any = isChatCompletions
-      ? { model: provider.modelName, messages: [{ role: 'user', content: prompt }], stream: false }
+      ? { model: provider.modelName, messages: [{ role: 'user', content: chatContent }], stream: false }
       : { model: provider.modelName, input: [{ role: 'user', content }] };
     if (pdf && provider.providerType === 'QWEN') body.ocr_options = { task: 'document_parsing' };
-    if (provider.providerType === 'QWEN_STRUCTURER') body.enable_thinking = false;
+    if (provider.providerType === 'QWEN') {
+      body.enable_thinking = false;
+      body.presence_penalty = 1.5;
+      body.max_completion_tokens = 16384;
+      body.vl_high_resolution_images = true;
+    }
     if (structured && provider.supportsStructuredJson && !(pdf && provider.providerType === 'QWEN')) {
       if (isChatCompletions) body.response_format = { type: 'json_object' };
       else body.text = { format: { type: 'json_schema', name: 'bank_statement_transactions', strict: true, schema: this.bankStatementExtractionSchema() } };
@@ -589,19 +634,6 @@ export class ReconciliationService implements OnModuleInit {
     return texts.join('');
   }
 
-  private qwenStructuringProvider(provider: any) {
-    return {
-      ...provider,
-      providerType: 'QWEN_STRUCTURER',
-      transport: 'OPENAI_CHAT_COMPLETIONS',
-      apiPath: provider.structuringApiPath || '/compatible-mode/v1/chat/completions',
-      modelName: provider.structuringModelName || 'qwen3.7-plus',
-      supportsPdfInput: false,
-      supportsStructuredJson: true,
-      supportsJapanese: true,
-    };
-  }
-
   private createSignedScanSourceUrl(scanId: string) {
     const configuredBaseUrl = this.config.get<string>('BANK_STATEMENT_PUBLIC_BASE_URL');
     if (!configuredBaseUrl) throw new Error('服务器未配置 BANK_STATEMENT_PUBLIC_BASE_URL，Qwen 无法读取银行账单 PDF');
@@ -670,80 +702,12 @@ export class ReconciliationService implements OnModuleInit {
     };
   }
 
-  private async parseAndValidateProviderRows(text: string, sourceProvider: any, scanId: string) {
+  private async parseAndValidateProviderRows(text: string, sourceProvider: any, _scanId: string) {
     try {
       return this.parseAndNormalizeProviderRows(text);
-    } catch {
-      if (sourceProvider.providerType !== 'QWEN') {
-        throw new Error(`AI Provider ${sourceProvider.displayName} 返回的 JSON 无法解析或结构不完整`);
-      }
-      if (text.length > 800000) throw new Error('OCR 文本过长，无法在单次请求中转换为交易 JSON，请拆分 PDF 后重新扫描');
-      const structuringProvider = this.qwenStructuringProvider(sourceProvider);
-      await this.bankStatementScanTaskStore.update({
-        where: { id: scanId },
-        data: {
-          currentStage: 'AI_STRUCTURING',
-          progress: 55,
-          providerModel: structuringProvider.modelName,
-          providerSnapshot: {
-            ...this.providerSnapshot(sourceProvider),
-            activeStage: 'JSON_STRUCTURING',
-            activeModelName: structuringProvider.modelName,
-            activeTransport: structuringProvider.transport,
-            activeApiPath: structuringProvider.apiPath,
-          },
-        },
-      });
-      await this.prisma.auditLog.create({
-        data: {
-          actorUserId: null,
-          action: 'reconciliation.bank.scan.structuring.started',
-          entityType: 'BankStatementScanTask',
-          entityId: scanId,
-          after: {
-            providerType: sourceProvider.providerType,
-            modelName: structuringProvider.modelName,
-            transport: structuringProvider.transport,
-            apiPath: structuringProvider.apiPath,
-          },
-        },
-      });
-      const structuringPrompt = [
-        'Convert the following Japanese bank statement OCR text into one valid JSON object.',
-        'Output JSON only, with exactly one top-level key named rows.',
-        'Each rows item must contain: sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, confidence.',
-        'Use null for missing values. Amounts must be numbers without commas or currency symbols. Dates must be YYYY-MM-DD when confidently known.',
-        'Ignore titles, balances, repeated headers, footers, account metadata, page numbers, and explanatory text.',
-        'Required JSON example: {"rows":[{"sourcePageNumber":1,"sourceRowNumber":1,"transactionDate":"2026-04-01","withdrawalAmount":null,"depositAmount":1000,"transactionType":null,"bankDescription":"example","remarks":null,"confidence":0.9}]}',
-        'OCR TEXT START',
-        text,
-        'OCR TEXT END',
-      ].join('\n');
-      const structuredText = await this.callResponsesProvider(structuringProvider, null, structuringPrompt, true);
-      try {
-        return this.parseAndNormalizeProviderRows(structuredText);
-      } catch (firstError) {
-        if (structuredText.length > 300000) {
-          throw new Error(`千问 JSON 模型 ${structuringProvider.modelName} 返回内容过长且结构不完整，请拆分 PDF 后重新扫描`);
-        }
-        const repairPrompt = [
-          'Repair the following bank transaction output into one valid JSON object.',
-          'Return JSON only. The top-level object must contain exactly one rows array.',
-          'Preserve every transaction and map all existing values into these exact fields:',
-          'sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, confidence.',
-          'Use null for missing values. Do not add explanations or Markdown fences.',
-          'INVALID OUTPUT START',
-          structuredText,
-          'INVALID OUTPUT END',
-        ].join('\n');
-        const repairedText = await this.callResponsesProvider(structuringProvider, null, repairPrompt, true);
-        try {
-          return this.parseAndNormalizeProviderRows(repairedText);
-        } catch {
-          const reason = firstError instanceof Error ? firstError.message : 'JSON 结构无效';
-          throw new Error(`千问 JSON 模型 ${structuringProvider.modelName} 两次返回均未通过交易结构校验：${reason}`);
-        }
-      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '交易 JSON 结构无效';
+      throw new Error(`视觉模型 ${sourceProvider.modelName} 返回的银行交易 JSON 无法使用：${reason}`);
     }
   }
 
@@ -898,8 +862,8 @@ export class ReconciliationService implements OnModuleInit {
         return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
       };
       const transactionDate = normalizeDate(pick('transactionDate', 'transaction_date', 'date', '取引日', '入出金日', '日付'));
-      const sourcePageNumber = numberOrNull(pick('sourcePageNumber', 'source_page_number', 'pageNumber', 'page', 'ページ'));
-      const sourceRowNumber = numberOrNull(pick('sourceRowNumber', 'source_row_number', 'rowNumber', 'row', '行番号'));
+      const sourcePageNumber = numberOrNull(pick('sourcePageNumber', 'source_page_number', 'sourcePage', 'pageNumber', 'page', 'ページ'));
+      const sourceRowNumber = numberOrNull(pick('sourceRowNumber', 'source_row_number', 'sequenceNumber', 'rowNumber', 'row', '行番号'));
       return {
         sourcePageNumber: typeof sourcePageNumber === 'number' && Number.isInteger(sourcePageNumber) && sourcePageNumber > 0 ? sourcePageNumber : null,
         sourceRowNumber: typeof sourceRowNumber === 'number' && Number.isInteger(sourceRowNumber) && sourceRowNumber > 0 ? sourceRowNumber : index + 1,
@@ -908,7 +872,7 @@ export class ReconciliationService implements OnModuleInit {
         depositAmount: numberOrNull(pick('depositAmount', 'deposit_amount', 'deposit', '入金額', '預り金額', 'お預り金額')),
         transactionType: this.sanitizeOptionalText(pick('transactionType', 'transaction_type', 'type', '取引種別', '区分')),
         bankDescription: this.sanitizeOptionalText(pick('bankDescription', 'bank_description', 'description', 'summary', '摘要', '摘要名', 'お取引内容')),
-        remarks: this.sanitizeOptionalText(pick('remarks', 'remark', 'notes', 'note', '備考')),
+        remarks: this.sanitizeOptionalText(pick('remarks', 'remark', 'notes', 'note', 'rawText', '備考')),
         confidence: Math.min(1, Math.max(0, numberOrNull(pick('confidence', 'score', '信頼度')) ?? 0)),
       };
     });
