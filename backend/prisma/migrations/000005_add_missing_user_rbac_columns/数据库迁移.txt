@@ -1,0 +1,325 @@
+下面是重新整理后的完整迁移流程，适用于：
+旧服务器：PostgreSQL 16 或其他旧版本
+新服务器：Rocky Linux 8.10 + PostgreSQL 17.10
+非 Docker 部署
+项目数据库：finance_management
+数据库用户：finance
+项目使用 PostGIS
+应用由 PM2 管理
+这次在源库导出时直接排除 spatial_ref_sys 数据，避免恢复阶段再次遇到权限错误。
+一、旧服务器：停止应用
+进入旧服务器项目目录：
+cd /旧服务器项目路径/FinanceManagementSystem
+pm2 stop finance-management
+pm2 status
+停止应用是为了确保数据库和 backend/uploads 处于同一个时间点。
+二、旧服务器：检查数据库
+检查 PostgreSQL 和 PostGIS：
+sudo -u postgres psql \
+  --dbname=finance_management \
+  --command='SELECT version(), PostGIS_Version();'
+检查 schema：
+sudo -u postgres psql \
+  --dbname=finance_management \
+  --command='\dn'
+检查主要业务表是否位于 public：
+sudo -u postgres psql \
+  --dbname=finance_management \
+  --command='\dt public.*'
+如果还存在 publi：
+sudo -u postgres psql \
+  --dbname=finance_management \
+  --command='\dt publi.*'
+当前项目应继续使用 public。publi 可以一起备份，迁移成功前不要删除。
+三、旧服务器：记录数据数量
+sudo -u postgres psql \
+  --dbname=finance_management \
+  --command='
+SELECT ''User'' AS table_name, count(*) FROM public."User"
+UNION ALL SELECT ''Property'', count(*) FROM public."Property"
+UNION ALL SELECT ''Room'', count(*) FROM public."Room"
+UNION ALL SELECT ''Tenant'', count(*) FROM public."Tenant"
+UNION ALL SELECT ''Contract'', count(*) FROM public."Contract"
+UNION ALL SELECT ''Transaction'', count(*) FROM public."Transaction"
+UNION ALL SELECT ''BankTransaction'', count(*) FROM public."BankTransaction"
+UNION ALL SELECT ''SystemSetting'', count(*) FROM public."SystemSetting"
+UNION ALL SELECT ''OcrTask'', count(*) FROM public."OcrTask"
+UNION ALL SELECT ''BankStatementScanTask'', count(*) FROM public."BankStatementScanTask";
+' | sudo tee /var/tmp/finance-old-counts.txt
+四、旧服务器：重新导出数据库
+创建备份目录：
+sudo install -d \
+  -o postgres \
+  -g postgres \
+  -m 700 \
+  /var/lib/pgsql/backups
+如果旧服务器为 PostgreSQL 16：
+sudo -u postgres /usr/pgsql-16/bin/pg_dump \
+  --dbname=finance_management \
+  --format=custom \
+  --compress=9 \
+  --no-owner \
+  --no-acl \
+  --exclude-table-data='public.spatial_ref_sys' \
+  --verbose \
+  --file=/var/lib/pgsql/backups/finance_management.dump
+如果 pg_dump 不在 /usr/pgsql-16/bin：
+command -v pg_dump
+pg_dump --version
+然后使用实际路径：
+sudo -u postgres pg_dump \
+  --dbname=finance_management \
+  --format=custom \
+  --compress=9 \
+  --no-owner \
+  --no-acl \
+  --exclude-table-data='public.spatial_ref_sys' \
+  --verbose \
+  --file=/var/lib/pgsql/backups/finance_management.dump
+注意：--exclude-table-data 是 pg_dump 的参数，不是 PostgreSQL 17 pg_restore 的参数。
+五、旧服务器：验证备份
+确认文件存在：
+sudo ls -lh \
+  /var/lib/pgsql/backups/finance_management.dump
+检查备份格式：
+file /var/lib/pgsql/backups/finance_management.dump
+应显示类似：
+PostgreSQL custom database dump
+检查目录清单：
+sudo -u postgres pg_restore \
+  --list \
+  /var/lib/pgsql/backups/finance_management.dump \
+  > /var/tmp/finance-dump-list.txt
+确保备份中没有 spatial_ref_sys 的数据项：
+grep 'TABLE DATA.*spatial_ref_sys' \
+  /var/tmp/finance-dump-list.txt
+正确结果是没有任何输出。
+备份文件校验值：
+sudo sha256sum \
+  /var/lib/pgsql/backups/finance_management.dump \
+  | sudo tee /var/lib/pgsql/backups/SHA256SUMS
+六、旧服务器：备份上传文件和环境变量
+进入项目目录：
+cd /旧服务器项目路径/FinanceManagementSystem
+备份上传文件：
+sudo tar -czpf \
+  /var/lib/pgsql/backups/finance-uploads.tar.gz \
+  -C backend uploads
+备份环境配置：
+sudo install \
+  -o postgres \
+  -g postgres \
+  -m 600 \
+  backend/.env \
+  /var/lib/pgsql/backups/backend.env
+重新生成完整校验文件：
+cd /var/lib/pgsql/backups
+
+sudo sha256sum \
+  finance_management.dump \
+  finance-uploads.tar.gz \
+  backend.env \
+  | sudo tee SHA256SUMS
+七、传输到新服务器
+在旧服务器执行：
+sudo scp \
+  /var/lib/pgsql/backups/finance_management.dump \
+  /var/lib/pgsql/backups/finance-uploads.tar.gz \
+  /var/lib/pgsql/backups/backend.env \
+  /var/lib/pgsql/backups/SHA256SUMS \
+  root@新服务器IP:/root/
+八、新服务器：移动备份文件
+不要直接让 postgres 读取 /root，因为它没有权限进入该目录。
+sudo install -d \
+  -o postgres \
+  -g postgres \
+  -m 700 \
+  /var/lib/pgsql/backups
+
+sudo install \
+  -o postgres \
+  -g postgres \
+  -m 600 \
+  /root/finance_management.dump \
+  /var/lib/pgsql/backups/finance_management.dump
+
+sudo install \
+  -o postgres \
+  -g postgres \
+  -m 600 \
+  /root/finance-uploads.tar.gz \
+  /var/lib/pgsql/backups/finance-uploads.tar.gz
+
+sudo install \
+  -o postgres \
+  -g postgres \
+  -m 600 \
+  /root/backend.env \
+  /var/lib/pgsql/backups/backend.env
+
+sudo install \
+  -o postgres \
+  -g postgres \
+  -m 600 \
+  /root/SHA256SUMS \
+  /var/lib/pgsql/backups/SHA256SUMS
+校验文件：
+cd /var/lib/pgsql/backups
+sudo -u postgres sha256sum --check SHA256SUMS
+必须全部显示：
+OK
+九、新服务器：检查 PostgreSQL 17
+/usr/pgsql-17/bin/psql --version
+sudo systemctl status postgresql-17
+rpm -q postgis35_17
+预期 PostgreSQL：
+psql (PostgreSQL) 17.10
+十、新服务器：创建数据库用户
+检查 finance 用户：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --command='\du finance'
+如果不存在：
+sudo -u postgres /usr/pgsql-17/bin/createuser \
+  --pwprompt \
+  finance
+如果已经存在，需要修改密码：
+sudo -u postgres /usr/pgsql-17/bin/psql
+进入后执行：
+\password finance
+\q
+十一、新服务器：重建空数据库
+以下操作会删除新服务器现有的测试数据库：
+sudo -u postgres /usr/pgsql-17/bin/dropdb \
+  --if-exists \
+  --force \
+  finance_management
+重新创建：
+sudo -u postgres /usr/pgsql-17/bin/createdb \
+  --owner=finance \
+  finance_management
+由 postgres 创建扩展：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='CREATE EXTENSION IF NOT EXISTS pg_trgm;'
+
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='CREATE EXTENSION IF NOT EXISTS postgis;'
+确认：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='\dx'
+十二、新服务器：恢复数据库
+停止新环境应用：
+sudo -iu financeapp pm2 stop finance-management
+恢复：
+sudo -u postgres /usr/pgsql-17/bin/pg_restore \
+  --dbname=finance_management \
+  --no-owner \
+  --no-acl \
+  --no-comments \
+  --role=finance \
+  --single-transaction \
+  --exit-on-error \
+  --verbose \
+  /var/lib/pgsql/backups/finance_management.dump
+这次不需要：
+--exclude-table-data
+--use-list
+restore.list
+因为已经在源库执行 pg_dump 时排除了 spatial_ref_sys 数据。
+如果恢复命令最终没有出现 error，表示恢复完成。
+十三、新服务器：更新统计信息
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='ANALYZE;'
+更新 PostGIS：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='ALTER EXTENSION postgis UPDATE;'
+十四、新服务器：验证数据
+检查数据库版本：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='SELECT version(), PostGIS_Full_Version();'
+检查表：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='\dt public.*'
+检查数据数量：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='
+SELECT ''User'' AS table_name, count(*) FROM public."User"
+UNION ALL SELECT ''Property'', count(*) FROM public."Property"
+UNION ALL SELECT ''Room'', count(*) FROM public."Room"
+UNION ALL SELECT ''Tenant'', count(*) FROM public."Tenant"
+UNION ALL SELECT ''Contract'', count(*) FROM public."Contract"
+UNION ALL SELECT ''Transaction'', count(*) FROM public."Transaction"
+UNION ALL SELECT ''BankTransaction'', count(*) FROM public."BankTransaction"
+UNION ALL SELECT ''SystemSetting'', count(*) FROM public."SystemSetting"
+UNION ALL SELECT ''OcrTask'', count(*) FROM public."OcrTask"
+UNION ALL SELECT ''BankStatementScanTask'', count(*) FROM public."BankStatementScanTask";
+'
+与旧服务器 /var/tmp/finance-old-counts.txt 对比。
+检查 spatial_ref_sys：
+sudo -u postgres /usr/pgsql-17/bin/psql \
+  --dbname=finance_management \
+  --command='SELECT count(*) FROM public.spatial_ref_sys;'
+应该有数千条由 PostGIS 生成的记录。
+十五、恢复上传文件
+cd /opt/FinanceManagementSystem
+
+sudo tar -xzpf \
+  /var/lib/pgsql/backups/finance-uploads.tar.gz \
+  -C backend
+设置权限：
+sudo chown -R financeapp:financeapp \
+  backend/uploads
+
+sudo chmod -R u+rwX \
+  backend/uploads
+十六、恢复环境变量
+sudo install \
+  -o financeapp \
+  -g financeapp \
+  -m 600 \
+  /var/lib/pgsql/backups/backend.env \
+  /opt/FinanceManagementSystem/backend/.env
+修改：
+sudo -u financeapp vi \
+  /opt/FinanceManagementSystem/backend/.env
+数据库连接应使用 public：
+DATABASE_URL=postgresql://finance:新数据库密码@127.0.0.1:5432/finance_management?schema=public
+PORT=8006
+CORS_ORIGIN=https://kotabi.top
+BANK_STATEMENT_PUBLIC_BASE_URL=https://kotabi.top
+以下配置保留旧环境原值：
+AI_PROVIDER_MASTER_KEY=旧环境原值
+AUTH_TOKEN_SECRET=旧环境原值
+十七、执行 Prisma 校验
+sudo -iu financeapp bash -lc '
+cd /opt/FinanceManagementSystem &&
+npm run backend:prisma:generate &&
+npm run backend:prisma:deploy &&
+npm run backend:db:check &&
+npm run backend:build
+'
+十八、启动应用
+sudo -iu financeapp bash -lc '
+cd /opt/FinanceManagementSystem &&
+export BANK_STATEMENT_PUBLIC_BASE_URL=https://kotabi.top &&
+pm2 start ecosystem.config.cjs --update-env &&
+pm2 save
+'
+检查：
+curl --fail \
+  http://127.0.0.1:8006/api/v1/health
+检查 Nginx：
+curl --fail \
+  https://kotabi.top/finance/api/v1/health
+检查日志：
+sudo -iu financeapp pm2 logs \
+  finance-management \
+  --lines 100
+确认登录、权限、财务流水、银行账单、OCR 和附件全部正常后，再停止或下线旧服务器。
