@@ -4,6 +4,7 @@ import { Prisma, ReconciliationRecordMatchStatus } from '@prisma/client';
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { join, relative, resolve } from 'path';
+import * as JSON5 from 'json5';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../database/prisma.service';
 
@@ -722,7 +723,15 @@ export class ReconciliationService implements OnModuleInit {
   }
 
   private parseAndNormalizeProviderRows(text: string) {
-    return this.validateExtractedRows(this.normalizeTransactionPayload(this.parseProviderJson(text)));
+    let lastError: Error = new Error('AI Provider 返回的 JSON 无法解析');
+    for (const payload of this.parseProviderJsonCandidates(text)) {
+      try {
+        return this.validateExtractedRows(this.normalizeTransactionPayload(payload));
+      } catch (error) {
+        lastError = error instanceof Error ? error : lastError;
+      }
+    }
+    throw lastError;
   }
 
   private normalizeTransactionPayload(payload: any): any {
@@ -743,33 +752,56 @@ export class ReconciliationService implements OnModuleInit {
   }
 
   private parseProviderJson(text: string) {
-    const normalized = text.replace(/^\uFEFF/, '').trim();
-    const candidates = [
+    const [parsed] = this.parseProviderJsonCandidates(text);
+    if (parsed !== undefined) return parsed;
+    throw new Error('AI Provider 返回的 JSON 无法解析');
+  }
+
+  private parseProviderJsonCandidates(text: string) {
+    const normalized = text
+      .replace(/^\uFEFF/, '')
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .trim();
+    const rawCandidates = [
       normalized,
-      ...Array.from(normalized.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi), (match) => match[1].trim()),
-    ];
-    const balancedObject = this.extractFirstJsonObject(normalized);
-    if (balancedObject) candidates.push(balancedObject);
+      ...Array.from(normalized.matchAll(/```(?:json|json5)?\s*([\s\S]*?)```/gi), (match) => match[1].trim()),
+      ...this.extractBalancedJsonValues(normalized),
+    ].filter(Boolean);
+    const candidates = Array.from(new Set(rawCandidates.flatMap((candidate) => [
+      candidate,
+      this.escapeJsonStringControlCharacters(candidate),
+      candidate.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/\bNone\b/g, 'null').replace(/\bTrue\b/g, 'true').replace(/\bFalse\b/g, 'false'),
+    ])));
+    const parsedValues: any[] = [];
     for (const candidate of candidates) {
       try {
         let parsed: any = JSON.parse(candidate);
         if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        if (parsed && typeof parsed === 'object') return parsed;
+        if (parsed && typeof parsed === 'object') parsedValues.push(parsed);
+        continue;
+      } catch { /* try JSON5 next */ }
+      try {
+        let parsed: any = JSON5.parse(candidate);
+        if (typeof parsed === 'string') parsed = JSON5.parse(parsed);
+        if (parsed && typeof parsed === 'object') parsedValues.push(parsed);
       } catch { /* try the next safe candidate */ }
     }
-    throw new Error('AI Provider 返回的 JSON 无法解析');
+    return parsedValues;
   }
 
-  private extractFirstJsonObject(text: string) {
+  private extractBalancedJsonValues(text: string) {
+    const values: string[] = [];
     let start = -1;
     let depth = 0;
+    let opening = '';
     let inString = false;
     let escaped = false;
     for (let index = 0; index < text.length; index += 1) {
       const character = text[index];
       if (start < 0) {
-        if (character !== '{') continue;
+        if (character !== '{' && character !== '[') continue;
         start = index;
+        opening = character;
         depth = 1;
         continue;
       }
@@ -780,13 +812,33 @@ export class ReconciliationService implements OnModuleInit {
         continue;
       }
       if (character === '"') inString = true;
-      else if (character === '{') depth += 1;
-      else if (character === '}') {
+      else if (character === opening) depth += 1;
+      else if (character === (opening === '{' ? '}' : ']')) {
         depth -= 1;
-        if (depth === 0) return text.slice(start, index + 1);
+        if (depth === 0) {
+          values.push(text.slice(start, index + 1));
+          start = -1;
+          opening = '';
+        }
       }
     }
-    return '';
+    return values;
+  }
+
+  private escapeJsonStringControlCharacters(text: string) {
+    let result = '';
+    let inString = false;
+    let escaped = false;
+    for (const character of text) {
+      if (inString && !escaped && character === '\n') { result += '\\n'; continue; }
+      if (inString && !escaped && character === '\r') { result += '\\r'; continue; }
+      if (inString && !escaped && character === '\t') { result += '\\t'; continue; }
+      result += character;
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = !inString;
+    }
+    return result;
   }
 
   private validateExtractedRows(payload: any): ExtractedBankStatementRow[] {
