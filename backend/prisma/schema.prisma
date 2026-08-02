@@ -938,6 +938,8 @@ model BankStatementAiProvider {
   baseUrl                String
   apiPath                String   @default("/v1/responses")
   modelName              String
+  structuringApiPath     String?
+  structuringModelName   String?
   encryptedApiKey        String?
   apiKeyLastFour         String?
   supportsPdfInput       Boolean  @default(true)

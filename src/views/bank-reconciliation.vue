@@ -228,16 +228,19 @@
             <label>{{ scanUi.providerType }}<select v-model="providerForm.providerType" @change="applyProviderTypeDefaults"><option value="OPENAI">OpenAI</option><option value="QWEN">Qwen / Alibaba</option><option value="DEEPSEEK">DeepSeek</option><option value="OPENAI_COMPATIBLE">OpenAI-compatible</option></select></label>
             <label>{{ scanUi.baseUrl }}<input v-model.trim="providerForm.baseUrl" required placeholder="https://api.openai.com" /></label>
             <label>{{ scanUi.apiPath }}<input v-model.trim="providerForm.apiPath" required :placeholder="providerForm.transport === 'OPENAI_CHAT_COMPLETIONS' ? '/chat/completions' : '/v1/responses'" /></label>
-            <label>{{ scanUi.modelName }}<input v-model.trim="providerForm.modelName" required :placeholder="providerForm.providerType === 'DEEPSEEK' ? 'deepseek-v4-flash' : 'gpt-5.6-terra'" /></label>
+            <label>{{ providerForm.providerType === 'QWEN' ? scanUi.ocrModelName : scanUi.modelName }}<input v-model.trim="providerForm.modelName" required :placeholder="providerForm.providerType === 'QWEN' ? 'qwen3.5-ocr' : (providerForm.providerType === 'DEEPSEEK' ? 'deepseek-v4-flash' : 'gpt-5.6-terra')" /></label>
+            <label v-if="providerForm.providerType === 'QWEN'">{{ scanUi.structuringModelName }}<input v-model.trim="providerForm.structuringModelName" required placeholder="qwen3.7-plus" /></label>
+            <label v-if="providerForm.providerType === 'QWEN'">{{ scanUi.structuringApiPath }}<input v-model.trim="providerForm.structuringApiPath" required placeholder="/compatible-mode/v1/chat/completions" /></label>
             <label>{{ scanUi.apiKey }}<input v-model="providerForm.apiKey" type="password" :required="!providerForm.id" :placeholder="providerForm.apiKeyMasked || 'sk-…'" autocomplete="new-password" /></label>
             <div class="provider-capabilities">
               <label><input v-model="providerForm.supportsPdfInput" type="checkbox" :disabled="providerForm.providerType === 'DEEPSEEK'" />{{ scanUi.pdfCapability }}</label>
-              <label><input v-model="providerForm.supportsStructuredJson" type="checkbox" />{{ scanUi.jsonCapability }}</label>
+              <label><input v-model="providerForm.supportsStructuredJson" type="checkbox" :disabled="providerForm.providerType === 'QWEN'" />{{ scanUi.jsonCapability }}</label>
               <label><input v-model="providerForm.supportsJapanese" type="checkbox" />{{ scanUi.japaneseCapability }}</label>
               <label><input v-model="providerForm.enabled" type="checkbox" />{{ scanUi.enabled }}</label>
               <label><input v-model="providerForm.isDefault" type="checkbox" />{{ scanUi.defaultProvider }}</label>
             </div>
             <p v-if="providerForm.providerType === 'DEEPSEEK'" class="scan-hint">{{ scanUi.deepseekPdfNotice }}</p>
+            <p v-if="providerForm.providerType === 'QWEN'" class="scan-hint">{{ scanUi.qwenPipelineNotice }}</p>
             <p v-if="providerMessage" class="scan-hint">{{ providerMessage }}</p>
             <footer class="provider-form-actions">
               <button v-if="providerForm.id" class="danger-button" type="button" @click="removeProvider">{{ scanUi.deleteProvider }}</button>
@@ -371,7 +374,7 @@ const showProviderDialog = ref(false);
 const aiProviders = ref([]);
 const providerLoading = ref(false);
 const providerMessage = ref("");
-const emptyProviderForm = () => ({ id: "", displayName: "", providerType: "OPENAI", transport: "OPENAI_RESPONSES", baseUrl: "https://api.openai.com", apiPath: "/v1/responses", modelName: "", apiKey: "", apiKeyMasked: "", supportsPdfInput: true, supportsStructuredJson: true, supportsJapanese: true, enabled: true, isDefault: false, timeoutMs: 120000, maxRetries: 2 });
+const emptyProviderForm = () => ({ id: "", displayName: "", providerType: "OPENAI", transport: "OPENAI_RESPONSES", baseUrl: "https://api.openai.com", apiPath: "/v1/responses", modelName: "", structuringModelName: "", structuringApiPath: "", apiKey: "", apiKeyMasked: "", supportsPdfInput: true, supportsStructuredJson: true, supportsJapanese: true, enabled: true, isDefault: false, timeoutMs: 120000, maxRetries: 2 });
 const providerForm = ref(emptyProviderForm());
 const batches = ref([]);
 const records = ref([]);
@@ -441,8 +444,8 @@ const scanUi = computed(() => locale.value === "zh" ? {
   ready: "PDF 校验完成，可以开始 AI 扫描。",
   queued: "任务已进入后台队列，可离开当前页面后再返回查看进度。",
   pendingWorker: "扫描任务基础流程已建立，正在等待银行账单 AI Provider 处理器。",
-  processingPdf: "AI 正在读取并提取银行账单交易。", generatingExcel: "正在生成本地 Excel 并创建对账批次。", batchCreated: "Excel 已生成，对账批次已自动创建。",
-  modelSettings: "AI 模型配置 / API Key", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "API 路径", modelName: "模型 ID", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", deepseekPdfNotice: "DeepSeek 官方 Chat API 当前不支持 PDF 或图片输入，可保存并测试文本/JSON 能力，但不会被选作银行账单 OCR 模型。", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
+  processingPdf: "AI 正在读取并提取银行账单交易。", structuringJson: "Qwen3.7-Plus 正在把 OCR 结果整理为交易 JSON。", generatingExcel: "正在生成本地 Excel 并创建对账批次。", batchCreated: "Excel 已生成，对账批次已自动创建。",
+  modelSettings: "AI 模型配置 / API Key", modelSettingsHelp: "配置银行账单 PDF 专用模型。API Key 加密后仅在后端使用。", newProvider: "新建模型", displayName: "配置名称", providerType: "Provider 类型", baseUrl: "Base URL", apiPath: "OCR Responses API 路径", modelName: "模型 ID", ocrModelName: "OCR 模型 ID", structuringModelName: "JSON 整理模型 ID", structuringApiPath: "JSON Chat API 路径", apiKey: "API Key", pdfCapability: "支持 PDF 输入", jsonCapability: "支持结构化 JSON", japaneseCapability: "支持日文", qwenPipelineNotice: "千问双模型流水线：Qwen3.5-OCR 读取 PDF，Qwen3.7-Plus 将 OCR 文本转换为严格交易 JSON；共用同一个 Base URL 和 API Key。", deepseekPdfNotice: "DeepSeek 官方 Chat API 当前不支持 PDF 或图片输入，可保存并测试文本/JSON 能力，但不会被选作银行账单 OCR 模型。", enabled: "启用", disabled: "停用", defaultProvider: "默认模型", saveProvider: "保存配置", deleteProvider: "删除配置", testConnection: "测试连接", generatedFile: "已生成本地 Excel", saveRecord: "保存", deleteRecord: "删除",
 } : {
   inputTitle: "銀行明細の入力元",
   inputHelp: "既存の Excel/CSV、または AI スキャン用の銀行明細 PDF を選択します",
@@ -454,8 +457,8 @@ const scanUi = computed(() => locale.value === "zh" ? {
   ready: "PDF の検証が完了しました。AI スキャンを開始できます。",
   queued: "バックグラウンドキューに登録しました。後から進捗を確認できます。",
   pendingWorker: "銀行明細 AI Provider の処理待ちです。",
-  processingPdf: "AI が銀行明細を読み取り、取引を抽出しています。", generatingExcel: "ローカル Excel を生成し、照合バッチを作成しています。", batchCreated: "Excel と照合バッチを作成しました。",
-  modelSettings: "AI モデル設定", modelSettingsHelp: "銀行明細 PDF 用モデルを設定します。API Key は暗号化され、バックエンドのみで使用されます。", newProvider: "新規モデル", displayName: "設定名", providerType: "Provider 種別", baseUrl: "Base URL", apiPath: "API パス", modelName: "モデル ID", apiKey: "API Key", pdfCapability: "PDF 入力対応", jsonCapability: "構造化 JSON 対応", japaneseCapability: "日本語対応", deepseekPdfNotice: "DeepSeek 公式 Chat API は現在 PDF・画像入力に対応していません。テキスト/JSON 接続の保存とテストはできますが、銀行明細 OCR モデルには選択されません。", enabled: "有効", disabled: "無効", defaultProvider: "既定モデル", saveProvider: "設定を保存", deleteProvider: "設定を削除", testConnection: "接続テスト", generatedFile: "生成済みローカル Excel", saveRecord: "保存", deleteRecord: "削除",
+  processingPdf: "AI が銀行明細を読み取り、取引を抽出しています。", structuringJson: "Qwen3.7-Plus が OCR 結果を取引 JSON に変換しています。", generatingExcel: "ローカル Excel を生成し、照合バッチを作成しています。", batchCreated: "Excel と照合バッチを作成しました。",
+  modelSettings: "AI モデル設定", modelSettingsHelp: "銀行明細 PDF 用モデルを設定します。API Key は暗号化され、バックエンドのみで使用されます。", newProvider: "新規モデル", displayName: "設定名", providerType: "Provider 種別", baseUrl: "Base URL", apiPath: "OCR Responses API パス", modelName: "モデル ID", ocrModelName: "OCR モデル ID", structuringModelName: "JSON 整形モデル ID", structuringApiPath: "JSON Chat API パス", apiKey: "API Key", pdfCapability: "PDF 入力対応", jsonCapability: "構造化 JSON 対応", japaneseCapability: "日本語対応", qwenPipelineNotice: "Qwen デュアルモデル：Qwen3.5-OCR が PDF を読み取り、Qwen3.7-Plus が OCR テキストを厳密な取引 JSON に変換します。Base URL と API Key は共通です。", deepseekPdfNotice: "DeepSeek 公式 Chat API は現在 PDF・画像入力に対応していません。テキスト/JSON 接続の保存とテストはできますが、銀行明細 OCR モデルには選択されません。", enabled: "有効", disabled: "無効", defaultProvider: "既定モデル", saveProvider: "設定を保存", deleteProvider: "設定を削除", testConnection: "接続テスト", generatedFile: "生成済みローカル Excel", saveRecord: "保存", deleteRecord: "削除",
 });
 const ui = computed(() => locale.value === "zh" ? {
   selectFields: "选择匹配字段", chooseTemplate: "选择匹配模板", newTemplate: "新建模板", newTemplateHelp: "从空白规则开始并保存到数据库", currentConfiguration: "当前批次配置", loadingTemplates: "正在加载模板…", noTemplatesHint: "尚无模板，请选择“新建模板”。", ruleRequired: "执行对账前，请至少配置一个有效的匹配条件。", rulesConfigured: "条规则已配置", groups: "个规则组",
@@ -542,6 +545,7 @@ const scanStageMessage = computed(() => {
   if (activeScanTask.value.status === "READY") return scanUi.value.ready;
   if (activeScanTask.value.currentStage === "WAITING_FOR_PROVIDER_WORKER") return scanUi.value.pendingWorker;
   if (activeScanTask.value.status === "QUEUED") return scanUi.value.queued;
+  if (activeScanTask.value.currentStage === "AI_STRUCTURING") return scanUi.value.structuringJson;
   if (activeScanTask.value.status === "OCR_RUNNING") return scanUi.value.processingPdf;
   if (activeScanTask.value.status === "GENERATING_EXCEL") return scanUi.value.generatingExcel;
   if (activeScanTask.value.status === "COMPLETED") return scanUi.value.batchCreated;
@@ -680,6 +684,9 @@ const applyProviderTypeDefaults = () => {
   if (qwen) {
     providerForm.value.transport = "OPENAI_RESPONSES";
     providerForm.value.apiPath = "/compatible-mode/v1/responses";
+    providerForm.value.modelName = "qwen3.5-ocr";
+    providerForm.value.structuringModelName = "qwen3.7-plus";
+    providerForm.value.structuringApiPath = "/compatible-mode/v1/chat/completions";
   }
   if (deepseek) {
     providerForm.value.transport = "OPENAI_CHAT_COMPLETIONS";
@@ -688,7 +695,7 @@ const applyProviderTypeDefaults = () => {
     providerForm.value.modelName = "deepseek-v4-flash";
   }
   providerForm.value.supportsPdfInput = verifiedOpenAi || qwen;
-  providerForm.value.supportsStructuredJson = verifiedOpenAi || deepseek;
+  providerForm.value.supportsStructuredJson = verifiedOpenAi || qwen || deepseek;
   providerForm.value.supportsJapanese = true;
 };
 
