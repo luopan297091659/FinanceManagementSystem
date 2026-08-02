@@ -516,6 +516,9 @@ export class ReconciliationService implements OnModuleInit {
           if (response.status === 400 && this.isProviderDataInspectionFailure(providerError)) throw providerError;
           throw providerError;
         }
+        if (payload?.choices?.[0]?.finish_reason === 'length') {
+          throw new Error(`AI Provider ${provider.displayName} 输出因长度限制被截断，请拆分 PDF 后重新扫描`);
+        }
         const text = this.extractResponsesText(payload);
         if (!text) throw new Error('AI Provider 返回了空结果');
         return text;
@@ -570,7 +573,14 @@ export class ReconciliationService implements OnModuleInit {
 
   private extractResponsesText(payload: any) {
     if (typeof payload?.output_text === 'string') return payload.output_text;
-    if (typeof payload?.choices?.[0]?.message?.content === 'string') return payload.choices[0].message.content;
+    const chatContent = payload?.choices?.[0]?.message?.content;
+    if (typeof chatContent === 'string') return chatContent;
+    if (Array.isArray(chatContent)) {
+      const chatTexts = chatContent
+        .map((item: any) => item?.text ?? item?.content)
+        .filter((value: unknown) => typeof value === 'string');
+      if (chatTexts.length) return chatTexts.join('');
+    }
     const texts = (payload?.output || [])
       .flatMap((item: any) => item?.content || [])
       .map((item: any) => item?.text ?? item?.ocr_result)
@@ -661,7 +671,7 @@ export class ReconciliationService implements OnModuleInit {
 
   private async parseAndValidateProviderRows(text: string, sourceProvider: any, scanId: string) {
     try {
-      return this.validateExtractedRows(this.parseProviderJson(text));
+      return this.parseAndNormalizeProviderRows(text);
     } catch {
       if (sourceProvider.providerType !== 'QWEN') {
         throw new Error(`AI Provider ${sourceProvider.displayName} 返回的 JSON 无法解析或结构不完整`);
@@ -685,11 +695,51 @@ export class ReconciliationService implements OnModuleInit {
       ].join('\n');
       const structuredText = await this.callResponsesProvider(structuringProvider, null, structuringPrompt, true);
       try {
-        return this.validateExtractedRows(this.parseProviderJson(structuredText));
-      } catch {
-        throw new Error(`千问 JSON 模型 ${structuringProvider.modelName} 返回的交易结构无法解析，请检查模型配置后重新扫描`);
+        return this.parseAndNormalizeProviderRows(structuredText);
+      } catch (firstError) {
+        if (structuredText.length > 300000) {
+          throw new Error(`千问 JSON 模型 ${structuringProvider.modelName} 返回内容过长且结构不完整，请拆分 PDF 后重新扫描`);
+        }
+        const repairPrompt = [
+          'Repair the following bank transaction output into one valid JSON object.',
+          'Return JSON only. The top-level object must contain exactly one rows array.',
+          'Preserve every transaction and map all existing values into these exact fields:',
+          'sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, confidence.',
+          'Use null for missing values. Do not add explanations or Markdown fences.',
+          'INVALID OUTPUT START',
+          structuredText,
+          'INVALID OUTPUT END',
+        ].join('\n');
+        const repairedText = await this.callResponsesProvider(structuringProvider, null, repairPrompt, true);
+        try {
+          return this.parseAndNormalizeProviderRows(repairedText);
+        } catch {
+          const reason = firstError instanceof Error ? firstError.message : 'JSON 结构无效';
+          throw new Error(`千问 JSON 模型 ${structuringProvider.modelName} 两次返回均未通过交易结构校验：${reason}`);
+        }
       }
     }
+  }
+
+  private parseAndNormalizeProviderRows(text: string) {
+    return this.validateExtractedRows(this.normalizeTransactionPayload(this.parseProviderJson(text)));
+  }
+
+  private normalizeTransactionPayload(payload: any): any {
+    if (Array.isArray(payload)) return { rows: payload };
+    if (!payload || typeof payload !== 'object') return payload;
+    if (Array.isArray(payload.rows)) return payload;
+    for (const key of ['transactions', 'records', 'items', 'bankTransactions', 'bank_transactions', 'transactionRows', 'transaction_rows']) {
+      if (Array.isArray(payload[key])) return { rows: payload[key] };
+    }
+    for (const key of ['data', 'result', 'output']) {
+      const nested = payload[key];
+      if (nested && typeof nested === 'object') {
+        const normalized = this.normalizeTransactionPayload(nested);
+        if (Array.isArray(normalized?.rows)) return normalized;
+      }
+    }
+    throw new Error('JSON 顶层缺少 rows 交易数组');
   }
 
   private parseProviderJson(text: string) {
@@ -742,18 +792,37 @@ export class ReconciliationService implements OnModuleInit {
   private validateExtractedRows(payload: any): ExtractedBankStatementRow[] {
     if (!payload || !Array.isArray(payload.rows) || payload.rows.length > 10000) throw new Error('AI Provider 返回的交易结构无效');
     return payload.rows.map((row: any, index: number) => {
-      const transactionDate = typeof row.transactionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.transactionDate) ? row.transactionDate : null;
-      const numberOrNull = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`第 ${index + 1} 条交易不是有效对象`);
+      const pick = (...keys: string[]) => {
+        for (const key of keys) if (row[key] !== undefined && row[key] !== '') return row[key];
+        return null;
+      };
+      const normalizeDate = (value: unknown) => {
+        if (typeof value !== 'string') return null;
+        const normalized = value.trim().replace(/^(\d{4})[年\/.\-](\d{1,2})[月\/.\-](\d{1,2})日?$/, (_match, year, month, day) => `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+        return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+      };
+      const numberOrNull = (value: unknown) => {
+        if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
+        if (typeof value !== 'string') return null;
+        const normalized = value.replace(/[\s,，￥¥円]/g, '').trim();
+        if (!normalized || ['-', '—', 'null', 'なし'].includes(normalized.toLowerCase())) return null;
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+      };
+      const transactionDate = normalizeDate(pick('transactionDate', 'transaction_date', 'date', '取引日', '入出金日', '日付'));
+      const sourcePageNumber = numberOrNull(pick('sourcePageNumber', 'source_page_number', 'pageNumber', 'page', 'ページ'));
+      const sourceRowNumber = numberOrNull(pick('sourceRowNumber', 'source_row_number', 'rowNumber', 'row', '行番号'));
       return {
-        sourcePageNumber: Number.isInteger(row.sourcePageNumber) && row.sourcePageNumber > 0 ? row.sourcePageNumber : null,
-        sourceRowNumber: Number.isInteger(row.sourceRowNumber) && row.sourceRowNumber > 0 ? row.sourceRowNumber : index + 1,
+        sourcePageNumber: typeof sourcePageNumber === 'number' && Number.isInteger(sourcePageNumber) && sourcePageNumber > 0 ? sourcePageNumber : null,
+        sourceRowNumber: typeof sourceRowNumber === 'number' && Number.isInteger(sourceRowNumber) && sourceRowNumber > 0 ? sourceRowNumber : index + 1,
         transactionDate,
-        withdrawalAmount: numberOrNull(row.withdrawalAmount),
-        depositAmount: numberOrNull(row.depositAmount),
-        transactionType: this.sanitizeOptionalText(row.transactionType),
-        bankDescription: this.sanitizeOptionalText(row.bankDescription),
-        remarks: this.sanitizeOptionalText(row.remarks),
-        confidence: typeof row.confidence === 'number' ? Math.min(1, Math.max(0, row.confidence)) : 0,
+        withdrawalAmount: numberOrNull(pick('withdrawalAmount', 'withdrawal_amount', 'withdrawal', '出金額', '支払金額', '引出金額')),
+        depositAmount: numberOrNull(pick('depositAmount', 'deposit_amount', 'deposit', '入金額', '預り金額', 'お預り金額')),
+        transactionType: this.sanitizeOptionalText(pick('transactionType', 'transaction_type', 'type', '取引種別', '区分')),
+        bankDescription: this.sanitizeOptionalText(pick('bankDescription', 'bank_description', 'description', 'summary', '摘要', '摘要名', 'お取引内容')),
+        remarks: this.sanitizeOptionalText(pick('remarks', 'remark', 'notes', 'note', '備考')),
+        confidence: Math.min(1, Math.max(0, numberOrNull(pick('confidence', 'score', '信頼度')) ?? 0)),
       };
     });
   }
