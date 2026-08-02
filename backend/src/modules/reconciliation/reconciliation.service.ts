@@ -678,11 +678,36 @@ export class ReconciliationService implements OnModuleInit {
         throw new Error(`AI Provider ${sourceProvider.displayName} 返回的 JSON 无法解析或结构不完整`);
       }
       if (text.length > 800000) throw new Error('OCR 文本过长，无法在单次请求中转换为交易 JSON，请拆分 PDF 后重新扫描');
+      const structuringProvider = this.qwenStructuringProvider(sourceProvider);
       await this.bankStatementScanTaskStore.update({
         where: { id: scanId },
-        data: { currentStage: 'AI_STRUCTURING', progress: 55 },
+        data: {
+          currentStage: 'AI_STRUCTURING',
+          progress: 55,
+          providerModel: structuringProvider.modelName,
+          providerSnapshot: {
+            ...this.providerSnapshot(sourceProvider),
+            activeStage: 'JSON_STRUCTURING',
+            activeModelName: structuringProvider.modelName,
+            activeTransport: structuringProvider.transport,
+            activeApiPath: structuringProvider.apiPath,
+          },
+        },
       });
-      const structuringProvider = this.qwenStructuringProvider(sourceProvider);
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: null,
+          action: 'reconciliation.bank.scan.structuring.started',
+          entityType: 'BankStatementScanTask',
+          entityId: scanId,
+          after: {
+            providerType: sourceProvider.providerType,
+            modelName: structuringProvider.modelName,
+            transport: structuringProvider.transport,
+            apiPath: structuringProvider.apiPath,
+          },
+        },
+      });
       const structuringPrompt = [
         'Convert the following Japanese bank statement OCR text into one valid JSON object.',
         'Output JSON only, with exactly one top-level key named rows.',
@@ -723,8 +748,11 @@ export class ReconciliationService implements OnModuleInit {
   }
 
   private parseAndNormalizeProviderRows(text: string) {
-    let lastError: Error = new Error('AI Provider 返回的 JSON 无法解析');
-    for (const payload of this.parseProviderJsonCandidates(text)) {
+    const candidates = this.parseProviderJsonCandidates(text);
+    let lastError: Error = candidates.length
+      ? new Error('AI Provider 返回的交易 JSON 结构无效')
+      : new Error(this.describeUnparseableProviderOutput(text));
+    for (const payload of candidates) {
       try {
         return this.validateExtractedRows(this.normalizeTransactionPayload(payload));
       } catch (error) {
@@ -732,6 +760,13 @@ export class ReconciliationService implements OnModuleInit {
       }
     }
     throw lastError;
+  }
+
+  private describeUnparseableProviderOutput(text: string) {
+    const normalized = text.replace(/^\uFEFF/, '').trim();
+    const fingerprint = createHash('sha256').update(normalized).digest('hex').slice(0, 12);
+    const fenced = /```(?:json|json5)?/i.test(normalized) ? '是' : '否';
+    return `AI Provider 返回内容不是可解析 JSON（长度 ${normalized.length}，指纹 ${fingerprint}，JSON 代码块 ${fenced}）`;
   }
 
   private normalizeTransactionPayload(payload: any): any {
@@ -916,7 +951,18 @@ export class ReconciliationService implements OnModuleInit {
   }
 
   private providerSnapshot(provider: any) {
-    return { id: provider.id, displayName: provider.displayName, providerType: provider.providerType, transport: provider.transport, modelName: provider.modelName, structuringModelName: provider.structuringModelName, supportsPdfInput: provider.supportsPdfInput, supportsStructuredJson: provider.supportsStructuredJson, supportsJapanese: provider.supportsJapanese };
+    return {
+      id: provider.id,
+      displayName: provider.displayName,
+      providerType: provider.providerType,
+      transport: provider.transport,
+      modelName: provider.modelName,
+      structuringModelName: provider.structuringModelName,
+      structuringApiPath: provider.structuringApiPath,
+      supportsPdfInput: provider.supportsPdfInput,
+      supportsStructuredJson: provider.supportsStructuredJson,
+      supportsJapanese: provider.supportsJapanese,
+    };
   }
 
   private toPublicProvider(provider: any) {
