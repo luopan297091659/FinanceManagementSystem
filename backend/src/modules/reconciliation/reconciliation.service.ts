@@ -5,7 +5,6 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { join, relative, resolve } from 'path';
 import * as JSON5 from 'json5';
-import { PDFParse } from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../database/prisma.service';
 import { QWEN3_VL_MIZUHO_BANK_STATEMENT_PROMPT } from './qwen3-vl-mizuho.prompt';
@@ -490,6 +489,12 @@ export class ReconciliationService implements OnModuleInit {
   }
 
   private async renderPdfPagesForVision(pdf: Buffer) {
+    let PDFParse: typeof import('pdf-parse').PDFParse;
+    try {
+      ({ PDFParse } = await import('pdf-parse'));
+    } catch {
+      throw new Error('服务器未安装 PDF 页面渲染组件 pdf-parse，请在 backend 目录执行 npm ci 后重启服务');
+    }
     const parser = new PDFParse({ data: new Uint8Array(pdf) });
     try {
       const screenshots = await parser.getScreenshot({

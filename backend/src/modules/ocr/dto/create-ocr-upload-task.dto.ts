@@ -1,15 +1,15 @@
-import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateOcrUploadTaskDto {
   @IsString()
   @IsNotEmpty()
   taskName!: string;
 
-  @IsUrl()
+  @IsString()
   @IsNotEmpty()
-  webhookUrl!: string;
+  workflowId!: string;
 
-  @IsUrl()
-  @IsNotEmpty()
-  callbackUrl!: string;
+  @IsString()
+  @IsOptional()
+  sessionId?: string;
 }

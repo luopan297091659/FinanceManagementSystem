@@ -1123,17 +1123,42 @@ enum OcrTaskStatus {
 model OcrTask {
   id              String        @id @default(uuid())
   taskId          String        @unique
+  sessionId       String?       @unique
+  workflowId      String?
+  workflow        OcrWorkflow?  @relation(fields: [workflowId], references: [id], onDelete: SetNull)
   taskName        String?
   webhookUrl      String
   callbackUrl     String
   state           OcrTaskStatus @default(PENDING)
   fileNames       String[]
+  storagePaths    String[]      @default([])
   resultJson      Json?
+  matchedResultJson Json?
   callbackPayload Json?
   reviewStatus    String?       @default("PENDING")
   errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  @@index([workflowId, createdAt])
+  @@index([state, createdAt])
+}
+
+model OcrWorkflow {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  webhookUrl  String
+  callbackUrl String
+  enabled     Boolean   @default(true)
+  createdBy   String?
+  tasks       OcrTask[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([enabled, createdAt])
 }
 
 model Document {
