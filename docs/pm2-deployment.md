@@ -11,6 +11,7 @@
 
 ```powershell
 npm --prefix backend install
+npm run build
 npm run backend:prisma:generate
 npm run backend:build
 pm2 start ecosystem.config.cjs
@@ -45,6 +46,7 @@ JWT_SECRET=replace-with-production-secret
 
 ```powershell
 npm --prefix backend run prisma:migrate
+npm run build
 npm --prefix backend run prisma:generate
 npm --prefix backend run build
 pm2 restart finance-management

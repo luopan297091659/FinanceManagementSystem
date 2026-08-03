@@ -46,11 +46,15 @@ API 前缀：
 ```powershell
 cd D:\PROJECT\FinanceManagementSystem
 $env:DATABASE_URL="postgresql://user:password@host:5432/dbname?schema=public"
+npm.cmd run build
 npm.cmd run backend:prisma:deploy
 npm.cmd run backend:prisma:generate
 npm.cmd run backend:build
 pm2 restart finance-management --update-env
 ```
+
+其中 `npm.cmd run build` 用于更新根目录 `dist/` 中的前端页面，不能只执行
+`backend:build`。也可以使用 `npm.cmd run build:all` 一次构建前端和后端。
 
 ## 数据库检查
 
