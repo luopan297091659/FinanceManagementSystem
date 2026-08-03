@@ -474,6 +474,34 @@ export const api = {
     return request('/ocr/tasks/upload', { method: 'POST', body: payload });
   },
 
+  uploadOcrTaskWithProgress(payload, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/ocr/tasks/upload`);
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth-token') : null;
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch { reject(new Error('OCR 上传接口返回了无效 JSON')); }
+          return;
+        }
+        let errorMessage = xhr.responseText || `上传失败：HTTP ${xhr.status}`;
+        try {
+          const errorPayload = JSON.parse(xhr.responseText);
+          errorMessage = Array.isArray(errorPayload.message) ? errorPayload.message.join('; ') : errorPayload.message || errorPayload.error || errorMessage;
+        } catch { /* Keep the original response text. */ }
+        reject(new Error(errorMessage));
+      });
+      xhr.addEventListener('error', () => reject(new Error('网络错误，文件上传失败')));
+      xhr.addEventListener('abort', () => reject(new Error('文件上传已取消')));
+      xhr.send(payload);
+    });
+  },
+
   async startOcrTask(taskId) {
     return request(`/ocr/tasks/${encodeURIComponent(taskId)}/start`, { method: 'POST', body: {} });
   },

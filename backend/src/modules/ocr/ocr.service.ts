@@ -116,17 +116,20 @@ export class OcrService {
   }
 
   async handleCallback(payload: any) {
-    const correlationId = payload?.sessionId || payload?.seesinId || payload?.taskId;
+    const callback = this.normalizeCallbackPayload(payload);
+    const correlationId = callback?.sessionId || callback?.seesinId || callback?.taskId
+      || callback?.data?.sessionId || callback?.data?.seesinId || callback?.data?.taskId;
     if (!correlationId) throw new BadRequestException('回调缺少 sessionId、seesinId 或 taskId');
     const task = await this.prisma.ocrTask.findFirst({
       where: { OR: [{ sessionId: String(correlationId) }, { taskId: String(correlationId) }] },
     });
     if (!task) throw new NotFoundException('OCR 任务不存在');
 
-    const rawRecords = this.extractRecords(payload);
+    const rawRecords = this.extractRecords(callback);
     const matchedRecords = await Promise.all(rawRecords.map((record) => this.matchSystemData(record)));
     const unmatchedCount = matchedRecords.filter((record) => record.systemMatch.status !== 'MATCHED').length;
-    const failed = String(payload?.status || '').toUpperCase() === 'FAILED';
+    const callbackStatus = callback?.status || callback?.data?.status;
+    const failed = ['FAILED', 'ERROR'].includes(String(callbackStatus || '').toUpperCase());
     const state = failed ? 'FAILED' : unmatchedCount ? 'REVIEW_REQUIRED' : 'COMPLETED';
     const normalizedResult = { records: matchedRecords, summary: { total: matchedRecords.length, matched: matchedRecords.length - unmatchedCount, unmatched: unmatchedCount } };
 
@@ -134,15 +137,24 @@ export class OcrService {
       where: { taskId: task.taskId },
       data: {
         state,
-        callbackPayload: payload,
+        callbackPayload: callback,
         resultJson: normalizedResult,
         matchedResultJson: normalizedResult,
         reviewStatus: unmatchedCount ? 'REVIEW_REQUIRED' : 'COMPLETED',
-        errorMessage: failed ? String(payload?.error || payload?.message || '工作流执行失败') : null,
+        errorMessage: failed ? String(callback?.error || callback?.message || callback?.data?.error || '工作流执行失败') : null,
         completedAt: new Date(),
       },
       include: { workflow: true },
     });
+  }
+
+  private normalizeCallbackPayload(payload: any) {
+    if (typeof payload !== 'string') return payload;
+    try {
+      return JSON.parse(payload);
+    } catch {
+      throw new BadRequestException('回调内容不是有效 JSON');
+    }
   }
 
   private extractRecords(payload: any): Record<string, any>[] {
