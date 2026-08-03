@@ -451,6 +451,37 @@ export const api = {
     return request('/reconciliation/bank/master-data/sync', { method: 'POST', body: { rows } });
   },
 
+  async listOcrWorkflows() {
+    return request('/ocr/workflows');
+  },
+
+  async saveOcrWorkflow(payload, workflowId = '') {
+    return request(`/ocr/workflows${workflowId ? `/${workflowId}` : ''}`, {
+      method: workflowId ? 'PATCH' : 'POST',
+      body: payload,
+    });
+  },
+
+  async deleteOcrWorkflow(workflowId) {
+    return request(`/ocr/workflows/${workflowId}`, { method: 'DELETE' });
+  },
+
+  async listOcrTasks(workflowId = '') {
+    return request(`/ocr/tasks${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ''}`);
+  },
+
+  async uploadOcrTask(payload) {
+    return request('/ocr/tasks/upload', { method: 'POST', body: payload });
+  },
+
+  async startOcrTask(taskId) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/start`, { method: 'POST', body: {} });
+  },
+
+  async getOcrTask(taskId) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}`);
+  },
+
   async listAdminTranslations(params = {}) {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
     return request(`/admin/i18n/translations${query ? `?${query}` : ''}`);
