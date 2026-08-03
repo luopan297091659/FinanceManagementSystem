@@ -158,7 +158,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { api } from '../services/api';
+import { API_BASE, api } from '../services/api';
 
 const path = window.location.pathname;
 const routeQuery = new URLSearchParams(window.location.search);
@@ -189,7 +189,7 @@ const detailRecords = computed(() => detailTask.value?.resultJson?.records || de
 const detailSummary = computed(() => detailTask.value?.resultJson?.summary || { total: detailRecords.value.length, matched: detailRecords.value.filter((item) => item.systemMatch?.status === 'MATCHED').length, unmatched: detailRecords.value.filter((item) => item.systemMatch?.status !== 'MATCHED').length });
 const visibleRecords = computed(() => { const query = searchKeyword.value.trim().toLowerCase(); return detailRecords.value.filter((record) => (resultFilter.value === 'ALL' || (resultFilter.value === 'MATCHED' ? record.systemMatch?.status === 'MATCHED' : record.systemMatch?.status !== 'MATCHED')) && (!query || JSON.stringify(record).toLowerCase().includes(query))); });
 
-function beginCreateWorkflow() { editingWorkflowId.value = ''; Object.assign(workflowForm, { name:'', description:'', webhookUrl:'', callbackUrl:`${window.location.origin}/api/v1/ocr/callback`, enabled:true }); workflowEditorOpen.value = true; }
+function beginCreateWorkflow() { editingWorkflowId.value = ''; Object.assign(workflowForm, { name:'', description:'', webhookUrl:'', callbackUrl:`${window.location.origin}${API_BASE}/ocr/callback`, enabled:true }); workflowEditorOpen.value = true; }
 function editWorkflow(item) { editingWorkflowId.value = item.id; Object.assign(workflowForm, { name:item.name, description:item.description || '', webhookUrl:item.webhookUrl, callbackUrl:item.callbackUrl, enabled:item.enabled }); workflowEditorOpen.value = true; }
 async function saveWorkflow() { if (!workflowForm.name.trim() || !workflowForm.webhookUrl.trim() || !workflowForm.callbackUrl.trim()) return showMessage('请完整填写工作流名称、Webhook 和回调地址。', true); savingWorkflow.value = true; try { await api.saveOcrWorkflow({ ...workflowForm }, editingWorkflowId.value); workflowEditorOpen.value = false; await loadPage(); showMessage('工作流配置已保存。'); } catch (error) { showMessage(error.message, true); } finally { savingWorkflow.value = false; } }
 function requestDelete(item) { workflowPendingDelete.value = item; }

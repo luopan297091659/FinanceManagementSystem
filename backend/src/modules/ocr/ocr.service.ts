@@ -24,7 +24,7 @@ export class OcrService {
       name: input.name.trim(),
       description: input.description?.trim() || null,
       webhookUrl: input.webhookUrl.trim(),
-      callbackUrl: input.callbackUrl.trim(),
+      callbackUrl: this.normalizeCallbackUrl(input.callbackUrl),
       enabled: input.enabled ?? true,
     };
     if (workflowId) {
@@ -63,7 +63,7 @@ export class OcrService {
         workflowId: workflow.id,
         taskName: dto.taskName.trim(),
         webhookUrl: workflow.webhookUrl,
-        callbackUrl: workflow.callbackUrl,
+        callbackUrl: this.normalizeCallbackUrl(workflow.callbackUrl),
         fileNames: files.map((file) => file.originalname),
         storagePaths: files.map((file) => file.path),
         state: 'UPLOADING',
@@ -155,6 +155,14 @@ export class OcrService {
     } catch {
       throw new BadRequestException('回调内容不是有效 JSON');
     }
+  }
+
+  private normalizeCallbackUrl(url: string) {
+    const normalized = url.trim();
+    return normalized.replace(
+      /^https:\/\/(www\.)?kotabi\.top\/api\/v1\/ocr\/callback$/i,
+      'https://kotabi.top/finance/api/v1/ocr/callback',
+    );
   }
 
   private extractRecords(payload: any): Record<string, any>[] {

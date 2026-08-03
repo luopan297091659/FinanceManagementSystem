@@ -1,4 +1,7 @@
-const API_BASE = import.meta.env?.VITE_API_BASE || '/api/v1';
+const isKotabiFinanceDeployment = typeof window !== 'undefined'
+  && /^(www\.)?kotabi\.top$/i.test(window.location.hostname);
+export const API_BASE = import.meta.env?.VITE_API_BASE
+  || `${isKotabiFinanceDeployment ? '/finance' : ''}/api/v1`;
 
 async function request(path, { method = 'GET', body } = {}) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
