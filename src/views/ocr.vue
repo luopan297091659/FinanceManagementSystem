@@ -161,8 +161,18 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { api } from '../services/api';
 
 const path = window.location.pathname;
-const executionWorkflowId = decodeURIComponent(path.match(/^\/ai-reconciliation\/ocr\/workflows\/([^/]+)\/execute/)?.[1] || '');
-const detailTaskId = decodeURIComponent(path.match(/^\/ai-reconciliation\/ocr\/tasks\/([^/]+)/)?.[1] || '');
+const routeQuery = new URLSearchParams(window.location.search);
+const configuredEntryPath = import.meta.env?.VITE_APP_ENTRY_PATH;
+const appEntryPath = configuredEntryPath
+  || (/^(www\.)?kotabi\.top$/i.test(window.location.hostname) ? '/finance/' : '/');
+// Query-based child pages work even when Nginx only exposes the base OCR SPA route.
+// Keep parsing legacy deep links so direct NestJS deployments remain compatible.
+const executionWorkflowId = routeQuery.get('mode') === 'execute'
+  ? routeQuery.get('workflowId') || ''
+  : decodeURIComponent(path.match(/^\/ai-reconciliation\/ocr\/workflows\/([^/]+)\/execute/)?.[1] || '');
+const detailTaskId = routeQuery.get('mode') === 'detail'
+  ? routeQuery.get('taskId') || ''
+  : decodeURIComponent(path.match(/^\/ai-reconciliation\/ocr\/tasks\/([^/]+)/)?.[1] || '');
 const pageMode = detailTaskId ? 'detail' : executionWorkflowId ? 'execute' : 'list';
 const workflows = ref([]), tasks = ref([]), selectedFiles = ref([]), detailTask = ref(null), activeTask = ref(null);
 const loading = ref(true), workflowEditorOpen = ref(false), savingWorkflow = ref(false), deletingWorkflow = ref(false), submitting = ref(false), isDragging = ref(false);
@@ -184,8 +194,8 @@ function editWorkflow(item) { editingWorkflowId.value = item.id; Object.assign(w
 async function saveWorkflow() { if (!workflowForm.name.trim() || !workflowForm.webhookUrl.trim() || !workflowForm.callbackUrl.trim()) return showMessage('请完整填写工作流名称、Webhook 和回调地址。', true); savingWorkflow.value = true; try { await api.saveOcrWorkflow({ ...workflowForm }, editingWorkflowId.value); workflowEditorOpen.value = false; await loadPage(); showMessage('工作流配置已保存。'); } catch (error) { showMessage(error.message, true); } finally { savingWorkflow.value = false; } }
 function requestDelete(item) { workflowPendingDelete.value = item; }
 async function confirmDelete() { deletingWorkflow.value = true; try { await api.deleteOcrWorkflow(workflowPendingDelete.value.id); workflowPendingDelete.value = null; await loadPage(); showMessage('工作流已删除，历史任务仍保留。'); } catch (error) { showMessage(error.message, true); } finally { deletingWorkflow.value = false; } }
-function openExecution(item) { window.open(`/ai-reconciliation/ocr/workflows/${encodeURIComponent(item.id)}/execute`, '_blank', 'noopener,noreferrer'); }
-function goToWorkflowList() { window.location.href = '/ai-reconciliation/ocr'; }
+function openExecution(item) { window.open(`${appEntryPath}?view=ocr&mode=execute&workflowId=${encodeURIComponent(item.id)}`, '_blank', 'noopener,noreferrer'); }
+function goToWorkflowList() { window.location.href = `${appEntryPath}?view=ocr`; }
 async function loadPage() { [workflows.value, tasks.value] = await Promise.all([api.listOcrWorkflows(), api.listOcrTasks()]); }
 function handleFileSelection(event) { selectedFiles.value.push(...Array.from(event.target.files || [])); event.target.value = ''; }
 function handleDrop(event) { isDragging.value = false; if (!isExecuting.value) selectedFiles.value.push(...Array.from(event.dataTransfer?.files || [])); }
@@ -213,7 +223,7 @@ async function pollExecution(taskId) {
   }
   clearTimers(); executionPhase.value = 'failed'; showMessage('等待回调超时，可稍后在任务详情中查看结果。', true);
 }
-function openTaskDetail(task) { window.open(`/ai-reconciliation/ocr/tasks/${encodeURIComponent(task.taskId)}`, '_blank', 'noopener,noreferrer'); }
+function openTaskDetail(task) { window.open(`${appEntryPath}?view=ocr&mode=detail&taskId=${encodeURIComponent(task.taskId)}`, '_blank', 'noopener,noreferrer'); }
 async function loadDetailTask() { try { detailTask.value = await api.getOcrTask(detailTaskId); } catch (error) { showMessage(error.message, true); } }
 function clearTimers() { clearTimeout(pollTimer); clearInterval(progressTimer); pollTimer = undefined; progressTimer = undefined; }
 function showMessage(text, error = false) { message.value = text; messageIsError.value = error; }

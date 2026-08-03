@@ -164,6 +164,12 @@ const isAuthenticated = ref(false);
 const currentUser = ref(null);
 const currentPermissions = ref([]);
 const { locale, dictionary, setLocale } = useI18n();
+const configuredEntryPath = import.meta.env?.VITE_APP_ENTRY_PATH;
+const appEntryPath = configuredEntryPath
+  || (/^(www\.)?kotabi\.top$/i.test(window.location.hostname) ? '/finance/' : '/');
+const appPath = (route = '/') => appEntryPath === '/'
+  ? route
+  : `${appEntryPath.replace(/\/$/, '')}${route}`;
 
 const reconciliationMenuLabels = computed(() => ({
   bank: `AI / ${dictionary.value.bankReconciliation.menu.bankReconciliation}`,
@@ -233,19 +239,19 @@ const setActiveNavItem = (item) => {
     activeSystemTab.value = item.tab;
   }
   if (item.key === "bank-reconciliation") {
-    window.history.pushState({}, "", "/ai-reconciliation/bank");
+    window.history.pushState({}, "", appPath("/ai-reconciliation/bank"));
   } else if (item.key === "ocr") {
-    window.history.pushState({}, "", "/ai-reconciliation/ocr");
+    window.history.pushState({}, "", appPath("/ai-reconciliation/ocr"));
   } else if (item.key === "contracts") {
-    window.history.pushState({}, "", "/contracts");
+    window.history.pushState({}, "", appPath("/contracts"));
   } else if (item.key === "resources") {
-    window.history.pushState({}, "", "/resources");
+    window.history.pushState({}, "", appPath("/resources"));
   } else if (item.key === "overview") {
-    window.history.pushState({}, "", "/");
+    window.history.pushState({}, "", appPath("/"));
   } else if (item.key === "gis") {
-    window.history.pushState({}, "", "/gis");
+    window.history.pushState({}, "", appPath("/gis"));
   } else if (item.key === "finance") {
-    window.history.pushState({}, "", "/finance");
+    window.history.pushState({}, "", appPath("/finance"));
   }
 };
 
@@ -267,8 +273,17 @@ const handleDashboardNavigate = (route) => {
 };
 
 const applyRouteFromLocation = () => {
-  const path = window.location.pathname;
-  if (path === "/ai-reconciliation" || path === "/ai-reconciliation/") {
+  const rawPath = window.location.pathname;
+  const entryPrefix = appEntryPath === '/' ? '' : appEntryPath.replace(/\/$/, '');
+  const path = entryPrefix && rawPath.startsWith(entryPrefix)
+    ? rawPath.slice(entryPrefix.length) || '/'
+    : rawPath;
+  const requestedView = new URLSearchParams(window.location.search).get("view");
+  if (requestedView === "ocr") {
+    activeNavKey.value = "ocr";
+    activeView.value = "ocr";
+    isAiAnalysisExpanded.value = true;
+  } else if (path === "/ai-reconciliation" || path === "/ai-reconciliation/") {
     window.history.replaceState({}, "", "/ai-reconciliation/ocr");
     activeNavKey.value = "ocr";
     activeView.value = "ocr";
