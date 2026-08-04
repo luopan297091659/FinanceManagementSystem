@@ -599,7 +599,12 @@ const formatDate = (dateStr) => {
 const loadUsers = async () => {
   if (!can('user:view')) return;
   try {
-    users.value = await api.listUsers();
+    const [userRows, roleOptions] = await Promise.all([
+      api.listUsers(),
+      api.listUserRoleOptions(),
+    ]);
+    users.value = userRows;
+    roles.value = roleOptions;
   } catch (e) {
     showNotice(e.message || 'Failed to load users');
   }

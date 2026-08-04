@@ -1,8 +1,9 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { readFile, stat } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
+import { prepareFileForWebhook } from './image-to-pdf.util';
 
 type WorkflowInput = {
   name: string;
@@ -86,15 +87,22 @@ export class OcrService {
       data: { state: 'PROCESSING', startedAt: new Date(), errorMessage: null },
     });
 
-    const fileStats = await Promise.all(task.storagePaths.map((path) => stat(path)));
-    const totalBytes = fileStats.reduce((sum, file) => sum + file.size, 0);
-    const totalMegabytes = (totalBytes / 1024 / 1024).toFixed(1);
     const maxAttempts = 3;
+    let totalMegabytes = '0.0';
     let lastStatus = 0;
     let lastDetail = '';
     let attempts = 0;
 
     try {
+      const preparedFiles = await Promise.all(task.storagePaths.map(async (storagePath, index) => {
+        const buffer = await readFile(storagePath);
+        const fileName = task.fileNames[index] || `request-file-${index + 1}`;
+        const mimeType = detectMimeType(fileName, task.fileMimeTypes[index]);
+        return prepareFileForWebhook(buffer, fileName, mimeType);
+      }));
+      const totalBytes = preparedFiles.reduce((sum, file) => sum + file.buffer.length, 0);
+      totalMegabytes = (totalBytes / 1024 / 1024).toFixed(1);
+
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         attempts = attempt;
         try {
@@ -103,11 +111,12 @@ export class OcrService {
           form.append('sessionId', task.sessionId || task.taskId);
           form.append('taskName', task.taskName || task.workflow.name);
           form.append('callbackUrl', task.callbackUrl);
-          for (let index = 0; index < task.storagePaths.length; index += 1) {
-            const buffer = await readFile(task.storagePaths[index]);
-            const name = task.fileNames[index] || `request-file-${index + 1}`;
-            const mimeType = detectMimeType(name, task.fileMimeTypes[index]);
-            form.append('requestFile', new Blob([buffer], { type: mimeType }), name);
+          for (const file of preparedFiles) {
+            form.append(
+              'requestFile',
+              new Blob([file.buffer], { type: file.mimeType }),
+              file.fileName,
+            );
           }
           const response = await fetch(task.webhookUrl, {
             method: 'POST',

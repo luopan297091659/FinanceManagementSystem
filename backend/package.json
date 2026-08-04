@@ -13,7 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "db:check": "node scripts/check-db.js",
-    "test:ocr-mime": "node --test test/mime-type.util.test.js",
+    "test:ocr-mime": "node --test test/mime-type.util.test.js test/image-to-pdf.util.test.js",
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
@@ -28,6 +28,7 @@
     "ioredis": "^5.4.1",
     "json5": "2.2.3",
     "nodemailer": "^6.9.16",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

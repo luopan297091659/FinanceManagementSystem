@@ -88,6 +88,12 @@ export class RbacController {
     return this.rbacService.listUsers();
   }
 
+  @Get('users/role-options')
+  @RequirePermission('user:view')
+  async listUserRoleOptions() {
+    return this.rbacService.listUserRoleOptions();
+  }
+
   @Post('users')
   @RequirePermission('user:create')
   async createUser(@Body() body: any, @Req() req: Request) {

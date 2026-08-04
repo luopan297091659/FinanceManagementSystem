@@ -98,6 +98,10 @@ export const api = {
     return request('/rbac/users');
   },
 
+  async listUserRoleOptions() {
+    return request('/rbac/users/role-options');
+  },
+
   async createUser(payload) {
     return request('/rbac/users', { method: 'POST', body: payload });
   },

@@ -386,6 +386,13 @@ export class RbacService implements OnModuleInit {
     return this.prisma.user.findMany({ include: { userRoles: { include: { role: true } } }, orderBy: { createdAt: 'desc' } });
   }
 
+  async listUserRoleOptions() {
+    return this.prisma.role.findMany({
+      select: { id: true, name: true, code: true, isActive: true },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+    });
+  }
+
   async createUser(data: { username: string; email?: string | null; name: string; phone?: string | null; password: string; roles?: string[]; roleId?: string; isActive?: boolean; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
     const email = data.email?.trim() || null;
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ username: data.username }, ...(email ? [{ email }] : [])] } });
