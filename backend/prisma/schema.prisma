@@ -1131,6 +1131,7 @@ model OcrTask {
   callbackUrl     String
   state           OcrTaskStatus @default(PENDING)
   fileNames       String[]
+  fileMimeTypes   String[]      @default([])
   storagePaths    String[]      @default([])
   resultJson      Json?
   matchedResultJson Json?

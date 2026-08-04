@@ -1,0 +1,2 @@
+ALTER TABLE "OcrTask"
+  ADD COLUMN "fileMimeTypes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

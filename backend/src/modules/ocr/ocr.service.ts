@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, NotFoundException
 import { readFile, stat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { detectMimeType } from './mime-type.util';
 
 type WorkflowInput = {
   name: string;
@@ -65,6 +66,7 @@ export class OcrService {
         webhookUrl: workflow.webhookUrl,
         callbackUrl: this.normalizeCallbackUrl(workflow.callbackUrl),
         fileNames: files.map((file) => file.originalname),
+        fileMimeTypes: files.map((file) => detectMimeType(file.originalname, file.mimetype)),
         storagePaths: files.map((file) => file.path),
         state: 'UPLOADING',
       },
@@ -104,7 +106,8 @@ export class OcrService {
           for (let index = 0; index < task.storagePaths.length; index += 1) {
             const buffer = await readFile(task.storagePaths[index]);
             const name = task.fileNames[index] || `request-file-${index + 1}`;
-            form.append('requestFile', new Blob([buffer]), name);
+            const mimeType = detectMimeType(name, task.fileMimeTypes[index]);
+            form.append('requestFile', new Blob([buffer], { type: mimeType }), name);
           }
           const response = await fetch(task.webhookUrl, {
             method: 'POST',
