@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { readFile } from 'fs/promises';
+import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { readFile, stat } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 
@@ -84,28 +84,57 @@ export class OcrService {
       data: { state: 'PROCESSING', startedAt: new Date(), errorMessage: null },
     });
 
+    const fileStats = await Promise.all(task.storagePaths.map((path) => stat(path)));
+    const totalBytes = fileStats.reduce((sum, file) => sum + file.size, 0);
+    const totalMegabytes = (totalBytes / 1024 / 1024).toFixed(1);
+    const maxAttempts = 3;
+    let lastStatus = 0;
+    let lastDetail = '';
+    let attempts = 0;
+
     try {
-      const form = new FormData();
-      form.append('taskId', task.taskId);
-      form.append('sessionId', task.sessionId || task.taskId);
-      // Keep the misspelled field for existing Make scenarios that already consume it.
-      form.append('seesinId', task.sessionId || task.taskId);
-      form.append('taskName', task.taskName || task.workflow.name);
-      form.append('callbackUrl', task.callbackUrl);
-      for (let index = 0; index < task.storagePaths.length; index += 1) {
-        const buffer = await readFile(task.storagePaths[index]);
-        const name = task.fileNames[index] || `request-file-${index + 1}`;
-        form.append('requestFile', new Blob([buffer]), name);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        attempts = attempt;
+        try {
+          const form = new FormData();
+          form.append('taskId', task.taskId);
+          form.append('sessionId', task.sessionId || task.taskId);
+          form.append('taskName', task.taskName || task.workflow.name);
+          form.append('callbackUrl', task.callbackUrl);
+          for (let index = 0; index < task.storagePaths.length; index += 1) {
+            const buffer = await readFile(task.storagePaths[index]);
+            const name = task.fileNames[index] || `request-file-${index + 1}`;
+            form.append('requestFile', new Blob([buffer]), name);
+          }
+          const response = await fetch(task.webhookUrl, {
+            method: 'POST',
+            body: form,
+            signal: AbortSignal.timeout(120_000),
+          });
+          if (response.ok) return this.getTask(taskId);
+          lastStatus = response.status;
+          lastDetail = this.compactUpstreamError(await response.text());
+          if (![502, 503, 504].includes(response.status) || attempt === maxAttempts) break;
+        } catch (error) {
+          lastStatus = 0;
+          lastDetail = error instanceof Error ? error.message : String(error);
+          if (attempt === maxAttempts) break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 800));
       }
-      const response = await fetch(task.webhookUrl, { method: 'POST', body: form });
-      if (!response.ok) throw new Error(`Webhook HTTP ${response.status}: ${await response.text()}`);
-      return this.getTask(taskId);
+      const statusLabel = lastStatus ? `HTTP ${lastStatus}` : 'network/timeout error';
+      throw new Error(
+        `Make Webhook failed after ${attempts} attempt(s): ${statusLabel}. `
+        + `${task.fileNames.length} file(s), ${totalMegabytes} MB total. ${lastDetail} `
+        + 'Check the Make file-size limit (Free 5 MB, Core 100 MB, Pro 250 MB, Teams 500 MB, Enterprise 1 GB).',
+      );
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       await this.prisma.ocrTask.update({
         where: { taskId },
-        data: { state: 'FAILED', errorMessage: error instanceof Error ? error.message : String(error) },
+        data: { state: 'FAILED', errorMessage: message },
       });
-      throw new BadRequestException(error instanceof Error ? error.message : 'Webhook 调用失败');
+      throw new BadGatewayException(message);
     }
   }
 
@@ -163,6 +192,10 @@ export class OcrService {
       /^https:\/\/(www\.)?kotabi\.top\/api\/v1\/ocr\/callback$/i,
       'https://kotabi.top/finance/api/v1/ocr/callback',
     );
+  }
+
+  private compactUpstreamError(value: string) {
+    return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400);
   }
 
   private extractRecords(payload: any): Record<string, any>[] {

@@ -140,7 +140,7 @@
           <label class="full-field"><span>Make Webhook 地址</span><input v-model="workflowForm.webhookUrl" type="url" placeholder="https://hook.eu1.make.com/..." /></label>
           <label class="full-field"><span>JSON 回调地址</span><input v-model="workflowForm.callbackUrl" type="url" placeholder="https://your-server.com/api/v1/ocr/callback" /></label>
         </div>
-        <p class="contract-note">Webhook 接收：taskId、sessionId、seesinId、taskName、callbackUrl，以及重复的 requestFile 文件字段。</p>
+        <p class="contract-note">Webhook 接收：taskId、sessionId、taskName、callbackUrl，以及重复的 requestFile 文件字段。</p>
         <div class="modal-actions"><label class="switch-label"><input v-model="workflowForm.enabled" type="checkbox" /> 启用工作流</label><button class="ghost-button" type="button" @click="workflowEditorOpen = false">取消</button><button class="primary-button" type="button" :disabled="savingWorkflow" @click="saveWorkflow">{{ savingWorkflow ? '保存中…' : '保存' }}</button></div>
       </div>
     </div>
@@ -205,7 +205,13 @@ async function executeWorkflow() {
     const form = new FormData(); form.append('workflowId', executionWorkflowId); form.append('taskName', taskName.value.trim()); selectedFiles.value.forEach((file) => form.append('files', file, file.name));
     activeTask.value = await api.uploadOcrTaskWithProgress(form, (percent) => { progressPercent.value = Math.max(progressPercent.value, percent * .58); });
     executionPhase.value = 'dispatching'; progressPercent.value = 62;
-    await api.startOcrTask(activeTask.value.taskId);
+    await api.startOcrTask(activeTask.value.taskId, {
+      taskId: activeTask.value.taskId,
+      sessionId: activeTask.value.sessionId,
+      fileCount: selectedFiles.value.length,
+      fileNames: selectedFiles.value.map((file) => file.name),
+      totalBytes: selectedFiles.value.reduce((sum, file) => sum + file.size, 0),
+    });
     executionPhase.value = 'waiting'; progressPercent.value = 72;
     progressTimer = setInterval(() => { if (progressPercent.value < 92) progressPercent.value += 1; }, 1200);
     await pollExecution(activeTask.value.taskId);

@@ -505,8 +505,8 @@ export const api = {
     });
   },
 
-  async startOcrTask(taskId) {
-    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/start`, { method: 'POST', body: {} });
+  async startOcrTask(taskId, summary = {}) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/start`, { method: 'POST', body: summary });
   },
 
   async getOcrTask(taskId) {
