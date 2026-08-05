@@ -390,7 +390,7 @@ export const messages = reactive({
       previewTitle: "物件・契約総合取込プレビュー", total: "合計", ready: "取込可能", conflict: "競合", error: "エラー", committed: "登録済み", commit: "競合のない行を一括登録", sourceRow: "元行", propertyAction: "物件・部屋処理", contractAction: "契約処理", reason: "競合・エラー理由", createContract: "契約を作成", updateContract: "契約を更新", noContract: "契約なし", skip: "スキップ",
       statuses: { UNCONTRACTED: "未契約", ACTIVE: "契約中", DRAFT: "作成中", CANCELLATION_SETTLEMENT: "解約精算中", EXPIRED: "満了", TERMINATED: "終了", FUTURE: "開始前" },
       actions: { CREATE_PROPERTY_AND_ROOM: "物件・部屋を作成", CREATE_ROOM: "部屋を作成", UPDATE_ROOM: "既存部屋を使用", CREATE_CONTRACT: "契約を作成", UPDATE_CONTRACT: "契約を更新", NO_CONTRACT: "契約なし", SKIP: "スキップ", ERROR: "エラー" },
-      reasons: { "integrated.error.existingContractDiffers": "既存契約と取込値が異なります", "integrated.error.overlappingContract": "契約期間が既存契約と重複しています", "import.error.sameNameDifferentAddress": "同名で住所が異なります", "import.error.propertyNameRequired": "物件名が未入力です" },
+      reasons: { "integrated.error.existingContractDiffers": "既存契約と取込値が異なります", "integrated.error.overlappingContract": "契約期間が既存契約と重複しています", "integrated.error.contractNotFound": "指定された契約者または契約番号に一致する契約がありません", "integrated.error.contractMatchAmbiguous": "一致する契約が複数あります。契約番号を追加してください", "integrated.error.noRecognizedHeaders": "取込可能な列が見つかりません", "integrated.error.missingMatchHeaders": "物件名、契約番号、外部契約ID、契約者のいずれかの列が必要です", "import.error.sameNameDifferentAddress": "同名で住所が異なります", "import.error.propertyNameRequired": "物件名が未入力です" },
     },
   },
   zh: {
@@ -778,7 +778,7 @@ export const messages = reactive({
       previewTitle: "房源与合同综合导入预览", total: "总计", ready: "可导入", conflict: "冲突", error: "错误", committed: "已入库", commit: "批量提交无冲突行", sourceRow: "源行", propertyAction: "物件/房间动作", contractAction: "合同动作", reason: "冲突/错误原因", createContract: "新建合同", updateContract: "更新合同", noContract: "无合同", skip: "跳过",
       statuses: { UNCONTRACTED: "未签约", ACTIVE: "签约中", DRAFT: "创建中", CANCELLATION_SETTLEMENT: "解约结算中", EXPIRED: "已到期", TERMINATED: "已终止", FUTURE: "未开始" },
       actions: { CREATE_PROPERTY_AND_ROOM: "新建物件和房间", CREATE_ROOM: "新建房间", UPDATE_ROOM: "使用已有房间", CREATE_CONTRACT: "新建合同", UPDATE_CONTRACT: "更新合同", NO_CONTRACT: "无合同", SKIP: "跳过", ERROR: "错误" },
-      reasons: { "integrated.error.existingContractDiffers": "现有合同与导入值不同", "integrated.error.overlappingContract": "合同期间与现有合同重叠", "import.error.sameNameDifferentAddress": "同名但地址不同", "import.error.propertyNameRequired": "物件名为空" },
+      reasons: { "integrated.error.existingContractDiffers": "现有合同与导入值不同", "integrated.error.overlappingContract": "合同期间与现有合同重叠", "integrated.error.contractNotFound": "未找到与签约人或合同编号匹配的合同", "integrated.error.contractMatchAmbiguous": "匹配到多个合同，请在表格中增加合同编号", "integrated.error.noRecognizedHeaders": "未找到可导入的表头", "integrated.error.missingMatchHeaders": "至少需要物件名、合同编号、外部合同ID或签约人中的一列表头", "import.error.sameNameDifferentAddress": "同名但地址不同", "import.error.propertyNameRequired": "物件名为空" },
     },
   },
 });
@@ -808,7 +808,7 @@ messages.en = {
     previewTitle: "Integrated property and contract import preview", total: "Total", ready: "Ready", conflict: "Conflict", error: "Error", committed: "Committed", commit: "Commit non-conflicting rows", sourceRow: "Source row", propertyAction: "Property / room action", contractAction: "Contract action", reason: "Conflict / error", createContract: "Create contract", updateContract: "Update contract", noContract: "No contract", skip: "Skip",
     statuses: { UNCONTRACTED: "Uncontracted", ACTIVE: "Active", DRAFT: "Draft", CANCELLATION_SETTLEMENT: "Cancellation settlement", EXPIRED: "Expired", TERMINATED: "Terminated", FUTURE: "Future" },
     actions: { CREATE_PROPERTY_AND_ROOM: "Create property and room", CREATE_ROOM: "Create room", UPDATE_ROOM: "Use existing room", CREATE_CONTRACT: "Create contract", UPDATE_CONTRACT: "Update contract", NO_CONTRACT: "No contract", SKIP: "Skip", ERROR: "Error" },
-    reasons: { "integrated.error.existingContractDiffers": "Existing contract values differ", "integrated.error.overlappingContract": "Contract period overlaps an existing contract", "import.error.sameNameDifferentAddress": "Same name with a different address", "import.error.propertyNameRequired": "Property name is required" },
+    reasons: { "integrated.error.existingContractDiffers": "Existing contract values differ", "integrated.error.overlappingContract": "Contract period overlaps an existing contract", "integrated.error.contractNotFound": "No contract matches the supplied contractor or contract number", "integrated.error.contractMatchAmbiguous": "Multiple contracts match; add the contract number to the file", "integrated.error.noRecognizedHeaders": "No importable headers were found", "integrated.error.missingMatchHeaders": "Include at least a property name, contract number, external contract ID, or contractor header", "import.error.sameNameDifferentAddress": "Same name with a different address", "import.error.propertyNameRequired": "Property name is required" },
   },
 };
 

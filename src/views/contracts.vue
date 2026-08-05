@@ -349,7 +349,7 @@ async function uploadIntegrated(event) {
     const rows = await parseTableFile(file); const headers = rows[0] || []; const dataRows = rows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])));
     let fileHash; if (globalThis.crypto?.subtle) { const digest = await globalThis.crypto.subtle.digest("SHA-256", await file.arrayBuffer()); fileHash = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join(""); }
     importResult.value = await api.uploadIntegratedImport({ originalName: file.name, ...(fileHash ? { fileHash } : {}), rows: dataRows }); importView.value = "preview"; showImportModal.value = true;
-  } catch (error) { errorMessage.value = error.message || labels.value.importFailed; } finally { importBusy.value = false; event.target.value = ""; }
+  } catch (error) { errorMessage.value = labels.value.reasons?.[error.message] || error.message || labels.value.importFailed; } finally { importBusy.value = false; event.target.value = ""; }
 }
 async function loadImportPage(nextPage) { if (!importResult.value?.batch?.id) return; importResult.value = await api.getIntegratedImport(importResult.value.batch.id, { page: nextPage, pageSize: 50 }); }
 async function openImportHistory() {

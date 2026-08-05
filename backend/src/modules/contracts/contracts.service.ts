@@ -7,6 +7,7 @@ import { detectUnitType, normalizeAddress, normalizeMatchText, normalizePostalCo
 type SourceRow = Record<string, unknown>;
 
 const H = {
+  contractNumber: '契約番号', externalContractId: '外部契約ID',
   propertyName: '【物件情報】物件名', roomNumber: '【基本情報】部屋番号', postalCode: '【物件情報】郵便番号', address: '【物件情報】住所',
   contractorName: '【契約者】氏名/名称', payerNameKana: '【契約者】振込名義人カナ1', bankSummaryName: '銀行摘要名義', bankStatementSummary: '銀行明細摘要',
   monthlyName1: 'その他月次費用：項目名', monthly1: 'その他月次費用', monthlyName2: 'その他月次費用２：項目名', monthly2: 'その他月次費用２',
@@ -18,6 +19,25 @@ const H = {
   insuranceStartDate: '保険開始日', insuranceEndDate: '保険満期日', guarantor2BirthDate: '【連帯保証人2】生年月日/設立年月日', collectionAccount: '賃料回収用口座（入居者）',
   managementContractType: '管理委託契約契約方式', remark: 'メモ',
 } as const;
+
+type IntegratedHeaderKey = keyof typeof H;
+
+const HEADER_ALIASES: Partial<Record<IntegratedHeaderKey, readonly string[]>> = {
+  contractNumber: ['契約ID', '契約No', '契約NO', '合同编号'],
+  externalContractId: ['外部契約Id', '外部ID'],
+  propertyName: ['物件名', '物件名称', '房源名称'],
+  roomNumber: ['部屋番号', '部屋No', '房间号'],
+  postalCode: ['郵便番号', '邮编'],
+  address: ['住所', '地址'],
+  contractorName: ['契約者', '契約者名', '氏名/名称', '签约人'],
+  payerNameKana: ['振込名義人カナ1', '振込名義人カナ', '汇款名义人假名'],
+  bankSummaryName: ['銀行摘要', '銀行摘要名', '银行摘要名义'],
+  bankStatementSummary: ['銀行明細摘要', '銀行明細の摘要', '银行账单摘要'],
+  guaranteeCompanyName: ['保証会社名', '保証会社名称', '担保公司名称'],
+  guaranteeCompanyNameKana: ['保証会社名カナ', '保証会社名称カナ', '担保公司名称假名'],
+};
+
+const CONTRACT_MATCH_HEADERS: IntegratedHeaderKey[] = ['contractNumber', 'externalContractId', 'contractorName'];
 
 @Injectable()
 export class ContractsService {
@@ -206,12 +226,17 @@ export class ContractsService {
   }
 
   async uploadIntegrated(body: { originalName?: string; fileHash?: string; rows?: SourceRow[] }, actorUserId?: string) {
-    const rows = Array.isArray(body.rows) ? body.rows : [];
-    if (!rows.length) throw new BadRequestException('import.error.emptyFile');
-    if (rows.length > 20_000) throw new BadRequestException('import.error.tooManyRows');
-    const missing = [H.propertyName, H.roomNumber, H.postalCode, H.address].filter((header) => !(header in (rows[0] ?? {})));
-    if (missing.length) throw new BadRequestException({ message: 'integrated.error.missingHeaders', missing });
-    const fileHash = createHash('sha256').update(`INTEGRATED:${body.fileHash || JSON.stringify(rows)}`).digest('hex');
+    const inputRows = Array.isArray(body.rows) ? body.rows : [];
+    if (!inputRows.length) throw new BadRequestException('import.error.emptyFile');
+    if (inputRows.length > 20_000) throw new BadRequestException('import.error.tooManyRows');
+    const headerMapping = resolveIntegratedHeaders(Object.keys(inputRows[0] ?? {}));
+    if (!headerMapping.size) throw new BadRequestException('integrated.error.noRecognizedHeaders');
+    const providedHeaders = new Set(headerMapping.keys());
+    const hasPropertyIdentity = providedHeaders.has('propertyName');
+    const hasContractIdentity = CONTRACT_MATCH_HEADERS.some((key) => providedHeaders.has(key));
+    if (!hasPropertyIdentity && !hasContractIdentity) throw new BadRequestException('integrated.error.missingMatchHeaders');
+    const rows = inputRows.map((source) => mapIntegratedRow(source, headerMapping));
+    const fileHash = createHash('sha256').update(`INTEGRATED:${body.fileHash || JSON.stringify(inputRows)}`).digest('hex');
     const duplicate = await this.prisma.propertyImportBatch.findUnique({ where: { fileHash } });
     if (duplicate) throw new ConflictException({ message: 'import.error.duplicateFile', batchId: duplicate.id });
 
@@ -219,11 +244,17 @@ export class ContractsService {
       where: { deletedAt: null },
       include: { rooms: { where: { deletedAt: null }, include: { contracts: { where: { deletedAt: null } } } } },
     });
-    const preview = rows.map((source, index) => this.previewRow(source, index + 2, properties));
+    const contracts = await this.prisma.contract.findMany({
+      where: { deletedAt: null },
+      include: { property: true, room: true },
+    });
+    const preview = rows.map((source, index) => hasPropertyIdentity
+      ? this.previewRow(source, index + 2, properties, providedHeaders)
+      : this.previewPartialContractRow(source, index + 2, contracts, providedHeaders));
     const batchNo = `ICI-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${fileHash.slice(0, 6).toUpperCase()}`;
     const batch = await this.prisma.$transaction(async (tx) => {
       const created = await tx.propertyImportBatch.create({
-        data: { batchNo, originalName: normalizeText(body.originalName) || 'integrated-import.xls', fileHash, importType: 'INTEGRATED', totalRows: preview.length, status: 'PREVIEW_READY', createdBy: actorUserId, mappingJson: H },
+        data: { batchNo, originalName: normalizeText(body.originalName) || 'integrated-import.xls', fileHash, importType: 'INTEGRATED', totalRows: preview.length, status: 'PREVIEW_READY', createdBy: actorUserId, mappingJson: Object.fromEntries(headerMapping) },
       });
       await tx.propertyImportRow.createMany({ data: preview.map((row) => ({ ...row, batchId: created.id })) });
       await tx.auditLog.create({ data: { actorUserId, action: 'integrated.import.upload', entityType: 'PropertyImportBatch', entityId: created.id, after: { batchNo, totalRows: preview.length } } });
@@ -296,18 +327,18 @@ export class ContractsService {
     return this.getImportBatch(batchId, { page: 1, pageSize: 50 });
   }
 
-  private previewRow(source: SourceRow, sourceRow: number, properties: any[]) {
+  private previewRow(source: SourceRow, sourceRow: number, properties: any[], providedHeaders: Set<IntegratedHeaderKey>) {
     const propertyName = normalizeText(source[H.propertyName]);
     const address = normalizeText(source[H.address]);
     const roomNumber = normalizeText(source[H.roomNumber]) || '0';
     const normalizedPropertyName = normalizeMatchText(propertyName);
     const normalizedAddress = normalizeAddress(address);
     const normalizedRoomNumber = normalizeMatchText(roomNumber);
-    const contractData = this.contractData(source);
-    if (!propertyName) return this.previewError(source, sourceRow, propertyName, address, roomNumber, 'import.error.propertyNameRequired');
+    const contractData = this.contractData(source, providedHeaders);
+    if (!propertyName) return this.previewError(source, sourceRow, propertyName, address, roomNumber, 'import.error.propertyNameRequired', contractData);
     const sameName = properties.filter((property) => (property.normalizedName || normalizeMatchText(property.name)) === normalizedPropertyName);
     const exact = sameName.find((property) => (property.normalizedAddress || normalizeAddress(property.address)) === normalizedAddress);
-    if (!exact && sameName.length) return this.previewError(source, sourceRow, propertyName, address, roomNumber, 'import.error.sameNameDifferentAddress');
+    if (!exact && sameName.length) return this.previewError(source, sourceRow, propertyName, address, roomNumber, 'import.error.sameNameDifferentAddress', contractData);
     const room = exact?.rooms.find((item: any) => (item.normalizedRoomNumber || normalizeMatchText(item.roomNumber)) === normalizedRoomNumber);
     let contractAction = contractData.hasContract ? 'CREATE_CONTRACT' : 'NO_CONTRACT';
     let contractId: string | null = null;
@@ -317,7 +348,7 @@ export class ContractsService {
       const exactContract = room.contracts.find((contract: any) => normalizeMatchText(contract.contractorName) === normalizeMatchText(contractData.contractorName) && iso(contract.startDate) === contractData.startDate && iso(contract.endDate) === contractData.endDate);
       if (exactContract) {
         contractId = exactContract.id;
-        if (sameMoney(exactContract.monthlyRent, contractData.monthlyRent) && sameMoney(exactContract.managementFee, contractData.managementFee)) {
+        if (!hasProvidedContractChanges(exactContract, contractData)) {
           contractAction = 'SKIP'; status = 'SKIPPED';
         } else {
           contractAction = 'UPDATE_CONTRACT'; status = 'CONFLICT'; contractConflictReason = 'integrated.error.existingContractDiffers';
@@ -336,11 +367,33 @@ export class ContractsService {
     };
   }
 
-  private previewError(source: SourceRow, sourceRow: number, propertyName: string, address: string, roomNumber: string, reason: string) {
-    return { sourceRow, sourceDataJson: source as Prisma.InputJsonObject, propertyName, normalizedPropertyName: normalizeMatchText(propertyName), roomNumber, normalizedRoomNumber: normalizeMatchText(roomNumber), postalCode: normalizePostalCode(source[H.postalCode]) || null, address: address || null, normalizedAddress: normalizeAddress(address) || null, detectedUnitType: detectUnitType(roomNumber), action: 'ERROR', status: 'ERROR', contractAction: 'SKIP', contractStatus: 'DRAFT', contractDataJson: this.contractData(source) as unknown as Prisma.InputJsonObject, errorMessage: reason, conflictReason: reason };
+  private previewPartialContractRow(source: SourceRow, sourceRow: number, contracts: any[], providedHeaders: Set<IntegratedHeaderKey>) {
+    const matches = matchExistingContracts(source, contracts, providedHeaders);
+    const contractData = this.contractData(source, providedHeaders);
+    const reason = matches.length ? 'integrated.error.contractMatchAmbiguous' : 'integrated.error.contractNotFound';
+    if (matches.length !== 1) {
+      const propertyName = normalizeText(source[H.propertyName]);
+      const roomNumber = normalizeText(source[H.roomNumber]);
+      return this.previewError(source, sourceRow, propertyName, normalizeText(source[H.address]), roomNumber, reason, contractData);
+    }
+    const contract = matches[0];
+    return {
+      sourceRow, sourceDataJson: source as Prisma.InputJsonObject,
+      propertyName: contract.property.name, normalizedPropertyName: contract.property.normalizedName || normalizeMatchText(contract.property.name),
+      roomNumber: contract.room.roomNumber, normalizedRoomNumber: contract.room.normalizedRoomNumber || normalizeMatchText(contract.room.roomNumber),
+      postalCode: contract.property.postalCode, address: contract.property.address, normalizedAddress: contract.property.normalizedAddress || normalizeAddress(contract.property.address),
+      detectedUnitType: contract.room.unitType, propertyId: contract.propertyId, roomId: contract.roomId,
+      action: 'UPDATE_ROOM', status: 'READY', contractId: contract.id, contractAction: 'UPDATE_CONTRACT', contractStatus: contract.status,
+      contractDataJson: { ...contractData, status: contract.status } as unknown as Prisma.InputJsonObject,
+      contractConflictReason: null, conflictReason: null, errorMessage: null,
+    };
   }
 
-  private contractData(source: SourceRow) {
+  private previewError(source: SourceRow, sourceRow: number, propertyName: string, address: string, roomNumber: string, reason: string, contractData = this.contractData(source)) {
+    return { sourceRow, sourceDataJson: source as Prisma.InputJsonObject, propertyName, normalizedPropertyName: normalizeMatchText(propertyName), roomNumber, normalizedRoomNumber: normalizeMatchText(roomNumber), postalCode: normalizePostalCode(source[H.postalCode]) || null, address: address || null, normalizedAddress: normalizeAddress(address) || null, detectedUnitType: detectUnitType(roomNumber), action: 'ERROR', status: 'ERROR', contractAction: 'SKIP', contractStatus: 'DRAFT', contractDataJson: contractData as unknown as Prisma.InputJsonObject, errorMessage: reason, conflictReason: reason };
+  }
+
+  private contractData(source: SourceRow, providedHeaders = new Set<IntegratedHeaderKey>(Object.keys(H) as IntegratedHeaderKey[])) {
     const contractorName = normalizeText(source[H.contractorName]);
     const startDate = iso(parseDate(source[H.startDate]));
     const endDate = iso(parseDate(source[H.endDate]));
@@ -354,6 +407,7 @@ export class ContractsService {
       charge('SECURITY_DEPOSIT', '敷金', source[H.deposit], source[H.depositMonths], 10), charge('KEY_MONEY', '礼金', source[H.keyMoney], source[H.keyMoneyMonths], 11),
     ].filter(Boolean);
     return {
+      _providedFields: contractProvidedFields(providedHeaders), _replaceCharges: hasProvidedChargeHeaders(providedHeaders),
       hasContract, contractorName: contractorName || null, contractorNameKana: normalizeText(source[H.payerNameKana]) || null,
       contractorType: normalizeText(source[H.contractorType]) || null, payerName: contractorName || null, payerNameKana: normalizeText(source[H.payerNameKana]) || null,
       bankSummaryName: normalizeText(source[H.bankSummaryName]) || null, bankStatementSummary: bankStatementSummary || null, startDate, endDate, paymentMethod: normalizeText(source[H.paymentMethod]) || null,
@@ -384,7 +438,7 @@ export class ContractsService {
       if (row.contractAction !== 'NO_CONTRACT') {
         let tenant = data.contractorName ? await tx.tenant.findFirst({ where: { name: data.contractorName } }) : null;
         if (!tenant && data.contractorName) tenant = await tx.tenant.create({ data: { name: data.contractorName, nameKana: data.contractorNameKana } });
-        const contractData = {
+        const fullContractData = {
           propertyId: property.id, roomId: room.id, tenantId: tenant?.id ?? null, contractorName: data.contractorName, contractorNameKana: data.contractorNameKana,
           contractorType: data.contractorType, payerName: data.payerName, payerNameKana: data.payerNameKana, bankSummaryName: data.bankSummaryName, bankStatementSummary: data.bankStatementSummary,
           startDate: parseDate(data.startDate), endDate: parseDate(data.endDate), paymentMethod: data.paymentMethod, paymentMonthType: data.paymentMonthType,
@@ -394,15 +448,19 @@ export class ContractsService {
           insuranceStartDate: parseDate(data.insuranceStartDate), insuranceEndDate: parseDate(data.insuranceEndDate), collectionAccount: data.collectionAccount, managementContractType: data.managementContractType,
           status: this.validateStatus(data.status), remark: data.remark, sourceDataJson: row.sourceDataJson, updatedBy: actorUserId,
         };
+        const updating = Boolean(row.contractAction === 'UPDATE_CONTRACT' && row.contractId);
+        const contractData = updating
+          ? pickProvidedContractData(fullContractData, data._providedFields, row.sourceDataJson, actorUserId)
+          : fullContractData;
         let contract;
-        if (row.contractAction === 'UPDATE_CONTRACT' && row.contractId) {
-          await tx.contractCharge.deleteMany({ where: { contractId: row.contractId } });
+        if (updating) {
+          if (data._replaceCharges) await tx.contractCharge.deleteMany({ where: { contractId: row.contractId } });
           contract = await tx.contract.update({ where: { id: row.contractId }, data: contractData });
         } else {
-          contract = await tx.contract.create({ data: { ...contractData, contractNumber: contractNumber(row), createdBy: actorUserId } });
+          contract = await tx.contract.create({ data: { ...fullContractData, contractNumber: contractNumber(row), createdBy: actorUserId } });
         }
         contractId = contract.id;
-        if (Array.isArray(data.charges) && data.charges.length) await tx.contractCharge.createMany({ data: data.charges.map((item: any) => ({ contractId: contract.id, chargeType: item.chargeType, itemName: item.itemName, amount: decimalOrNull(item.amount), monthCount: decimalOrNull(item.monthCount), sortOrder: item.sortOrder })) });
+        if ((!updating || data._replaceCharges) && Array.isArray(data.charges) && data.charges.length) await tx.contractCharge.createMany({ data: data.charges.map((item: any) => ({ contractId: contract.id, chargeType: item.chargeType, itemName: item.itemName, amount: decimalOrNull(item.amount), monthCount: decimalOrNull(item.monthCount), sortOrder: item.sortOrder })) });
         if (data.bankSummaryName) {
           const normalizedBankSummary = normalizeMatchText(data.bankSummaryName);
           const alias = await tx.contractPaymentAlias.findFirst({ where: { contractId: contract.id, normalizedBankSummary } });
@@ -490,6 +548,83 @@ export class ContractsService {
   private toContract(contract: any) {
     return { ...contract, startDate: iso(contract.startDate), endDate: iso(contract.endDate), insuranceStartDate: iso(contract.insuranceStartDate), insuranceEndDate: iso(contract.insuranceEndDate), monthlyRent: moneyString(contract.monthlyRent), managementFee: moneyString(contract.managementFee), deposit: moneyString(contract.deposit), keyMoney: moneyString(contract.keyMoney), guaranteeDeposit: moneyString(contract.guaranteeDeposit), guaranteeFee: moneyString(contract.guaranteeFee), keyReplacementFee: moneyString(contract.keyReplacementFee), renewalAdministrativeFee: moneyString(contract.renewalAdministrativeFee), insuranceFee: moneyString(contract.insuranceFee), propertyName: contract.property?.name, roomNumber: contract.room?.roomNumber };
   }
+}
+
+function normalizeIntegratedHeader(value: unknown) {
+  return normalizeText(value).normalize('NFKC').replace(/[\s　【】\[\]（）()]/g, '').toLocaleLowerCase('ja');
+}
+
+function resolveIntegratedHeaders(headers: string[]) {
+  const available = new Map(headers.map((header) => [normalizeIntegratedHeader(header), header]));
+  const mapping = new Map<IntegratedHeaderKey, string>();
+  for (const key of Object.keys(H) as IntegratedHeaderKey[]) {
+    const candidates = [H[key], ...(HEADER_ALIASES[key] ?? [])];
+    const matched = candidates.map(normalizeIntegratedHeader).map((candidate) => available.get(candidate)).find(Boolean);
+    if (matched) mapping.set(key, matched);
+  }
+  return mapping;
+}
+
+function mapIntegratedRow(source: SourceRow, mapping: Map<IntegratedHeaderKey, string>) {
+  const mapped: SourceRow = { ...source };
+  for (const [key, header] of mapping) mapped[H[key]] = source[header];
+  return mapped;
+}
+
+function matchExistingContracts(source: SourceRow, contracts: any[], providedHeaders: Set<IntegratedHeaderKey>) {
+  const contractNumberValue = normalizeText(source[H.contractNumber]);
+  if (providedHeaders.has('contractNumber') && contractNumberValue) return contracts.filter((contract) => normalizeText(contract.contractNumber) === contractNumberValue);
+  const externalContractIdValue = normalizeText(source[H.externalContractId]);
+  if (providedHeaders.has('externalContractId') && externalContractIdValue) return contracts.filter((contract) => normalizeText(contract.externalContractId) === externalContractIdValue);
+  const contractorNameValue = normalizeMatchText(source[H.contractorName]);
+  if (providedHeaders.has('contractorName') && contractorNameValue) return contracts.filter((contract) => normalizeMatchText(contract.contractorName) === contractorNameValue);
+  return [];
+}
+
+function contractProvidedFields(providedHeaders: Set<IntegratedHeaderKey>) {
+  const fieldsByHeader: Partial<Record<IntegratedHeaderKey, string[]>> = {
+    contractorName: ['contractorName', 'tenantId'], payerNameKana: ['payerNameKana'],
+    bankSummaryName: ['bankSummaryName'], bankStatementSummary: ['bankStatementSummary'], startDate: ['startDate'], endDate: ['endDate'],
+    contractorType: ['contractorType'], paymentMethod: ['paymentMethod'], paymentMonthType: ['paymentMonthType'], rent: ['monthlyRent'],
+    managementFee: ['managementFee'], deposit: ['deposit'], keyMoney: ['keyMoney'], guaranteeDeposit: ['guaranteeDeposit'], guaranteeFee: ['guaranteeFee'],
+    guaranteeCompanyName: ['guaranteeCompanyName'], guaranteeCompanyNameKana: ['guaranteeCompanyNameKana'], keyReplacementFee: ['keyReplacementFee'],
+    renewalFee: ['renewalAdministrativeFee'], insuranceName: ['insuranceName'], insuranceFee: ['insuranceFee'], insurancePeriod: ['insurancePeriod'],
+    insuranceStartDate: ['insuranceStartDate'], insuranceEndDate: ['insuranceEndDate'], collectionAccount: ['collectionAccount'],
+    managementContractType: ['managementContractType'], remark: ['remark'],
+  };
+  const fields = new Set<string>();
+  for (const header of providedHeaders) for (const field of fieldsByHeader[header] ?? []) fields.add(field);
+  if (providedHeaders.has('contractorName') && providedHeaders.has('startDate') && providedHeaders.has('rent')) fields.add('status');
+  return [...fields];
+}
+
+function hasProvidedChargeHeaders(providedHeaders: Set<IntegratedHeaderKey>) {
+  const chargeHeaders: IntegratedHeaderKey[] = ['monthlyName1', 'monthly1', 'monthlyName2', 'monthly2', 'monthlyName6', 'monthly6', 'initialName1', 'initial1', 'initialName6', 'depositMonths', 'keyMoneyMonths'];
+  return chargeHeaders.some((header) => providedHeaders.has(header));
+}
+
+function pickProvidedContractData(fullData: Record<string, unknown>, providedFields: unknown, sourceDataJson: unknown, actorUserId?: string) {
+  const update: Record<string, unknown> = { sourceDataJson, updatedBy: actorUserId };
+  for (const field of Array.isArray(providedFields) ? providedFields : []) {
+    if (typeof field === 'string' && field in fullData) update[field] = fullData[field];
+  }
+  return update;
+}
+
+function hasProvidedContractChanges(contract: Record<string, unknown>, data: Record<string, unknown>) {
+  const moneyFields = new Set(['monthlyRent', 'managementFee', 'deposit', 'keyMoney', 'guaranteeDeposit', 'guaranteeFee', 'keyReplacementFee', 'renewalAdministrativeFee', 'insuranceFee']);
+  const dateFields = new Set(['startDate', 'endDate', 'insuranceStartDate', 'insuranceEndDate']);
+  for (const field of Array.isArray(data._providedFields) ? data._providedFields : []) {
+    if (typeof field !== 'string' || field === 'tenantId') continue;
+    if (moneyFields.has(field)) {
+      if (!sameMoney(contract[field], data[field])) return true;
+    } else if (dateFields.has(field)) {
+      if (iso(contract[field]) !== iso(data[field])) return true;
+    } else if (normalizeText(contract[field]) !== normalizeText(data[field])) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function parseDate(value: unknown): Date | null {
