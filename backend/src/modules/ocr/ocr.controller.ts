@@ -68,18 +68,29 @@ export class OcrController {
 
   @Patch('tasks/:taskId/match-config')
   @RequirePermission('ocr:execute')
-  saveMatchConfig(@Param('taskId') taskId: string, @Body() body: { fields?: string[] }, @Req() request: Request) {
-    return this.ocrService.saveMatchConfig(taskId, body?.fields, this.actorUserId(request));
+  saveMatchConfig(@Param('taskId') taskId: string, @Body() body: { configuration?: unknown; fields?: string[] }, @Req() request: Request) {
+    return this.ocrService.saveMatchConfig(taskId, body?.configuration ?? body?.fields, this.actorUserId(request));
   }
 
   @Post('tasks/:taskId/match')
   @RequirePermission('ocr:execute')
   executeMatching(
     @Param('taskId') taskId: string,
-    @Body() body: { fields?: string[]; recordIds?: string[] },
+    @Body() body: { configuration?: unknown; fields?: string[]; recordIds?: string[] },
     @Req() request: Request,
   ) {
-    return this.ocrService.executeMatching(taskId, body?.fields, body?.recordIds, this.actorUserId(request));
+    return this.ocrService.executeMatching(taskId, body?.configuration ?? body?.fields, body?.recordIds, this.actorUserId(request));
+  }
+
+  @Patch('tasks/:taskId/records/:recordId')
+  @RequirePermission('ocr:execute')
+  updateRecordFields(
+    @Param('taskId') taskId: string,
+    @Param('recordId') recordId: string,
+    @Body() body: { actualMonth?: string | null },
+    @Req() request: Request,
+  ) {
+    return this.ocrService.updateRecordFields(taskId, recordId, body, this.actorUserId(request));
   }
 
   @Patch('tasks/:taskId/records/:recordId/review')

@@ -14,6 +14,19 @@ type WorkflowInput = {
   enabled?: boolean;
 };
 
+type OcrMatchRule = {
+  id: string;
+  systemField: string;
+  sourceField: string;
+  operator: string;
+  required: boolean;
+};
+
+type OcrMatchConfiguration = {
+  logicalOperator: 'AND' | 'OR';
+  rules: OcrMatchRule[];
+};
+
 @Injectable()
 export class OcrService {
   constructor(private readonly prisma: PrismaService) {}
@@ -170,7 +183,7 @@ export class OcrService {
         ...(storedResult || {}),
         records: normalizedRecords,
         summary: summarizeOcrRecords(normalizedRecords),
-        matchConfig: (storedResult as any)?.matchConfig || { fields: [] },
+        matchConfig: (storedResult as any)?.matchConfig || { logicalOperator: 'AND', rules: [] },
         matchHistory: Array.isArray((storedResult as any)?.matchHistory) ? (storedResult as any).matchHistory : [],
       };
       const pending = normalizedResult.summary.unmatched > 0;
@@ -188,13 +201,13 @@ export class OcrService {
     return task;
   }
 
-  async saveMatchConfig(taskId: string, fields: unknown, actorUserId?: string) {
+  async saveMatchConfig(taskId: string, configuration: unknown, actorUserId?: string) {
     const task = await this.getTask(taskId);
-    const selectedFields = this.validateMatchFields(fields);
+    const normalizedConfiguration = this.validateMatchConfiguration(configuration);
     const result = (task.resultJson || {}) as Record<string, any>;
     const normalizedResult = {
       ...result,
-      matchConfig: { fields: selectedFields, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
+      matchConfig: { ...normalizedConfiguration, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
     };
     return this.prisma.ocrTask.update({
       where: { taskId },
@@ -203,11 +216,11 @@ export class OcrService {
     });
   }
 
-  async executeMatching(taskId: string, fields: unknown, recordIds: unknown, actorUserId?: string) {
+  async executeMatching(taskId: string, configuration: unknown, recordIds: unknown, actorUserId?: string) {
     const task = await this.getTask(taskId);
     const result = (task.resultJson || {}) as Record<string, any>;
-    const selectedFields = this.validateMatchFields(
-      Array.isArray(fields) && fields.length ? fields : result.matchConfig?.fields,
+    const normalizedConfiguration = this.validateMatchConfiguration(
+      configuration && typeof configuration === 'object' ? configuration : result.matchConfig,
     );
     const selectedRecordIds = Array.isArray(recordIds)
       ? new Set(recordIds.map((value) => String(value)))
@@ -222,7 +235,7 @@ export class OcrService {
     if (!targetIndexes.length) throw new BadRequestException('没有需要执行匹配的剩余数据');
 
     const matchedTargets = await Promise.all(
-      targetIndexes.map(({ record }) => this.matchSystemData(record, selectedFields)),
+      targetIndexes.map(({ record }) => this.matchSystemData(record, normalizedConfiguration)),
     );
     targetIndexes.forEach(({ index }, targetIndex) => { records[index] = matchedTargets[targetIndex]; });
     const summary = summarizeOcrRecords(records);
@@ -230,7 +243,7 @@ export class OcrService {
     const historyEntry = {
       executedAt: new Date().toISOString(),
       executedBy: actorUserId || null,
-      fields: selectedFields,
+      configuration: normalizedConfiguration,
       requestedRecordIds: selectedRecordIds ? [...selectedRecordIds] : null,
       processed: matchedTargets.length,
       matched: runMatched,
@@ -240,7 +253,7 @@ export class OcrService {
       ...result,
       records,
       summary,
-      matchConfig: { fields: selectedFields, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
+      matchConfig: { ...normalizedConfiguration, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
       matchHistory: [...(Array.isArray(result.matchHistory) ? result.matchHistory : []), historyEntry].slice(-100),
     };
     const pending = summary.unmatched > 0;
@@ -387,6 +400,46 @@ export class OcrService {
     return updated;
   }
 
+  async updateRecordFields(
+    taskId: string,
+    recordId: string,
+    input: { actualMonth?: string | null },
+    actorUserId?: string,
+  ) {
+    const task = await this.getTask(taskId);
+    const result = (task.resultJson || {}) as Record<string, any>;
+    const records = Array.isArray(result.records) ? result.records.map((record: Record<string, any>) => ({ ...record })) : [];
+    const recordIndex = records.findIndex((record: Record<string, any>) => record._recordId === recordId);
+    if (recordIndex < 0) throw new NotFoundException('OCR 明细记录不存在');
+    const actualMonth = input.actualMonth === undefined || input.actualMonth === null
+      ? null
+      : String(input.actualMonth).trim() || null;
+    if (actualMonth && !/^\d{4}-(0[1-9]|1[0-2])$/.test(actualMonth)) {
+      throw new BadRequestException('实际月份格式必须为 YYYY-MM');
+    }
+    const before = records[recordIndex];
+    records[recordIndex] = { ...before, actual_month: actualMonth };
+    const normalizedResult = { ...result, records };
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.ocrTask.update({
+        where: { taskId },
+        data: { resultJson: normalizedResult, matchedResultJson: normalizedResult },
+        include: { workflow: true },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.ocr.actual-month.update',
+          entityType: 'OcrTaskRecord',
+          entityId: `${taskId}:${recordId}`,
+          before: { actualMonth: before.actual_month || null },
+          after: { actualMonth },
+        },
+      }),
+    ]);
+    return updated;
+  }
+
   async handleCallback(payload: any) {
     const callback = this.normalizeCallbackPayload(payload);
     const correlationId = callback?.sessionId || callback?.seesinId || callback?.taskId
@@ -410,7 +463,7 @@ export class OcrService {
     const normalizedResult = {
       records: parsedRecords,
       summary,
-      matchConfig: { fields: [] },
+      matchConfig: { logicalOperator: 'AND', rules: [] },
       matchHistory: [],
     };
 
@@ -450,7 +503,61 @@ export class OcrService {
     return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400);
   }
 
-  private async matchSystemData(record: Record<string, any>, fields: string[]) {
+  private async matchSystemData(record: Record<string, any>, configuration: OcrMatchConfiguration) {
+    const missingRules = configuration.rules.filter((rule) => rule.required && !this.recordValue(record, rule.sourceField));
+    if (missingRules.length) {
+      return {
+        ...record,
+        systemMatch: {
+          status: 'UNMATCHED',
+          matchMode: null,
+          reason: `回调数据缺少必填字段：${missingRules.map((rule) => rule.sourceField).join('、')}`,
+          matchingConfiguration: configuration,
+        },
+      };
+    }
+
+    const activeRules = configuration.rules.filter((rule) => this.recordValue(record, rule.sourceField));
+    const conditions = activeRules.map((rule) => this.buildSystemCondition(
+      rule.systemField,
+      this.recordValue(record, rule.sourceField),
+      rule.operator,
+    ));
+    if (!conditions.length) {
+      return { ...record, systemMatch: { status: 'UNMATCHED', matchMode: null, reason: '所选 JSON 字段没有可用于匹配的数据', matchingConfiguration: configuration } };
+    }
+    const contracts = await this.prisma.contract.findMany({
+      where: { deletedAt: null, [configuration.logicalOperator]: conditions },
+      include: { tenant: true, room: { include: { property: true } }, property: true },
+      take: 2,
+    });
+    if (contracts.length !== 1) {
+      return {
+        ...record,
+        systemMatch: {
+          status: contracts.length > 1 ? 'AMBIGUOUS' : 'UNMATCHED',
+          matchMode: null,
+          reason: contracts.length > 1 ? '匹配到多个系统合同，请手工选择' : '未找到满足所配置规则的系统合同',
+          matchingConfiguration: configuration,
+        },
+      };
+    }
+    const contract = contracts[0];
+    return {
+      ...record,
+      systemMatch: {
+        status: 'MATCHED', matchMode: 'AUTO', matchingConfiguration: configuration,
+        contractId: contract.id, contractNumber: contract.contractNumber,
+        tenantId: contract.tenantId, tenantName: contract.tenant?.name || contract.contractorName,
+        roomId: contract.roomId, roomNumber: contract.room.roomNumber,
+        propertyId: contract.propertyId, propertyName: contract.property.name,
+        bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+        reason: `按 ${activeRules.map((rule) => `${this.systemFieldLabel(rule.systemField)}←${rule.sourceField}`).join('、')} 自动匹配成功`,
+      },
+    };
+  }
+
+  private async matchSystemDataLegacy(record: Record<string, any>, fields: string[]) {
     const values = {
       partyName: this.first(record, 'tenantName', 'tenant_name', 'inflow_party', 'outflow_party', 'payerName', 'payer_name', 'ownerName', 'owner_name'),
       summary: this.first(record, 'bankStatementSummary', 'bank_statement_summary', 'summary', 'description', 'bankDescription', 'bank_description'),
@@ -533,6 +640,82 @@ export class OcrService {
         reason: `按 ${fields.map((field) => this.matchFieldLabel(field)).join('、')} 自动匹配成功`,
       },
     };
+  }
+
+  private validateMatchConfiguration(value: unknown): OcrMatchConfiguration {
+    const legacyMappings: Record<string, [string, string]> = {
+      partyName: ['contract.payerName', 'inflow_party'],
+      summary: ['contract.bankStatementSummary', 'summary'],
+      propertyName: ['property.name', 'property_name'],
+      roomNumber: ['room.roomNumber', 'room_number'],
+      contractNumber: ['contract.contractNumber', 'contract_number'],
+      amount: ['contract.monthlyRent', 'net_amount'],
+      date: ['contract.validDate', 'date'],
+    };
+    const supportedFields = new Set([
+      'contract.payerName', 'contract.contractorName', 'tenant.name',
+      'contract.bankStatementSummary', 'contract.bankSummaryName', 'property.name',
+      'room.roomNumber', 'contract.contractNumber', 'contract.monthlyRent', 'contract.validDate',
+    ]);
+    const supportedOperators = new Set(['equals', 'contains', 'normalized_equals', 'within_date_range']);
+    const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
+    const legacyFields = Array.isArray(value) ? value : Array.isArray(raw.fields) ? raw.fields : [];
+    const rawRules = Array.isArray(raw.rules)
+      ? raw.rules
+      : legacyFields.map((field: unknown) => {
+        const mapping = legacyMappings[String(field)];
+        return mapping ? { systemField: mapping[0], sourceField: mapping[1] } : null;
+      }).filter(Boolean);
+    const rules: OcrMatchRule[] = rawRules.map((rule: any, index: number) => ({
+      id: String(rule?.id || `rule-${index + 1}`),
+      systemField: String(rule?.systemField || ''),
+      sourceField: String(rule?.sourceField || '').trim(),
+      operator: supportedOperators.has(String(rule?.operator)) ? String(rule.operator) : 'equals',
+      required: rule?.required !== false,
+    })).filter((rule: OcrMatchRule) => supportedFields.has(rule.systemField) && Boolean(rule.sourceField));
+    if (!rules.length) throw new BadRequestException('执行匹配前，请至少配置一条有效的系统字段与 JSON 字段映射');
+    return { logicalOperator: raw.logicalOperator === 'OR' ? 'OR' : 'AND', rules };
+  }
+
+  private recordValue(record: Record<string, any>, path: string) {
+    const value = path.split('.').reduce<any>((current, key) => current?.[key], record);
+    return value === undefined || value === null || String(value).trim() === '' ? '' : value;
+  }
+
+  private buildSystemCondition(systemField: string, rawValue: any, operator: string): Record<string, any> {
+    const stringFilter = operator === 'contains'
+      ? { contains: String(rawValue).trim(), mode: 'insensitive' }
+      : { equals: String(rawValue).trim(), mode: 'insensitive' };
+    switch (systemField) {
+      case 'contract.payerName': return { payerName: stringFilter };
+      case 'contract.contractorName': return { contractorName: stringFilter };
+      case 'tenant.name': return { tenant: { name: stringFilter } };
+      case 'contract.bankStatementSummary': return { bankStatementSummary: stringFilter };
+      case 'contract.bankSummaryName': return { bankSummaryName: stringFilter };
+      case 'property.name': return { property: { name: stringFilter } };
+      case 'room.roomNumber': return { room: { roomNumber: stringFilter } };
+      case 'contract.contractNumber': return { contractNumber: stringFilter };
+      case 'contract.monthlyRent': {
+        const amount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
+        return Number.isFinite(amount) ? { monthlyRent: amount } : { id: '__invalid_amount__' };
+      }
+      case 'contract.validDate': {
+        const date = new Date(rawValue);
+        return Number.isNaN(date.getTime())
+          ? { id: '__invalid_date__' }
+          : { AND: [{ startDate: { lte: date } }, { OR: [{ endDate: null }, { endDate: { gte: date } }] }] };
+      }
+      default: return { id: '__unsupported_field__' };
+    }
+  }
+
+  private systemFieldLabel(field: string) {
+    return ({
+      'contract.payerName': '支付人', 'contract.contractorName': '契约者', 'tenant.name': '租客',
+      'contract.bankStatementSummary': '银行账单摘要', 'contract.bankSummaryName': '入金名义',
+      'property.name': '物件名称', 'room.roomNumber': '房间号', 'contract.contractNumber': '合同编号',
+      'contract.monthlyRent': '月租金额', 'contract.validDate': '合同有效日期',
+    } as Record<string, string>)[field] || field;
   }
 
   private validateMatchFields(fields: unknown): string[] {
