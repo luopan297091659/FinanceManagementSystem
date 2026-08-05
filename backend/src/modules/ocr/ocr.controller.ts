@@ -62,6 +62,21 @@ export class OcrController {
   @RequirePermission('reconciliation.ocr.view')
   getTask(@Param('taskId') taskId: string) { return this.ocrService.getTask(taskId); }
 
+  @Get('tasks/:taskId/match-candidates')
+  @RequirePermission('reconciliation.ocr.view')
+  matchCandidates(@Query('query') query?: string) { return this.ocrService.listMatchCandidates(query); }
+
+  @Patch('tasks/:taskId/records/:recordId/review')
+  @RequirePermission('ocr:execute')
+  reviewRecord(
+    @Param('taskId') taskId: string,
+    @Param('recordId') recordId: string,
+    @Body() body: { action?: string; contractId?: string; reason?: string },
+    @Req() request: Request,
+  ) {
+    return this.ocrService.reviewRecord(taskId, recordId, body, this.actorUserId(request));
+  }
+
   @Post('callback')
   receiveCallback(@Body() payload: unknown) { return this.ocrService.handleCallback(payload); }
 

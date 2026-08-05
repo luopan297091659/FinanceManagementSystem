@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
 import { preparePdfFilesForWebhook } from './image-to-pdf.util';
+import { extractOcrResultRecords, summarizeOcrRecords } from './ocr-result.util';
 
 type WorkflowInput = {
   name: string;
@@ -152,9 +153,149 @@ export class OcrService {
   }
 
   async getTask(taskId: string) {
-    const task = await this.prisma.ocrTask.findUnique({ where: { taskId }, include: { workflow: true } });
+    let task = await this.prisma.ocrTask.findUnique({ where: { taskId }, include: { workflow: true } });
     if (!task) throw new NotFoundException('OCR 任务不存在');
+    const storedResult = task.resultJson as { records?: Record<string, any>[] } | null;
+    const storedRecords = Array.isArray(storedResult?.records) ? storedResult.records : [];
+    const requiresNormalization = storedRecords.some((record) => (
+      !record?._recordId || typeof record?.records === 'string' || Array.isArray(record?.records)
+    ));
+    if (storedRecords.length && requiresNormalization) {
+      const rawRecords = extractOcrResultRecords({ records: storedRecords });
+      const matchedRecords = await Promise.all(rawRecords.map((record) => this.matchSystemData(record)));
+      const normalizedResult = { records: matchedRecords, summary: summarizeOcrRecords(matchedRecords) };
+      const pending = normalizedResult.summary.unmatched > 0;
+      task = await this.prisma.ocrTask.update({
+        where: { taskId },
+        data: {
+          resultJson: normalizedResult,
+          matchedResultJson: normalizedResult,
+          state: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
+          reviewStatus: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
+        },
+        include: { workflow: true },
+      });
+    }
     return task;
+  }
+
+  async listMatchCandidates(query = '') {
+    const search = query.trim();
+    const contracts = await this.prisma.contract.findMany({
+      where: {
+        deletedAt: null,
+        ...(search ? {
+          OR: [
+            { contractNumber: { contains: search, mode: 'insensitive' as const } },
+            { contractorName: { contains: search, mode: 'insensitive' as const } },
+            { payerName: { contains: search, mode: 'insensitive' as const } },
+            { bankSummaryName: { contains: search, mode: 'insensitive' as const } },
+            { bankStatementSummary: { contains: search, mode: 'insensitive' as const } },
+            { tenant: { name: { contains: search, mode: 'insensitive' as const } } },
+            { room: { roomNumber: { contains: search, mode: 'insensitive' as const } } },
+            { property: { name: { contains: search, mode: 'insensitive' as const } } },
+          ],
+        } : {}),
+      },
+      include: { tenant: true, room: { include: { property: true } }, property: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+    return contracts.map((contract) => ({
+      id: contract.id,
+      contractNumber: contract.contractNumber,
+      propertyId: contract.propertyId,
+      propertyName: contract.property.name,
+      roomId: contract.roomId,
+      roomNumber: contract.room.roomNumber,
+      tenantId: contract.tenantId,
+      tenantName: contract.tenant?.name,
+      contractorName: contract.contractorName,
+      payerName: contract.payerName,
+      bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+      status: contract.status,
+    }));
+  }
+
+  async reviewRecord(
+    taskId: string,
+    recordId: string,
+    input: { action?: string; contractId?: string; reason?: string },
+    actorUserId?: string,
+  ) {
+    const task = await this.getTask(taskId);
+    const result = task.resultJson as { records?: Record<string, any>[] } | null;
+    const records = Array.isArray(result?.records) ? result.records.map((record) => ({ ...record })) : [];
+    const recordIndex = records.findIndex((record) => record._recordId === recordId);
+    if (recordIndex < 0) throw new NotFoundException('OCR 明细记录不存在');
+
+    const before = records[recordIndex];
+    const action = String(input.action || 'MATCH').toUpperCase();
+    if (action === 'MANUAL_SYNC') {
+      records[recordIndex] = {
+        ...before,
+        systemMatch: {
+          ...(before.systemMatch || {}),
+          status: 'MANUAL_SYNC',
+          matchMode: 'MANUAL',
+          reason: input.reason?.trim() || '未能匹配系统数据，已标记为手工同步',
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: actorUserId || null,
+        },
+      };
+    } else {
+      if (!input.contractId) throw new BadRequestException('请选择需要匹配的系统合同');
+      const contract = await this.prisma.contract.findFirst({
+        where: { id: input.contractId, deletedAt: null },
+        include: { tenant: true, room: { include: { property: true } }, property: true },
+      });
+      if (!contract) throw new BadRequestException('选择的系统合同不存在或已删除');
+      records[recordIndex] = {
+        ...before,
+        systemMatch: {
+          status: 'MATCHED',
+          matchMode: 'MANUAL',
+          contractId: contract.id,
+          contractNumber: contract.contractNumber,
+          tenantId: contract.tenantId,
+          tenantName: contract.tenant?.name || contract.contractorName,
+          roomId: contract.roomId,
+          roomNumber: contract.room.roomNumber,
+          propertyId: contract.propertyId,
+          propertyName: contract.property.name,
+          bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+          reason: input.reason?.trim() || '已由操作员选择系统合同并完成匹配',
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: actorUserId || null,
+        },
+      };
+    }
+
+    const normalizedResult = { records, summary: summarizeOcrRecords(records) };
+    const pending = normalizedResult.summary.unmatched > 0;
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.ocrTask.update({
+        where: { taskId },
+        data: {
+          resultJson: normalizedResult,
+          matchedResultJson: normalizedResult,
+          state: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
+          reviewStatus: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
+        },
+        include: { workflow: true },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: action === 'MANUAL_SYNC' ? 'reconciliation.ocr.manual-sync' : 'reconciliation.ocr.manual-match',
+          entityType: 'OcrTaskRecord',
+          entityId: `${taskId}:${recordId}`,
+          before,
+          after: records[recordIndex],
+        },
+      }),
+    ]);
+    return updated;
   }
 
   async handleCallback(payload: any) {
@@ -167,13 +308,14 @@ export class OcrService {
     });
     if (!task) throw new NotFoundException('OCR 任务不存在');
 
-    const rawRecords = this.extractRecords(callback);
+    const rawRecords = extractOcrResultRecords(callback);
     const matchedRecords = await Promise.all(rawRecords.map((record) => this.matchSystemData(record)));
-    const unmatchedCount = matchedRecords.filter((record) => record.systemMatch.status !== 'MATCHED').length;
+    const summary = summarizeOcrRecords(matchedRecords);
+    const unmatchedCount = summary.unmatched;
     const callbackStatus = callback?.status || callback?.data?.status;
     const failed = ['FAILED', 'ERROR'].includes(String(callbackStatus || '').toUpperCase());
     const state = failed ? 'FAILED' : unmatchedCount ? 'REVIEW_REQUIRED' : 'COMPLETED';
-    const normalizedResult = { records: matchedRecords, summary: { total: matchedRecords.length, matched: matchedRecords.length - unmatchedCount, unmatched: unmatchedCount } };
+    const normalizedResult = { records: matchedRecords, summary };
 
     return this.prisma.ocrTask.update({
       where: { taskId: task.taskId },
@@ -211,13 +353,6 @@ export class OcrService {
     return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400);
   }
 
-  private extractRecords(payload: any): Record<string, any>[] {
-    const candidates = [payload?.records, payload?.results, payload?.data?.records, payload?.data?.results, payload?.data];
-    const records = candidates.find(Array.isArray);
-    if (records) return records.filter((item: unknown) => item && typeof item === 'object');
-    return payload && typeof payload === 'object' ? [payload] : [];
-  }
-
   private async matchSystemData(record: Record<string, any>) {
     const tenantName = this.first(record, 'tenantName', 'tenant_name', 'inflow_party', 'payerName', 'payer_name');
     const ownerName = this.first(record, 'ownerName', 'owner_name', 'owner', 'outflow_party');
@@ -245,6 +380,7 @@ export class OcrService {
       ...record,
       systemMatch: {
         status: supplied > 0 && uniqueMatches > 0 && !ambiguous ? 'MATCHED' : ambiguous ? 'AMBIGUOUS' : 'UNMATCHED',
+        matchMode: supplied > 0 && uniqueMatches > 0 && !ambiguous ? 'AUTO' : null,
         tenantId: tenants.length === 1 ? tenants[0].id : null,
         ownerId: owners.length === 1 ? owners[0].id : null,
         roomId: rooms.length === 1 ? rooms[0].id : null,

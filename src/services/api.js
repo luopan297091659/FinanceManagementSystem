@@ -517,6 +517,18 @@ export const api = {
     return request(`/ocr/tasks/${encodeURIComponent(taskId)}`);
   },
 
+  async listOcrMatchCandidates(taskId, query = '') {
+    const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : '';
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/match-candidates${params}`);
+  },
+
+  async reviewOcrRecord(taskId, recordId, payload) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/records/${encodeURIComponent(recordId)}/review`, {
+      method: 'PATCH',
+      body: payload,
+    });
+  },
+
   async listAdminTranslations(params = {}) {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
     return request(`/admin/i18n/translations${query ? `?${query}` : ''}`);
