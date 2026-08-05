@@ -522,6 +522,20 @@ export const api = {
     return request(`/ocr/tasks/${encodeURIComponent(taskId)}/match-candidates${params}`);
   },
 
+  async saveOcrMatchConfig(taskId, fields) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/match-config`, {
+      method: 'PATCH',
+      body: { fields },
+    });
+  },
+
+  async executeOcrMatching(taskId, fields, recordIds) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/match`, {
+      method: 'POST',
+      body: { fields, ...(recordIds ? { recordIds } : {}) },
+    });
+  },
+
   async reviewOcrRecord(taskId, recordId, payload) {
     return request(`/ocr/tasks/${encodeURIComponent(taskId)}/records/${encodeURIComponent(recordId)}/review`, {
       method: 'PATCH',

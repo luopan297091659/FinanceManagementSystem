@@ -162,8 +162,17 @@ export class OcrService {
     ));
     if (storedRecords.length && requiresNormalization) {
       const rawRecords = extractOcrResultRecords({ records: storedRecords });
-      const matchedRecords = await Promise.all(rawRecords.map((record) => this.matchSystemData(record)));
-      const normalizedResult = { records: matchedRecords, summary: summarizeOcrRecords(matchedRecords) };
+      const normalizedRecords = rawRecords.map((record) => record.systemMatch ? record : ({
+        ...record,
+        systemMatch: { status: 'PENDING', matchMode: null, reason: '已解析，等待配置匹配字段并执行匹配' },
+      }));
+      const normalizedResult = {
+        ...(storedResult || {}),
+        records: normalizedRecords,
+        summary: summarizeOcrRecords(normalizedRecords),
+        matchConfig: (storedResult as any)?.matchConfig || { fields: [] },
+        matchHistory: Array.isArray((storedResult as any)?.matchHistory) ? (storedResult as any).matchHistory : [],
+      };
       const pending = normalizedResult.summary.unmatched > 0;
       task = await this.prisma.ocrTask.update({
         where: { taskId },
@@ -177,6 +186,86 @@ export class OcrService {
       });
     }
     return task;
+  }
+
+  async saveMatchConfig(taskId: string, fields: unknown, actorUserId?: string) {
+    const task = await this.getTask(taskId);
+    const selectedFields = this.validateMatchFields(fields);
+    const result = (task.resultJson || {}) as Record<string, any>;
+    const normalizedResult = {
+      ...result,
+      matchConfig: { fields: selectedFields, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
+    };
+    return this.prisma.ocrTask.update({
+      where: { taskId },
+      data: { resultJson: normalizedResult, matchedResultJson: normalizedResult },
+      include: { workflow: true },
+    });
+  }
+
+  async executeMatching(taskId: string, fields: unknown, recordIds: unknown, actorUserId?: string) {
+    const task = await this.getTask(taskId);
+    const result = (task.resultJson || {}) as Record<string, any>;
+    const selectedFields = this.validateMatchFields(
+      Array.isArray(fields) && fields.length ? fields : result.matchConfig?.fields,
+    );
+    const selectedRecordIds = Array.isArray(recordIds)
+      ? new Set(recordIds.map((value) => String(value)))
+      : null;
+    const records = Array.isArray(result.records) ? result.records.map((record: Record<string, any>) => ({ ...record })) : [];
+    const targetIndexes = records
+      .map((record: Record<string, any>, index: number) => ({ record, index }))
+      .filter(({ record }) => (
+        !['MATCHED', 'MANUAL_SYNC'].includes(record.systemMatch?.status)
+        && (!selectedRecordIds || selectedRecordIds.has(String(record._recordId)))
+      ));
+    if (!targetIndexes.length) throw new BadRequestException('没有需要执行匹配的剩余数据');
+
+    const matchedTargets = await Promise.all(
+      targetIndexes.map(({ record }) => this.matchSystemData(record, selectedFields)),
+    );
+    targetIndexes.forEach(({ index }, targetIndex) => { records[index] = matchedTargets[targetIndex]; });
+    const summary = summarizeOcrRecords(records);
+    const runMatched = matchedTargets.filter((record) => record.systemMatch?.status === 'MATCHED').length;
+    const historyEntry = {
+      executedAt: new Date().toISOString(),
+      executedBy: actorUserId || null,
+      fields: selectedFields,
+      requestedRecordIds: selectedRecordIds ? [...selectedRecordIds] : null,
+      processed: matchedTargets.length,
+      matched: runMatched,
+      remaining: summary.unmatched,
+    };
+    const normalizedResult = {
+      ...result,
+      records,
+      summary,
+      matchConfig: { fields: selectedFields, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
+      matchHistory: [...(Array.isArray(result.matchHistory) ? result.matchHistory : []), historyEntry].slice(-100),
+    };
+    const pending = summary.unmatched > 0;
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.ocrTask.update({
+        where: { taskId },
+        data: {
+          resultJson: normalizedResult,
+          matchedResultJson: normalizedResult,
+          state: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
+          reviewStatus: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
+        },
+        include: { workflow: true },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.ocr.auto-match',
+          entityType: 'OcrTask',
+          entityId: taskId,
+          after: historyEntry,
+        },
+      }),
+    ]);
+    return updated;
   }
 
   async listMatchCandidates(query = '') {
@@ -271,7 +360,7 @@ export class OcrService {
       };
     }
 
-    const normalizedResult = { records, summary: summarizeOcrRecords(records) };
+    const normalizedResult = { ...(result || {}), records, summary: summarizeOcrRecords(records) };
     const pending = normalizedResult.summary.unmatched > 0;
     const [updated] = await this.prisma.$transaction([
       this.prisma.ocrTask.update({
@@ -309,13 +398,21 @@ export class OcrService {
     if (!task) throw new NotFoundException('OCR 任务不存在');
 
     const rawRecords = extractOcrResultRecords(callback);
-    const matchedRecords = await Promise.all(rawRecords.map((record) => this.matchSystemData(record)));
-    const summary = summarizeOcrRecords(matchedRecords);
+    const parsedRecords = rawRecords.map((record) => ({
+      ...record,
+      systemMatch: { status: 'PENDING', matchMode: null, reason: '已解析，等待配置匹配字段并执行匹配' },
+    }));
+    const summary = summarizeOcrRecords(parsedRecords);
     const unmatchedCount = summary.unmatched;
     const callbackStatus = callback?.status || callback?.data?.status;
     const failed = ['FAILED', 'ERROR'].includes(String(callbackStatus || '').toUpperCase());
     const state = failed ? 'FAILED' : unmatchedCount ? 'REVIEW_REQUIRED' : 'COMPLETED';
-    const normalizedResult = { records: matchedRecords, summary };
+    const normalizedResult = {
+      records: parsedRecords,
+      summary,
+      matchConfig: { fields: [] },
+      matchHistory: [],
+    };
 
     return this.prisma.ocrTask.update({
       where: { taskId: task.taskId },
@@ -353,43 +450,110 @@ export class OcrService {
     return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400);
   }
 
-  private async matchSystemData(record: Record<string, any>) {
-    const tenantName = this.first(record, 'tenantName', 'tenant_name', 'inflow_party', 'payerName', 'payer_name');
-    const ownerName = this.first(record, 'ownerName', 'owner_name', 'owner', 'outflow_party');
-    const roomNumber = this.first(record, 'roomNumber', 'room_number', 'room');
-    const contractNumber = this.first(record, 'contractNumber', 'contract_number', 'contractNo');
-    const propertyName = this.first(record, 'propertyName', 'property_name', 'buildingName');
-    const bankStatementSummary = this.first(record, 'bankStatementSummary', 'bank_statement_summary', 'summary', 'description', 'bankDescription', 'bank_description');
+  private async matchSystemData(record: Record<string, any>, fields: string[]) {
+    const values = {
+      partyName: this.first(record, 'tenantName', 'tenant_name', 'inflow_party', 'outflow_party', 'payerName', 'payer_name', 'ownerName', 'owner_name'),
+      summary: this.first(record, 'bankStatementSummary', 'bank_statement_summary', 'summary', 'description', 'bankDescription', 'bank_description'),
+      roomNumber: this.first(record, 'roomNumber', 'room_number', 'room'),
+      contractNumber: this.first(record, 'contractNumber', 'contract_number', 'contractNo'),
+      propertyName: this.first(record, 'propertyName', 'property_name', 'buildingName'),
+      amount: this.first(record, 'net_amount', 'document_amount', 'amount'),
+      date: this.first(record, 'date', 'transactionDate', 'transaction_date'),
+    };
+    const missingFields = fields.filter((field) => !values[field as keyof typeof values]);
+    if (missingFields.length) {
+      return {
+        ...record,
+        systemMatch: {
+          status: 'UNMATCHED',
+          matchMode: null,
+          reason: `缺少已配置的匹配字段：${missingFields.map((field) => this.matchFieldLabel(field)).join('、')}`,
+          matchingFields: fields,
+        },
+      };
+    }
 
-    const [tenants, owners, rooms, contracts] = await Promise.all([
-      tenantName ? this.prisma.tenant.findMany({ where: { name: { equals: tenantName, mode: 'insensitive' } }, take: 2 }) : [],
-      ownerName ? this.prisma.owner.findMany({ where: { name: { equals: ownerName, mode: 'insensitive' }, deletedAt: null }, take: 2 }) : [],
-      roomNumber ? this.prisma.room.findMany({ where: { roomNumber: { equals: roomNumber, mode: 'insensitive' }, deletedAt: null, ...(propertyName ? { property: { name: { equals: propertyName, mode: 'insensitive' } } } : {}) }, include: { property: true }, take: 2 }) : [],
-      contractNumber || bankStatementSummary ? this.prisma.contract.findMany({
-        where: contractNumber
-          ? { contractNumber: { equals: contractNumber, mode: 'insensitive' }, deletedAt: null }
-          : { bankStatementSummary: { equals: bankStatementSummary, mode: 'insensitive' }, deletedAt: null },
-        take: 2,
-      }) : [],
-    ]);
+    const conditions: Record<string, any>[] = [];
+    if (fields.includes('partyName')) conditions.push({ OR: [
+      { payerName: { equals: values.partyName, mode: 'insensitive' } },
+      { contractorName: { equals: values.partyName, mode: 'insensitive' } },
+      { bankSummaryName: { equals: values.partyName, mode: 'insensitive' } },
+      { tenant: { name: { equals: values.partyName, mode: 'insensitive' } } },
+    ] });
+    if (fields.includes('summary')) conditions.push({ OR: [
+      { bankStatementSummary: { equals: values.summary, mode: 'insensitive' } },
+      { bankSummaryName: { equals: values.summary, mode: 'insensitive' } },
+    ] });
+    if (fields.includes('roomNumber')) conditions.push({ room: { roomNumber: { equals: values.roomNumber, mode: 'insensitive' } } });
+    if (fields.includes('contractNumber')) conditions.push({ contractNumber: { equals: values.contractNumber, mode: 'insensitive' } });
+    if (fields.includes('propertyName')) conditions.push({ property: { name: { equals: values.propertyName, mode: 'insensitive' } } });
+    if (fields.includes('amount')) conditions.push({ monthlyRent: values.amount });
+    if (fields.includes('date')) {
+      const transactionDate = new Date(values.date);
+      if (Number.isNaN(transactionDate.getTime())) {
+        return { ...record, systemMatch: { status: 'UNMATCHED', matchMode: null, reason: '匹配日期格式无效', matchingFields: fields } };
+      }
+      conditions.push({ startDate: { lte: transactionDate } });
+      conditions.push({ OR: [{ endDate: null }, { endDate: { gte: transactionDate } }] });
+    }
 
-    const supplied = [tenantName, ownerName, roomNumber, contractNumber, bankStatementSummary].filter(Boolean).length;
-    const uniqueMatches = [tenants, owners, rooms, contracts].filter((items) => items.length === 1).length;
-    const ambiguous = [tenants, owners, rooms, contracts].some((items) => items.length > 1);
+    const contracts = await this.prisma.contract.findMany({
+      where: { deletedAt: null, AND: conditions },
+      include: { tenant: true, room: { include: { property: true } }, property: true },
+      take: 2,
+    });
+    if (contracts.length !== 1) {
+      return {
+        ...record,
+        systemMatch: {
+          status: contracts.length > 1 ? 'AMBIGUOUS' : 'UNMATCHED',
+          matchMode: null,
+          reason: contracts.length > 1 ? '匹配到多个系统合同，请手工选择' : '未找到满足所选字段的系统合同',
+          matchingFields: fields,
+        },
+      };
+    }
+
+    const contract = contracts[0];
     return {
       ...record,
       systemMatch: {
-        status: supplied > 0 && uniqueMatches > 0 && !ambiguous ? 'MATCHED' : ambiguous ? 'AMBIGUOUS' : 'UNMATCHED',
-        matchMode: supplied > 0 && uniqueMatches > 0 && !ambiguous ? 'AUTO' : null,
-        tenantId: tenants.length === 1 ? tenants[0].id : null,
-        ownerId: owners.length === 1 ? owners[0].id : null,
-        roomId: rooms.length === 1 ? rooms[0].id : null,
-        propertyId: rooms.length === 1 ? rooms[0].propertyId : null,
-        contractId: contracts.length === 1 ? contracts[0].id : null,
-        bankStatementSummary: contracts.length === 1 ? contracts[0].bankStatementSummary : null,
-        reason: ambiguous ? '存在多个系统候选项，请人工确认' : uniqueMatches ? `已匹配 ${uniqueMatches} 类系统数据` : '未找到系统侧匹配数据',
+        status: 'MATCHED',
+        matchMode: 'AUTO',
+        matchingFields: fields,
+        contractId: contract.id,
+        contractNumber: contract.contractNumber,
+        tenantId: contract.tenantId,
+        tenantName: contract.tenant?.name || contract.contractorName,
+        roomId: contract.roomId,
+        roomNumber: contract.room.roomNumber,
+        propertyId: contract.propertyId,
+        propertyName: contract.property.name,
+        bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+        reason: `按 ${fields.map((field) => this.matchFieldLabel(field)).join('、')} 自动匹配成功`,
       },
     };
+  }
+
+  private validateMatchFields(fields: unknown): string[] {
+    const supported = new Set(['partyName', 'summary', 'propertyName', 'roomNumber', 'contractNumber', 'amount', 'date']);
+    const selected = Array.isArray(fields)
+      ? [...new Set(fields.map((field) => String(field)).filter((field) => supported.has(field)))]
+      : [];
+    if (!selected.length) throw new BadRequestException('执行匹配前，请至少配置一个有效的匹配字段');
+    return selected;
+  }
+
+  private matchFieldLabel(field: string) {
+    return ({
+      partyName: '对方名称',
+      summary: '银行摘要',
+      propertyName: '物件名称',
+      roomNumber: '房间号',
+      contractNumber: '合同编号',
+      amount: '金额/月租',
+      date: '交易日期/合同有效期',
+    } as Record<string, string>)[field] || field;
   }
 
   private first(record: Record<string, any>, ...keys: string[]) {
