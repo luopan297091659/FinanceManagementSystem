@@ -16,6 +16,7 @@
     "backend:prisma:migrate": "npm --prefix backend run prisma:migrate",
     "backend:prisma:deploy": "npm --prefix backend run prisma:deploy",
     "backend:db:check": "npm --prefix backend run db:check",
+    "deploy:backend": "node scripts/deploy-backend.cjs",
     "pm2:start": "pm2 start ecosystem.config.cjs",
     "pm2:restart": "pm2 restart finance-management",
     "pm2:logs": "pm2 logs finance-management"
