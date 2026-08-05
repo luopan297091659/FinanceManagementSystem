@@ -224,15 +224,21 @@ export class OcrService {
     const roomNumber = this.first(record, 'roomNumber', 'room_number', 'room');
     const contractNumber = this.first(record, 'contractNumber', 'contract_number', 'contractNo');
     const propertyName = this.first(record, 'propertyName', 'property_name', 'buildingName');
+    const bankStatementSummary = this.first(record, 'bankStatementSummary', 'bank_statement_summary', 'summary', 'description', 'bankDescription', 'bank_description');
 
     const [tenants, owners, rooms, contracts] = await Promise.all([
       tenantName ? this.prisma.tenant.findMany({ where: { name: { equals: tenantName, mode: 'insensitive' } }, take: 2 }) : [],
       ownerName ? this.prisma.owner.findMany({ where: { name: { equals: ownerName, mode: 'insensitive' }, deletedAt: null }, take: 2 }) : [],
       roomNumber ? this.prisma.room.findMany({ where: { roomNumber: { equals: roomNumber, mode: 'insensitive' }, deletedAt: null, ...(propertyName ? { property: { name: { equals: propertyName, mode: 'insensitive' } } } : {}) }, include: { property: true }, take: 2 }) : [],
-      contractNumber ? this.prisma.contract.findMany({ where: { contractNumber: { equals: contractNumber, mode: 'insensitive' }, deletedAt: null }, take: 2 }) : [],
+      contractNumber || bankStatementSummary ? this.prisma.contract.findMany({
+        where: contractNumber
+          ? { contractNumber: { equals: contractNumber, mode: 'insensitive' }, deletedAt: null }
+          : { bankStatementSummary: { equals: bankStatementSummary, mode: 'insensitive' }, deletedAt: null },
+        take: 2,
+      }) : [],
     ]);
 
-    const supplied = [tenantName, ownerName, roomNumber, contractNumber].filter(Boolean).length;
+    const supplied = [tenantName, ownerName, roomNumber, contractNumber, bankStatementSummary].filter(Boolean).length;
     const uniqueMatches = [tenants, owners, rooms, contracts].filter((items) => items.length === 1).length;
     const ambiguous = [tenants, owners, rooms, contracts].some((items) => items.length > 1);
     return {
@@ -244,6 +250,7 @@ export class OcrService {
         roomId: rooms.length === 1 ? rooms[0].id : null,
         propertyId: rooms.length === 1 ? rooms[0].propertyId : null,
         contractId: contracts.length === 1 ? contracts[0].id : null,
+        bankStatementSummary: contracts.length === 1 ? contracts[0].bankStatementSummary : null,
         reason: ambiguous ? '存在多个系统候选项，请人工确认' : uniqueMatches ? `已匹配 ${uniqueMatches} 类系统数据` : '未找到系统侧匹配数据',
       },
     };

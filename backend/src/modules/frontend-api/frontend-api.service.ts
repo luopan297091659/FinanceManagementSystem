@@ -68,6 +68,7 @@ export class FrontendApiService {
       roomTenants: [],
       roomOwners: [],
       feeItems: [],
+      contracts: [],
       transactions: [],
       documents: [],
       knowledgeDocuments: [],
@@ -81,6 +82,7 @@ export class FrontendApiService {
     let roomTenants: any[] = [];
     let roomOwners: any[] = [];
     let feeItems: any[] = [];
+    let contracts: any[] = [];
     let transactions: any[] = [];
     let documents: any[] = [];
     let knowledgeDocuments: any[] = [];
@@ -102,20 +104,30 @@ export class FrontendApiService {
         roomTenants,
         roomOwners,
         feeItems,
+        contracts,
         transactions,
         documents,
         knowledgeDocuments,
       ] = await Promise.all([
         loadPropertyHierarchy ? this.prisma.project.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
         loadPropertyHierarchy ? this.prisma.property.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
-        loadPropertyData ? this.prisma.room.findMany({ include: { property: true }, orderBy: [{ propertyId: 'asc' }, { roomNumber: 'asc' }] }) : Promise.resolve([]),
+        loadPropertyData ? this.prisma.room.findMany({ include: { property: { include: { project: true } } }, orderBy: [{ propertyId: 'asc' }, { roomNumber: 'asc' }] }) : Promise.resolve([]),
         loadCustomers ? this.prisma.tenant.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
         loadCustomers ? this.prisma.owner.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
         loadCustomers ? this.prisma.roomTenant.findMany({ orderBy: { startDate: 'desc' } }) : Promise.resolve([]),
         loadCustomers ? this.prisma.roomOwner.findMany({ orderBy: { startDate: 'desc' } }) : Promise.resolve([]),
         loadFinance ? this.prisma.feeItem.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }) : Promise.resolve([]),
+        loadFinance ? this.prisma.contract.findMany({
+          where: { deletedAt: null },
+          select: { id: true, roomId: true, contractNumber: true, contractorName: true, status: true },
+          orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        }) : Promise.resolve([]),
         loadFinance ? this.prisma.transaction.findMany({
-          include: { details: true },
+          include: {
+            details: true,
+            room: { include: { property: { include: { project: true } } } },
+            contract: { select: { id: true, contractNumber: true } },
+          },
           orderBy: [{ date: 'desc' }, { id: 'desc' }],
         }) : Promise.resolve([]),
         loadKnowledge ? this.prisma.document.findMany({ orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
@@ -132,6 +144,7 @@ export class FrontendApiService {
         roomTenants = [];
         roomOwners = [];
         feeItems = [];
+        contracts = [];
         transactions = [];
         documents = [];
         knowledgeDocuments = [];
@@ -171,6 +184,9 @@ export class FrontendApiService {
         id: room.id,
         projectId: room.property.projectId,
         buildingId: room.propertyId,
+        projectName: room.property.project?.name,
+        buildingName: room.property.name,
+        address: room.property.address,
         roomCode: room.roomCode,
         currentContractId: room.currentContractId,
         houseNumber: room.houseNumber,
@@ -244,16 +260,32 @@ export class FrontendApiService {
         sortOrder: item.sortOrder,
         enabled: item.enabled,
       })),
+      contracts: contracts.map((contract) => ({
+        id: contract.id,
+        roomId: contract.roomId,
+        contractNumber: contract.contractNumber,
+        contractorName: contract.contractorName,
+        status: contract.status,
+      })),
       transactions: transactions.map((transaction) => ({
         id: transaction.id,
         type: toFrontendTransactionType(transaction.type),
         roomId: transaction.roomId,
+        contractId: transaction.contractId ?? transaction.room?.currentContractId,
+        projectName: transaction.room?.property?.project?.name,
+        buildingName: transaction.room?.property?.name,
+        address: transaction.room?.property?.address,
+        roomNumber: transaction.room?.roomNumber ?? transaction.room?.displayName,
+        contractNumber: transaction.contract?.contractNumber ?? contracts.find((contract) => contract.id === transaction.room?.currentContractId)?.contractNumber,
         date: dateToIsoDate(transaction.date) ?? '',
         sequenceNo: transaction.sequenceNo,
         fileType: transaction.fileType,
         counterparty: transaction.counterparty,
         counterpartyRaw: transaction.counterpartyRaw,
         contentSummary: transaction.contentSummary,
+        transactionCategory: transaction.transactionCategory,
+        financialInstitutionName: transaction.financialInstitutionName,
+        bankBranchName: transaction.bankBranchName,
         fileAmount: decimalToString(transaction.fileAmount),
         transferFeeAmount: decimalToString(transaction.transferFeeAmount),
         statisticalAmount: decimalToString(transaction.statisticalAmount),
@@ -264,6 +296,10 @@ export class FrontendApiService {
         confirmationStatus: transaction.confirmationStatus,
         totalAmount: decimalToString(transaction.totalAmount),
         note: transaction.note,
+        manuallyReconciled: transaction.manuallyReconciled,
+        reconciledByUserId: transaction.reconciledByUserId,
+        reconciledByName: transaction.reconciledByName,
+        reconciledAt: transaction.reconciledAt?.toISOString() ?? null,
         details: transaction.details.map((detail: any) => ({
           feeItemId: detail.feeItemId,
           value:
@@ -750,12 +786,16 @@ export class FrontendApiService {
     return {
       type: toPrismaTransactionType(dto.type),
       room: dto.roomId ? { connect: { id: dto.roomId } } : undefined,
+      contract: dto.contractId ? { connect: { id: dto.contractId } } : undefined,
       date: new Date(dto.date),
       sequenceNo: dto.sequenceNo,
       fileType: dto.fileType,
       counterparty: dto.counterparty,
       counterpartyRaw: dto.counterpartyRaw,
       contentSummary: dto.contentSummary,
+      transactionCategory: dto.transactionCategory,
+      financialInstitutionName: dto.financialInstitutionName,
+      bankBranchName: dto.bankBranchName,
       fileAmount: dto.fileAmount ? toDecimal(dto.fileAmount) : undefined,
       transferFeeAmount: dto.transferFeeAmount ? toDecimal(dto.transferFeeAmount) : undefined,
       statisticalAmount: dto.statisticalAmount ? toDecimal(dto.statisticalAmount) : undefined,
@@ -780,12 +820,16 @@ export class FrontendApiService {
     return {
       type: toPrismaTransactionType(dto.type),
       room: dto.roomId ? { connect: { id: dto.roomId } } : { disconnect: true },
+      contract: dto.contractId ? { connect: { id: dto.contractId } } : { disconnect: true },
       date: new Date(dto.date),
       sequenceNo: dto.sequenceNo,
       fileType: dto.fileType,
       counterparty: dto.counterparty,
       counterpartyRaw: dto.counterpartyRaw,
       contentSummary: dto.contentSummary,
+      transactionCategory: dto.transactionCategory,
+      financialInstitutionName: dto.financialInstitutionName,
+      bankBranchName: dto.bankBranchName,
       fileAmount: dto.fileAmount ? toDecimal(dto.fileAmount) : null,
       transferFeeAmount: dto.transferFeeAmount ? toDecimal(dto.transferFeeAmount) : toDecimal(0),
       statisticalAmount: dto.statisticalAmount ? toDecimal(dto.statisticalAmount) : null,

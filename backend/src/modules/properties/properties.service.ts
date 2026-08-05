@@ -30,7 +30,7 @@ export class PropertiesService {
           property: { include: { project: true } },
           contracts: {
             where: { deletedAt: null },
-            select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, status: true, startDate: true },
+            select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, bankStatementSummary: true, status: true, startDate: true },
             orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
           },
         },
@@ -67,7 +67,7 @@ export class PropertiesService {
         property: { include: { project: true } },
         contracts: {
           where: { deletedAt: null },
-          select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, status: true, startDate: true },
+          select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, bankStatementSummary: true, status: true, startDate: true },
           orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
         },
       },

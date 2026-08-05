@@ -623,6 +623,7 @@ model Contract {
   payerName             String?
   payerNameKana         String?
   bankSummaryName       String?
+  bankStatementSummary  String?
   startDate             DateTime?
   endDate               DateTime?
   paymentMethod         String?
@@ -667,6 +668,7 @@ model Contract {
   charges               ContractCharge[]
   importRows            PropertyImportRow[]
   reconciliationRecords ReconciliationRecord[]
+  transactions          Transaction[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
@@ -675,6 +677,7 @@ model Contract {
   @@index([tenantId])
   @@index([nextDueDate])
   @@index([bankSummaryName])
+  @@index([bankStatementSummary])
   @@index([startDate, endDate])
   @@index([deletedAt])
 }
@@ -753,12 +756,17 @@ model Transaction {
   type               TransactionType
   roomId             String?
   room               Room?                 @relation(fields: [roomId], references: [id])
+  contractId         String?
+  contract           Contract?             @relation(fields: [contractId], references: [id])
   date               DateTime
   sequenceNo         Int?
   fileType           String?
   counterparty       String?
   counterpartyRaw    String?
   contentSummary     String?
+  transactionCategory String?
+  financialInstitutionName String?
+  bankBranchName     String?
   fileAmount         Decimal?              @db.Decimal(18, 2)
   transferFeeAmount  Decimal               @default(0) @db.Decimal(18, 2)
   statisticalAmount  Decimal?              @db.Decimal(18, 2)
@@ -769,6 +777,10 @@ model Transaction {
   confirmationStatus ConfirmationStatus    @default(PENDING)
   totalAmount        Decimal               @default(0) @db.Decimal(18, 2)
   note               String?
+  manuallyReconciled Boolean               @default(false)
+  reconciledByUserId String?
+  reconciledByName   String?
+  reconciledAt       DateTime?
   details            TransactionDetail[]
   bankMatches        ReconciliationMatch[]
   anomalies          Anomaly[]
@@ -777,6 +789,8 @@ model Transaction {
   updatedAt          DateTime              @updatedAt
 
   @@index([roomId, date])
+  @@index([contractId, date])
+  @@index([manuallyReconciled, reconciledAt])
   @@index([type, date])
   @@index([processingStatus, confirmationStatus])
 }
@@ -803,6 +817,9 @@ model BankTransaction {
   direction             BankTransactionDirection
   amount                Decimal                  @db.Decimal(18, 2)
   description           String?
+  transactionCategory   String?
+  financialInstitutionName String?
+  branchName            String?
   rawPayload            Json?
   reconciliationStatus  ReconciliationStatus     @default(UNMATCHED)
   matches               ReconciliationMatch[]
@@ -968,6 +985,7 @@ model ReconciliationRecord {
   sourceDataJson            Json
   transactionDate           DateTime?
   depositAmount             Decimal?                        @db.Decimal(18, 2)
+  withdrawalAmount          Decimal?                        @db.Decimal(18, 2)
   originalBankSummary       String?
   normalizedBankSummary     String?
   registeredBankSummaryName String?
@@ -992,6 +1010,8 @@ model ReconciliationRecord {
   bankTransactionId         String?
   bankTransaction           BankTransaction?                @relation(fields: [bankTransactionId], references: [id])
   transactionCategory       String?
+  financialInstitutionName  String?
+  bankBranchName            String?
   feeType                   String?
   remark                    String?
   recordHash                String

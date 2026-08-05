@@ -22,6 +22,10 @@ export class CreateTransactionDto {
 
   @IsOptional()
   @IsString()
+  contractId?: string;
+
+  @IsOptional()
+  @IsString()
   counterparty?: string;
 
   @IsOptional()
@@ -40,6 +44,18 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsString()
   contentSummary?: string;
+
+  @IsOptional()
+  @IsString()
+  transactionCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  financialInstitutionName?: string;
+
+  @IsOptional()
+  @IsString()
+  bankBranchName?: string;
 
   @IsOptional()
   @IsString()

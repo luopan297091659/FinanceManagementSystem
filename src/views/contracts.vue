@@ -56,6 +56,7 @@
           <div><span>{{ labels.contractorType }}</span><strong>{{ detail.contractorType || "" }}</strong></div>
           <div><span>{{ labels.payerKana }}</span><strong>{{ detail.payerNameKana || "" }}</strong></div>
           <div><span>{{ labels.bankSummary }}</span><strong>{{ detail.bankSummaryName || "" }}</strong></div>
+          <div><span>{{ labels.bankStatementSummary }}</span><strong>{{ detail.bankStatementSummary || "" }}</strong></div>
           <div><span>{{ labels.period }}</span><strong>{{ compact(detail.startDate, detail.endDate, " ～ ") }}</strong></div>
           <div><span>{{ labels.status }}</span><strong>{{ statusLabel(detail.status) }}</strong></div>
           <div><span>{{ labels.paymentMethod }}</span><strong>{{ compact(detail.paymentMethod, detail.paymentMonthType) }}</strong></div>
@@ -90,6 +91,7 @@
           <label><span>{{ labels.payerName }}</span><input v-model="editForm.payerName" /></label>
           <label><span>{{ labels.payerKana }}</span><input v-model="editForm.payerNameKana" /></label>
           <label><span>{{ labels.bankSummary }}</span><input v-model="editForm.bankSummaryName" /></label>
+          <label><span>{{ labels.bankStatementSummary }}</span><input v-model="editForm.bankStatementSummary" /></label>
           <label><span>{{ labels.status }}</span><select v-model="editForm.status"><option v-for="status in statusOptions" :key="status" :value="status">{{ statusLabel(status) }}</option></select></label>
           <label><span>{{ labels.startDate }}</span><input v-model="editForm.startDate" type="date" /></label>
           <label><span>{{ labels.endDate }}</span><input v-model="editForm.endDate" type="date" /></label>
@@ -187,6 +189,7 @@ const contractColumns = ref([
   { key: "payerName", labelKey: "payerName", visible: false },
   { key: "payerNameKana", labelKey: "payerKana", visible: false },
   { key: "bankSummaryName", labelKey: "bankSummary", visible: true },
+  { key: "bankStatementSummary", labelKey: "bankStatementSummary", visible: true },
   { key: "startDate", labelKey: "startDate", visible: true },
   { key: "endDate", labelKey: "endDate", visible: true },
   { key: "paymentMethod", labelKey: "paymentMethod", visible: false },
@@ -242,7 +245,7 @@ watch(roomSearch, () => {
   roomSearchTimer = setTimeout(loadRoomOptions, 250);
 });
 
-const editableContractFields = ["id", "roomId", "contractNumber", "contractorName", "contractorNameKana", "contractorType", "payerName", "payerNameKana", "bankSummaryName", "status", "startDate", "endDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "paymentMethod", "paymentMonthType", "guaranteeDeposit", "guaranteeCompanyName", "guaranteeCompanyNameKana", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceName", "insuranceFee", "insurancePeriod", "insuranceStartDate", "insuranceEndDate", "collectionAccount", "managementContractType", "remark"];
+const editableContractFields = ["id", "roomId", "contractNumber", "contractorName", "contractorNameKana", "contractorType", "payerName", "payerNameKana", "bankSummaryName", "bankStatementSummary", "status", "startDate", "endDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "paymentMethod", "paymentMonthType", "guaranteeDeposit", "guaranteeCompanyName", "guaranteeCompanyNameKana", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceName", "insuranceFee", "insurancePeriod", "insuranceStartDate", "insuranceEndDate", "collectionAccount", "managementContractType", "remark"];
 const blankContractForm = () => Object.fromEntries(editableContractFields.map((key) => [key, key === "status" ? "DRAFT" : ""]));
 const moneyColumnKeys = new Set(["monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
 
@@ -254,7 +257,7 @@ function getContractColumnValue(contract, key) {
 }
 
 function resetContractColumns() {
-  const defaults = new Set(["propertyRoom", "contractNumber", "contractorName", "bankSummaryName", "startDate", "endDate", "monthlyRent", "managementFee", "status"]);
+  const defaults = new Set(["propertyRoom", "contractNumber", "contractorName", "bankSummaryName", "bankStatementSummary", "startDate", "endDate", "monthlyRent", "managementFee", "status"]);
   contractColumns.value.forEach((column) => { column.visible = defaults.has(column.key); });
 }
 

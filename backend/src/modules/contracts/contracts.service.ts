@@ -8,7 +8,7 @@ type SourceRow = Record<string, unknown>;
 
 const H = {
   propertyName: '【物件情報】物件名', roomNumber: '【基本情報】部屋番号', postalCode: '【物件情報】郵便番号', address: '【物件情報】住所',
-  contractorName: '【契約者】氏名/名称', payerNameKana: '【契約者】振込名義人カナ1', bankSummaryName: '銀行摘要名義',
+  contractorName: '【契約者】氏名/名称', payerNameKana: '【契約者】振込名義人カナ1', bankSummaryName: '銀行摘要名義', bankStatementSummary: '銀行明細摘要',
   monthlyName1: 'その他月次費用：項目名', monthly1: 'その他月次費用', monthlyName2: 'その他月次費用２：項目名', monthly2: 'その他月次費用２',
   startDate: '契約開始日', endDate: '契約満了日', contractorType: '【契約者】個人法人区分', paymentMethod: '賃料等支払方法', paymentMonthType: '賃料等支払月区分',
   rent: '賃料', managementFee: '管理費・共益費', deposit: '敷金', keyMoney: '礼金', guaranteeDeposit: '保証金', guaranteeFee: '保証料',
@@ -345,7 +345,8 @@ export class ContractsService {
     const startDate = iso(parseDate(source[H.startDate]));
     const endDate = iso(parseDate(source[H.endDate]));
     const monthlyRent = moneyString(source[H.rent]);
-    const hasContract = Boolean(contractorName || startDate || endDate || monthlyRent !== null || normalizeText(source[H.bankSummaryName]) || normalizeText(source[H.paymentMethod]));
+    const bankStatementSummary = normalizeText(source[H.bankStatementSummary]) || normalizeText(source['银行账单摘要']);
+    const hasContract = Boolean(contractorName || startDate || endDate || monthlyRent !== null || normalizeText(source[H.bankSummaryName]) || bankStatementSummary || normalizeText(source[H.paymentMethod]));
     const valid = Boolean(contractorName && startDate && monthlyRent !== null);
     const charges = [
       charge('MONTHLY_OTHER', source[H.monthlyName1], source[H.monthly1], null, 1), charge('MONTHLY_OTHER', source[H.monthlyName2], source[H.monthly2], null, 2), charge('MONTHLY_OTHER', source[H.monthlyName6], source[H.monthly6], null, 6),
@@ -355,7 +356,7 @@ export class ContractsService {
     return {
       hasContract, contractorName: contractorName || null, contractorNameKana: normalizeText(source[H.payerNameKana]) || null,
       contractorType: normalizeText(source[H.contractorType]) || null, payerName: contractorName || null, payerNameKana: normalizeText(source[H.payerNameKana]) || null,
-      bankSummaryName: normalizeText(source[H.bankSummaryName]) || null, startDate, endDate, paymentMethod: normalizeText(source[H.paymentMethod]) || null,
+      bankSummaryName: normalizeText(source[H.bankSummaryName]) || null, bankStatementSummary: bankStatementSummary || null, startDate, endDate, paymentMethod: normalizeText(source[H.paymentMethod]) || null,
       paymentMonthType: normalizeText(source[H.paymentMonthType]) || null, monthlyRent, managementFee: moneyString(source[H.managementFee]), deposit: moneyString(source[H.deposit]), keyMoney: moneyString(source[H.keyMoney]),
       guaranteeDeposit: moneyString(source[H.guaranteeDeposit]), guaranteeFee: moneyString(source[H.guaranteeFee]), guaranteeCompanyName: normalizeText(source[H.guaranteeCompanyName]) || null,
       guaranteeCompanyNameKana: normalizeText(source[H.guaranteeCompanyNameKana]) || null, keyReplacementFee: moneyString(source[H.keyReplacementFee]), renewalAdministrativeFee: moneyString(source[H.renewalFee]),
@@ -385,7 +386,7 @@ export class ContractsService {
         if (!tenant && data.contractorName) tenant = await tx.tenant.create({ data: { name: data.contractorName, nameKana: data.contractorNameKana } });
         const contractData = {
           propertyId: property.id, roomId: room.id, tenantId: tenant?.id ?? null, contractorName: data.contractorName, contractorNameKana: data.contractorNameKana,
-          contractorType: data.contractorType, payerName: data.payerName, payerNameKana: data.payerNameKana, bankSummaryName: data.bankSummaryName,
+          contractorType: data.contractorType, payerName: data.payerName, payerNameKana: data.payerNameKana, bankSummaryName: data.bankSummaryName, bankStatementSummary: data.bankStatementSummary,
           startDate: parseDate(data.startDate), endDate: parseDate(data.endDate), paymentMethod: data.paymentMethod, paymentMonthType: data.paymentMonthType,
           monthlyRent: decimalOrNull(data.monthlyRent), managementFee: decimalOrNull(data.managementFee), deposit: decimalOrNull(data.deposit), keyMoney: decimalOrNull(data.keyMoney),
           guaranteeDeposit: decimalOrNull(data.guaranteeDeposit), guaranteeFee: decimalOrNull(data.guaranteeFee), keyReplacementFee: decimalOrNull(data.keyReplacementFee), renewalAdministrativeFee: decimalOrNull(data.renewalAdministrativeFee),
@@ -423,7 +424,7 @@ export class ContractsService {
   }
 
   private applyEditableFields(data: Record<string, unknown>, body: Record<string, unknown>) {
-    const textFields = ['contractorName', 'contractorNameKana', 'contractorType', 'payerName', 'payerNameKana', 'bankSummaryName', 'paymentMethod', 'paymentMonthType', 'guaranteeCompanyName', 'guaranteeCompanyNameKana', 'insuranceName', 'insurancePeriod', 'collectionAccount', 'managementContractType', 'remark'] as const;
+    const textFields = ['contractorName', 'contractorNameKana', 'contractorType', 'payerName', 'payerNameKana', 'bankSummaryName', 'bankStatementSummary', 'paymentMethod', 'paymentMonthType', 'guaranteeCompanyName', 'guaranteeCompanyNameKana', 'insuranceName', 'insurancePeriod', 'collectionAccount', 'managementContractType', 'remark'] as const;
     for (const key of textFields) if (body[key] !== undefined) data[key] = normalizeText(body[key]) || null;
     for (const key of ['startDate', 'endDate', 'insuranceStartDate', 'insuranceEndDate'] as const) {
       if (body[key] !== undefined) data[key] = parseDate(body[key]);
@@ -445,6 +446,7 @@ export class ContractsService {
         { payerName: { contains: value, mode: 'insensitive' } },
         { payerNameKana: { contains: value, mode: 'insensitive' } },
         { bankSummaryName: { contains: value, mode: 'insensitive' } },
+        { bankStatementSummary: { contains: value, mode: 'insensitive' } },
         { room: { roomNumber: { contains: value, mode: 'insensitive' } } },
         { property: { name: { contains: value, mode: 'insensitive' } } },
       ] } : {}),

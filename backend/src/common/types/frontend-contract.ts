@@ -34,6 +34,9 @@ export interface FrontendRoom {
   id: string;
   projectId?: string | null;
   buildingId: string;
+  projectName?: string | null;
+  buildingName?: string | null;
+  address?: string | null;
   roomCode?: string | null;
   currentContractId?: string | null;
   houseNumber?: string | null;
@@ -117,12 +120,21 @@ export interface FrontendTransaction {
   id: string;
   type: FrontendTransactionType;
   roomId?: string | null;
+  contractId?: string | null;
+  projectName?: string | null;
+  buildingName?: string | null;
+  address?: string | null;
+  roomNumber?: string | null;
+  contractNumber?: string | null;
   date: string;
   sequenceNo?: number | null;
   fileType?: string | null;
   counterparty?: string | null;
   counterpartyRaw?: string | null;
   contentSummary?: string | null;
+  transactionCategory?: string | null;
+  financialInstitutionName?: string | null;
+  bankBranchName?: string | null;
   fileAmount?: string | null;
   transferFeeAmount?: string | null;
   statisticalAmount?: string | null;
@@ -133,7 +145,19 @@ export interface FrontendTransaction {
   confirmationStatus: string;
   totalAmount?: string | null;
   note?: string | null;
+  manuallyReconciled?: boolean;
+  reconciledByUserId?: string | null;
+  reconciledByName?: string | null;
+  reconciledAt?: string | null;
   details: FrontendTransactionDetail[];
+}
+
+export interface FrontendContractSummary {
+  id: string;
+  roomId: string;
+  contractNumber?: string | null;
+  contractorName?: string | null;
+  status: string;
 }
 
 export interface FrontendDocument {
@@ -161,6 +185,7 @@ export interface FrontendBootstrap {
   roomTenants: FrontendRoomTenant[];
   roomOwners: FrontendRoomOwner[];
   feeItems: FrontendFeeItem[];
+  contracts: FrontendContractSummary[];
   transactions: FrontendTransaction[];
   documents: FrontendDocument[];
   knowledgeDocuments: FrontendKnowledgeDocument[];

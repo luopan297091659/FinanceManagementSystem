@@ -23,23 +23,48 @@
             </td>
             <td class="index-cell">{{ index + 1 }}</td>
             <td v-for="column in visibleColumns" :key="column.key">
-              <template v-if="column.key === 'description'">
-                <strong>{{ item.description || labels.noDescription }}</strong>
+              <template v-if="column.key === 'date'">
                 <p>{{ item.occurredAt || "-" }}</p>
               </template>
-              <template v-else-if="column.key === 'amount'">
+              <template v-else-if="column.key === 'category'">
                 <span class="status-pill" :class="item.kind">{{ item.kind === "income" ? labels.income : labels.expense }}</span>
-                <p>{{ Number(item.amount || 0).toLocaleString() }}</p>
+                <p>¥{{ Number(item.amount || 0).toLocaleString() }}</p>
               </template>
-              <template v-else-if="column.key === 'room'">
-                <p>{{ item.roomLabel || "-" }}</p>
+              <template v-else-if="column.key === 'projectBuilding'">
+                <p>{{ join(item.projectName, item.buildingName) || "-" }}</p>
               </template>
-              <template v-else-if="column.key === 'status'">
-                <span class="status-pill neutral">{{ processingLabel(item.processingStatus) }}</span>
-                <p>{{ confirmationLabel(item.confirmationStatus) }}</p>
+              <template v-else-if="column.key === 'address'">
+                <p>{{ item.address || "-" }}</p>
               </template>
-              <template v-else-if="column.key === 'customer'">
-                <p>{{ item.customerName || "-" }}</p>
+              <template v-else-if="column.key === 'propertyRoom'">
+                <a v-if="item.roomId" class="table-link-button" :href="roomHref(item.roomId)" target="_blank" rel="noopener">{{ join(item.buildingName, item.roomNumber) || labels.openRoom }}</a>
+                <span v-else>-</span>
+              </template>
+              <template v-else-if="column.key === 'summary'">
+                <strong>{{ item.description || labels.noDescription }}</strong>
+              </template>
+              <template v-else-if="column.key === 'contract'">
+                <a v-if="item.contractId" class="table-link-button" :href="contractHref(item.contractId)" target="_blank" rel="noopener">{{ item.contractNumber || item.contractId }}</a>
+                <span v-else>-</span>
+              </template>
+              <template v-else-if="column.key === 'transactionCategory'">
+                <p>{{ item.transactionCategory || "-" }}</p>
+              </template>
+              <template v-else-if="column.key === 'bank'">
+                <p>{{ join(item.financialInstitutionName, item.bankBranchName) || "-" }}</p>
+              </template>
+              <template v-else-if="column.key === 'remark'">
+                <p>{{ item.remark || "-" }}</p>
+              </template>
+              <template v-else-if="column.key === 'manualReconciliation'">
+                <span class="status-pill neutral">{{ item.manuallyReconciled ? labels.yes : labels.no }}</span>
+              </template>
+              <template v-else-if="column.key === 'reconciler'">
+                <p>{{ item.reconciledByName || "-" }}</p>
+                <small v-if="item.reconciledAt">{{ formatDateTime(item.reconciledAt) }}</small>
+              </template>
+              <template v-else>
+                <p>{{ item[column.key] || "-" }}</p>
               </template>
             </td>
             <td class="actions-cell">
@@ -118,4 +143,11 @@ const confirmationLabel = (status) =>
     CONFIRMED: props.labels.confirmed,
     REJECTED: props.labels.rejected,
   })[status] || status;
+
+const join = (...values) => values.filter(Boolean).join(" / ");
+const appBase = String(import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const linkedPath = (path) => `${appBase}${path}` || path;
+const roomHref = (roomId) => `${linkedPath("/resources")}?roomId=${encodeURIComponent(roomId)}`;
+const contractHref = (contractId) => `${linkedPath("/contracts")}?contractId=${encodeURIComponent(contractId)}`;
+const formatDateTime = (value) => new Date(value).toLocaleString();
 </script>

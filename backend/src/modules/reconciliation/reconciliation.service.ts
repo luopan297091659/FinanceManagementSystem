@@ -35,7 +35,11 @@ type ManualMatchDto = {
   payerName?: string;
   normalizedBankSummary?: string;
   depositAmount?: string;
+  withdrawalAmount?: string;
   transactionDate?: string;
+  transactionCategory?: string;
+  financialInstitutionName?: string;
+  bankBranchName?: string;
   paymentMonth?: string;
   remark?: string;
   reason?: string;
@@ -44,7 +48,11 @@ type ManualMatchDto = {
 type UpdateRecordDto = Partial<{
   transactionDate: string;
   depositAmount: string;
+  withdrawalAmount: string;
   normalizedBankSummary: string;
+  transactionCategory: string;
+  financialInstitutionName: string;
+  bankBranchName: string;
   contractorId: string;
   contractorName: string;
   payerId: string;
@@ -60,6 +68,8 @@ type ExtractedBankStatementRow = {
   withdrawalAmount: number | null;
   depositAmount: number | null;
   transactionType: string | null;
+  financialInstitutionName: string | null;
+  branchName: string | null;
   bankDescription: string | null;
   remarks: string | null;
   confidence: number;
@@ -87,6 +97,7 @@ const RECONCILIATION_FIELD_METADATA = [
       ['contract.contractorName', '契約者', 'string', true, false],
       ['contract.tenantName', '入居者名', 'string', true, false],
       ['contract.bankSummaryName', '銀行摘要名義', 'string', true, false],
+      ['contract.bankStatementSummary', '銀行明細摘要', 'string', true, false],
       ['contract.monthlyRent', '賃料', 'currency', true, true],
       ['contract.managementFee', '管理費', 'currency', true, true],
       ['contract.deposit', '敷金', 'currency', true, true],
@@ -104,6 +115,10 @@ const RECONCILIATION_FIELD_METADATA = [
       ['transaction.paymentDate', '入金日', 'date', true, false],
       ['transaction.paymentMonth', '入金月', 'month', true, false],
       ['transaction.feeType', '費目', 'string', true, false],
+      ['transaction.transactionCategory', '取引区分', 'string', true, false],
+      ['transaction.financialInstitutionName', '金融機関名', 'string', true, false],
+      ['transaction.bankBranchName', '支店名', 'string', true, false],
+      ['transaction.contentSummary', '摘要', 'string', true, false],
       ['transaction.status', '支払状態', 'string', false, false],
       ['transaction.remark', '備考', 'string', true, false],
     ],
@@ -377,7 +392,7 @@ export class ReconciliationService implements OnModuleInit {
         'Preserve source order and Japanese text. Never invent missing values; use null.',
         'Keep withdrawal and deposit amounts separate. Amounts must be numbers without currency symbols or commas.',
         'Dates must be YYYY-MM-DD when confidently known, otherwise null.',
-        'Return only one valid JSON object with a rows array. Each row must contain sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, bankDescription, remarks, and confidence.',
+        'Return only one valid JSON object with a rows array. Each row must contain sourcePageNumber, sourceRowNumber, transactionDate, withdrawalAmount, depositAmount, transactionType, financialInstitutionName, branchName, bankDescription, remarks, and confidence.',
       ].join(' ');
       let outputText: string;
       try {
@@ -420,6 +435,8 @@ export class ReconciliationService implements OnModuleInit {
         withdrawalAmount: row.withdrawalAmount,
         depositAmount: row.depositAmount,
         transactionType: row.transactionType,
+        financialInstitutionName: row.financialInstitutionName,
+        branchName: row.branchName,
         summary: row.bankDescription,
         normalizedBankSummary: row.bankDescription,
         remarks: row.remarks,
@@ -693,11 +710,13 @@ export class ReconciliationService implements OnModuleInit {
               withdrawalAmount: nullableNumber,
               depositAmount: nullableNumber,
               transactionType: nullableString,
+              financialInstitutionName: nullableString,
+              branchName: nullableString,
               bankDescription: nullableString,
               remarks: nullableString,
               confidence: { type: 'number', minimum: 0, maximum: 1 },
             },
-            required: ['sourcePageNumber', 'sourceRowNumber', 'transactionDate', 'withdrawalAmount', 'depositAmount', 'transactionType', 'bankDescription', 'remarks', 'confidence'],
+            required: ['sourcePageNumber', 'sourceRowNumber', 'transactionDate', 'withdrawalAmount', 'depositAmount', 'transactionType', 'financialInstitutionName', 'branchName', 'bankDescription', 'remarks', 'confidence'],
             additionalProperties: false,
           },
         },
@@ -876,6 +895,8 @@ export class ReconciliationService implements OnModuleInit {
         withdrawalAmount: numberOrNull(pick('withdrawalAmount', 'withdrawal_amount', 'withdrawal', '出金額', '支払金額', '引出金額')),
         depositAmount: numberOrNull(pick('depositAmount', 'deposit_amount', 'deposit', '入金額', '預り金額', 'お預り金額')),
         transactionType: this.sanitizeOptionalText(pick('transactionType', 'transaction_type', 'type', '取引種別', '区分')),
+        financialInstitutionName: this.sanitizeOptionalText(pick('financialInstitutionName', 'financial_institution_name', 'bankName', 'bank_name', '金融機関名', '銀行名')),
+        branchName: this.sanitizeOptionalText(pick('branchName', 'branch_name', '支店名', '支店')),
         bankDescription: this.sanitizeOptionalText(pick('bankDescription', 'bank_description', 'description', 'summary', '摘要', '摘要名', 'お取引内容')),
         remarks: this.sanitizeOptionalText(pick('remarks', 'remark', 'notes', 'note', 'rawText', '備考')),
         confidence: Math.min(1, Math.max(0, numberOrNull(pick('confidence', 'score', '信頼度')) ?? 0)),
@@ -894,6 +915,8 @@ export class ReconciliationService implements OnModuleInit {
       'Withdrawal Amount': row.withdrawalAmount,
       'Deposit Amount': row.depositAmount,
       'Transaction Type': safeText(row.transactionType),
+      'Financial Institution Name': safeText(row.financialInstitutionName),
+      'Branch Name': safeText(row.branchName),
       'Bank Description': safeText(row.bankDescription),
       Remarks: safeText(row.remarks),
       'OCR Confidence': row.confidence,
@@ -1201,6 +1224,7 @@ export class ReconciliationService implements OnModuleInit {
               sourceDataJson: row as Prisma.InputJsonObject,
               transactionDate: normalized.transactionDate,
               depositAmount: normalized.depositAmount,
+              withdrawalAmount: normalized.withdrawalAmount,
               originalBankSummary: normalized.originalBankSummary,
               normalizedBankSummary: normalized.normalizedBankSummary,
               propertyId: relations.propertyId,
@@ -1209,6 +1233,9 @@ export class ReconciliationService implements OnModuleInit {
               contractorName: normalized.contractorName,
               payerName: normalized.payerName,
               paymentMonth: normalized.paymentMonth,
+              transactionCategory: normalized.transactionCategory,
+              financialInstitutionName: normalized.financialInstitutionName,
+              bankBranchName: normalized.bankBranchName,
               matchStatus: 'UNMATCHED',
               matchingRulesJson: matchingRules,
               remark: normalized.remark,
@@ -1280,7 +1307,11 @@ export class ReconciliationService implements OnModuleInit {
     const data: Prisma.ReconciliationRecordUpdateInput = {};
     if (dto.transactionDate !== undefined) data.transactionDate = dto.transactionDate ? new Date(dto.transactionDate) : null;
     if (dto.depositAmount !== undefined) data.depositAmount = dto.depositAmount ? new Prisma.Decimal(dto.depositAmount) : null;
+    if (dto.withdrawalAmount !== undefined) data.withdrawalAmount = dto.withdrawalAmount ? new Prisma.Decimal(dto.withdrawalAmount) : null;
     if (dto.normalizedBankSummary !== undefined) data.normalizedBankSummary = normalizeBankSummary(dto.normalizedBankSummary);
+    if (dto.transactionCategory !== undefined) data.transactionCategory = dto.transactionCategory || null;
+    if (dto.financialInstitutionName !== undefined) data.financialInstitutionName = dto.financialInstitutionName || null;
+    if (dto.bankBranchName !== undefined) data.bankBranchName = dto.bankBranchName || null;
     if (dto.contractorId !== undefined) data.contractorId = dto.contractorId || null;
     if (dto.contractorName !== undefined) data.contractorName = dto.contractorName || null;
     if (dto.payerId !== undefined) data.payerId = dto.payerId || null;
@@ -1349,8 +1380,12 @@ export class ReconciliationService implements OnModuleInit {
           payerId: dto.payerId || contract.tenantId,
           payerName,
           normalizedBankSummary,
-          depositAmount: dto.depositAmount ? new Prisma.Decimal(dto.depositAmount) : record.depositAmount,
+          depositAmount: dto.depositAmount !== undefined ? (dto.depositAmount ? new Prisma.Decimal(dto.depositAmount) : null) : record.depositAmount,
+          withdrawalAmount: dto.withdrawalAmount !== undefined ? (dto.withdrawalAmount ? new Prisma.Decimal(dto.withdrawalAmount) : null) : record.withdrawalAmount,
           transactionDate: dto.transactionDate ? new Date(dto.transactionDate) : record.transactionDate,
+          transactionCategory: dto.transactionCategory ?? record.transactionCategory,
+          financialInstitutionName: dto.financialInstitutionName ?? record.financialInstitutionName,
+          bankBranchName: dto.bankBranchName ?? record.bankBranchName,
           paymentMonth: dto.paymentMonth ?? record.paymentMonth,
           matchMode: 'MANUAL',
           matchScore: null,
@@ -1460,6 +1495,9 @@ export class ReconciliationService implements OnModuleInit {
       include: { contract: { include: { tenant: true } } },
     });
     if (!records.length) throw new BadRequestException('No matched records to submit');
+    const reconciler = actorUserId
+      ? await this.prisma.user.findUnique({ where: { id: actorUserId }, select: { id: true, name: true, username: true } })
+      : null;
 
     await this.prisma.$transaction(async (tx) => {
       for (const record of records) {
@@ -1471,32 +1509,45 @@ export class ReconciliationService implements OnModuleInit {
           },
         });
         if (duplicate) throw new BadRequestException(`Duplicate bank record blocked: ${record.recordHash}`);
-        if (!record.contractId || !record.roomId || !record.transactionDate || !record.depositAmount) {
+        const amount = record.depositAmount ?? record.withdrawalAmount;
+        const isWithdrawal = record.withdrawalAmount != null && record.depositAmount == null;
+        if (!record.contractId || !record.roomId || !record.transactionDate || !amount) {
           throw new BadRequestException(`Record ${record.id} is missing required submission fields`);
         }
 
         const bankTransaction = await tx.bankTransaction.create({
           data: {
             bookedAt: record.transactionDate,
-            direction: 'CREDIT',
-            amount: record.depositAmount,
+            direction: isWithdrawal ? 'DEBIT' : 'CREDIT',
+            amount,
             description: record.originalBankSummary,
+            transactionCategory: record.transactionCategory,
+            financialInstitutionName: record.financialInstitutionName,
+            branchName: record.bankBranchName,
             rawPayload: record.sourceDataJson as Prisma.InputJsonValue,
             reconciliationStatus: 'MATCHED',
           },
         });
         const transaction = await tx.transaction.create({
           data: {
-            type: 'INCOME',
+            type: isWithdrawal ? 'EXPENSE' : 'INCOME',
             roomId: record.roomId,
+            contractId: record.contractId,
             date: record.transactionDate,
             counterparty: record.payerName ?? record.contract?.payerName ?? record.contract?.contractorName ?? record.contract?.tenant?.name,
             counterpartyRaw: record.originalBankSummary,
-            contentSummary: record.normalizedBankSummary,
-            fileAmount: record.depositAmount,
-            statisticalAmount: record.depositAmount,
-            totalAmount: record.depositAmount,
+            contentSummary: record.originalBankSummary ?? record.normalizedBankSummary,
+            transactionCategory: record.transactionCategory,
+            financialInstitutionName: record.financialInstitutionName,
+            bankBranchName: record.bankBranchName,
+            fileAmount: amount,
+            statisticalAmount: amount,
+            totalAmount: amount,
             note: record.remark,
+            manuallyReconciled: record.matchMode === 'MANUAL',
+            reconciledByUserId: actorUserId,
+            reconciledByName: reconciler?.name || reconciler?.username,
+            reconciledAt: new Date(),
             processingStatus: 'INCLUDED',
             confirmationStatus: 'CONFIRMED',
           },
@@ -1689,7 +1740,7 @@ export class ReconciliationService implements OnModuleInit {
     const validAliases = useSummary ? aliases.filter(
       (alias) =>
         (!useDate || this.isContractValid(alias.contract, record.transactionDate)) &&
-        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.originalBankSummary, alias.payerName, alias.contract.bankSummaryName, alias.contract.payerName, alias.contract.contractorName, alias.contract.tenant?.name]),
+        this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [alias.normalizedBankSummary, alias.originalBankSummary, alias.payerName, alias.contract.bankSummaryName, alias.contract.bankStatementSummary, alias.contract.payerName, alias.contract.contractorName, alias.contract.tenant?.name]),
     ) : [];
 
     const validCandidates = validAliases.length
@@ -1701,7 +1752,7 @@ export class ReconciliationService implements OnModuleInit {
           .filter(
             (contract) =>
               (!useDate || this.isContractValid(contract, record.transactionDate)) &&
-              (!useSummary || this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.bankSummaryName, contract.payerName, contract.contractorName, contract.tenant?.name])) &&
+              (!useSummary || this.summaryMatchesAnyContractParty(record.normalizedBankSummary, [contract.bankSummaryName, contract.bankStatementSummary, contract.payerName, contract.contractorName, contract.tenant?.name])) &&
               (!useAmount || (contract.monthlyRent != null && record.depositAmount != null && new Prisma.Decimal(record.depositAmount).equals(contract.monthlyRent))),
           )
           .map((contract) => ({
@@ -1795,8 +1846,14 @@ export class ReconciliationService implements OnModuleInit {
       'ご依頼人名',
     ]);
     const normalizedBankSummary = normalizeBankSummary(this.pick(row, ['normalizedBankSummary']) || originalBankSummary);
-    const transactionDate = this.parseDate(this.pick(row, ['transactionDate', 'date', 'Deposit Date', '取引日', '入金日', '日期']));
-    const depositAmount = this.parseAmount(this.pick(row, ['depositAmount', 'amount', 'Bank Deposit Amount', '入金額', '銀行入金額', '入金金额', '金额']));
+    const transactionDate = this.parseDate(this.pick(row, ['transactionDate', 'date', 'Transaction Date', 'Deposit Date', '取引日', '入金日', '勘定日', '日期']));
+    const depositAmount = this.parseAmount(this.pick(row, ['depositAmount', 'Deposit Amount', 'Bank Deposit Amount', '入金額', '銀行入金額', '入金金额']));
+    const withdrawalAmount = this.parseAmount(this.pick(row, ['withdrawalAmount', 'Withdrawal Amount', 'Bank Withdrawal Amount', '出金額', '銀行出金額', '出金金额']));
+    const fallbackAmount = this.parseAmount(this.pick(row, ['amount', '金额']));
+    const resolvedDepositAmount = depositAmount ?? (withdrawalAmount == null ? fallbackAmount : null);
+    const transactionCategory = this.pick(row, ['transactionCategory', 'transactionType', 'Transaction Type', '取引区分', '取引種別', '类别']);
+    const financialInstitutionName = this.pick(row, ['financialInstitutionName', 'Financial Institution Name', '金融機関名', '銀行名', '金融机构名称']);
+    const bankBranchName = this.pick(row, ['bankBranchName', 'branchName', 'Branch Name', '支店名', '支店', '支行名称']);
     const sourcePage = Number(this.pick(row, ['sourcePage', 'page', '原始页码'])) || null;
     const sourceRow = Number(this.pick(row, ['sourceRow', 'row', '原始行号'])) || rowNumber;
     const recordHash = this.hashJson({
@@ -1804,14 +1861,16 @@ export class ReconciliationService implements OnModuleInit {
       sourcePage,
       sourceRow,
       transactionDate: transactionDate?.toISOString().slice(0, 10),
-      depositAmount: depositAmount?.toString(),
+      depositAmount: resolvedDepositAmount?.toString(),
+      withdrawalAmount: withdrawalAmount?.toString(),
       originalBankSummary,
     });
     return {
       sourcePage,
       sourceRow,
       transactionDate,
-      depositAmount,
+      depositAmount: resolvedDepositAmount,
+      withdrawalAmount,
       originalBankSummary,
       normalizedBankSummary,
       propertyId: this.pick(row, ['propertyId']),
@@ -1820,6 +1879,9 @@ export class ReconciliationService implements OnModuleInit {
       contractorName: this.pick(row, ['contractorName', 'Contractor', '契约者', '契約者名']),
       payerName: this.pick(row, ['payerName', 'Payer', '支付人', '入金人名']),
       paymentMonth: this.pick(row, ['paymentMonth', 'month', '月份']),
+      transactionCategory,
+      financialInstitutionName,
+      bankBranchName,
       remark: this.pick(row, ['remark', 'Remark', '备注']),
       recordHash,
     };
@@ -1848,6 +1910,7 @@ export class ReconciliationService implements OnModuleInit {
       sourceRow: record.sourceRow,
       transactionDate: record.transactionDate?.toISOString().slice(0, 10),
       depositAmount: record.depositAmount?.toString(),
+      withdrawalAmount: record.withdrawalAmount?.toString(),
       originalBankSummary: record.originalBankSummary,
       normalizedBankSummary: record.normalizedBankSummary,
       registeredBankSummaryName: record.registeredBankSummaryName,
@@ -1862,6 +1925,9 @@ export class ReconciliationService implements OnModuleInit {
       payerId: record.payerId,
       payerName: record.payerName,
       paymentMonth: record.paymentMonth,
+      transactionCategory: record.transactionCategory,
+      financialInstitutionName: record.financialInstitutionName,
+      bankBranchName: record.bankBranchName,
       matchMode: record.matchMode,
       matchScore: record.matchScore,
       matchStatus: record.matchStatus,
@@ -1887,6 +1953,8 @@ export class ReconciliationService implements OnModuleInit {
       contractorName: contract.contractorName || contract.tenant?.name,
       payerId: contract.tenantId,
       payerName: contract.payerName || contract.contractorName || contract.tenant?.name,
+      bankSummaryName: contract.bankSummaryName,
+      bankStatementSummary: contract.bankStatementSummary,
       startDate: contract.startDate?.toISOString().slice(0, 10),
       endDate: contract.endDate?.toISOString().slice(0, 10),
       status: contract.status,

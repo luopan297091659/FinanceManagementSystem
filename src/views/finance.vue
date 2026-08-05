@@ -42,7 +42,7 @@
           <h3>{{ financeModalTitle }}</h3>
           <button class="modal-close-button" type="button" @click="closeFinanceModal" :title="common.close">×</button>
         </div>
-        <FinanceForm v-model="form" :rooms="rooms" :fee-items="feeItems" :labels="labels" @submit="saveFinance" @cancel="closeFinanceModal" />
+        <FinanceForm v-model="form" :rooms="rooms" :contracts="contracts" :fee-items="feeItems" :labels="labels" @submit="saveFinance" @cancel="closeFinanceModal" />
       </div>
     </div>
   </section>
@@ -63,7 +63,12 @@ const blankForm = () => ({
   amount: 0,
   occurredAt: new Date().toISOString().slice(0, 10),
   description: "",
+  remark: "",
   roomId: "",
+  contractId: "",
+  transactionCategory: "",
+  financialInstitutionName: "",
+  bankBranchName: "",
   customerName: "",
   feeItemId: "",
   processingStatus: "INCLUDED",
@@ -76,6 +81,7 @@ const common = computed(() => dictionary.value.common);
 const form = ref(blankForm());
 const items = ref([]);
 const rooms = ref([]);
+const contracts = ref([]);
 const feeItems = ref([]);
 const selectedIds = ref([]);
 const fileInput = ref(null);
@@ -85,11 +91,18 @@ const searchQuery = ref("");
 const showFinanceModal = ref(false);
 const financeModalTitle = ref("");
 const financeColumns = ref([
-  { key: "description", labelKey: "descriptionDate", visible: true },
-  { key: "amount", labelKey: "typeAmount", visible: true },
-  { key: "room", labelKey: "roomColumn", visible: true },
-  { key: "status", labelKey: "statusColumn", visible: true },
-  { key: "customer", labelKey: "customerColumn", visible: true },
+  { key: "date", labelKey: "dateColumn", visible: true },
+  { key: "category", labelKey: "categoryAmount", visible: true },
+  { key: "projectBuilding", labelKey: "projectBuilding", visible: true },
+  { key: "address", labelKey: "address", visible: true },
+  { key: "propertyRoom", labelKey: "propertyRoom", visible: true },
+  { key: "summary", labelKey: "summary", visible: true },
+  { key: "contract", labelKey: "contractNumber", visible: true },
+  { key: "transactionCategory", labelKey: "bankTransactionType", visible: true },
+  { key: "bank", labelKey: "financialInstitutionBranch", visible: true },
+  { key: "remark", labelKey: "remark", visible: true },
+  { key: "manualReconciliation", labelKey: "manualReconciliation", visible: true },
+  { key: "reconciler", labelKey: "reconciler", visible: true },
 ]);
 
 const showColumnPanel = ref(false);
@@ -118,6 +131,7 @@ const loadFinance = async () => {
   try {
     const payload = await api.bootstrap('finance');
     rooms.value = payload.rooms || [];
+    contracts.value = payload.contracts || [];
     feeItems.value = payload.feeItems || [];
     const roomLabels = new Map(rooms.value.map((room) => [room.id, `${room.houseNumber || room.number || "-"} / ${room.number || "-"}`]));
     items.value = (payload.transactions || []).map((transaction) => ({
@@ -125,10 +139,23 @@ const loadFinance = async () => {
       kind: transaction.type,
       amount: Number(transaction.totalAmount || transaction.statisticalAmount || transaction.details?.[0]?.value || 0),
       occurredAt: transaction.date,
-      description: transaction.note || transaction.contentSummary || "",
+      description: transaction.contentSummary || transaction.counterpartyRaw || "",
       roomId: transaction.roomId || "",
+      contractId: transaction.contractId || "",
+      projectName: transaction.projectName || "",
+      buildingName: transaction.buildingName || "",
+      address: transaction.address || "",
+      roomNumber: transaction.roomNumber || "",
+      contractNumber: transaction.contractNumber || "",
       roomLabel: roomLabels.get(transaction.roomId) || "",
       customerName: transaction.counterparty || "",
+      transactionCategory: transaction.transactionCategory || "",
+      financialInstitutionName: transaction.financialInstitutionName || "",
+      bankBranchName: transaction.bankBranchName || "",
+      manuallyReconciled: Boolean(transaction.manuallyReconciled),
+      reconciledByName: transaction.reconciledByName || "",
+      reconciledAt: transaction.reconciledAt || "",
+      remark: transaction.note || "",
       feeItemId: transaction.details?.[0]?.feeItemId || feeItems.value[0]?.id || "",
       processingStatus: transaction.processingStatus || "INCLUDED",
       confirmationStatus: transaction.confirmationStatus || "PENDING",
@@ -149,8 +176,13 @@ const saveFinance = async () => {
       type: form.value.kind,
       date: form.value.occurredAt,
       roomId: form.value.roomId || undefined,
+      contractId: form.value.contractId || undefined,
       counterparty: form.value.customerName || undefined,
-      note: form.value.description,
+      contentSummary: form.value.description,
+      transactionCategory: form.value.transactionCategory || undefined,
+      financialInstitutionName: form.value.financialInstitutionName || undefined,
+      bankBranchName: form.value.bankBranchName || undefined,
+      note: form.value.remark || undefined,
       processingStatus: form.value.processingStatus,
       confirmationStatus: form.value.confirmationStatus,
       details: [{ feeItemId: form.value.feeItemId, value: String(form.value.amount) }],
@@ -172,9 +204,18 @@ function matchesFinanceSearch(item) {
 
 const getExportValue = (item, key) =>
   ({
-    description: `${item.description || ""} / ${item.occurredAt || ""}`,
-    amount: `${item.kind === "income" ? labels.value.income : labels.value.expense} / ${item.amount || 0}`,
-    room: item.roomLabel || "",
+    date: item.occurredAt || "",
+    category: `${item.kind === "income" ? labels.value.income : labels.value.expense} / ${item.amount || 0}`,
+    projectBuilding: [item.projectName, item.buildingName].filter(Boolean).join(" / "),
+    address: item.address || "",
+    propertyRoom: [item.buildingName, item.roomNumber].filter(Boolean).join(" / "),
+    summary: item.description || "",
+    contract: item.contractNumber || "",
+    transactionCategory: item.transactionCategory || "",
+    bank: [item.financialInstitutionName, item.bankBranchName].filter(Boolean).join(" / "),
+    remark: item.remark || "",
+    manualReconciliation: item.manuallyReconciled ? labels.value.yes : labels.value.no,
+    reconciler: [item.reconciledByName, item.reconciledAt].filter(Boolean).join(" / "),
     status: `${processingLabel(item.processingStatus)} / ${confirmationLabel(item.confirmationStatus)}`,
     customer: item.customerName || "",
   })[key] || "";
@@ -248,15 +289,18 @@ const importFinance = async (event) => {
     await Promise.all(
       dataRows.map((row) => {
         const descriptionParts = String(row[labelIndex(labels.value.descriptionDate)] || "").split("/");
-        const amountParts = String(row[labelIndex(labels.value.typeAmount)] || "").split("/");
-        const statusParts = String(row[labelIndex(labels.value.statusColumn)] || "").split("/");
+        const amountParts = String(row[labelIndex(labels.value.categoryAmount)] || row[labelIndex(labels.value.typeAmount)] || "").split("/");
+        const bankParts = String(row[labelIndex(labels.value.financialInstitutionBranch)] || "").split("/");
         return api.createTransaction({
           type: amountParts[0]?.includes(labels.value.expense) ? "expense" : "income",
-          date: descriptionParts[1]?.trim() || new Date().toISOString().slice(0, 10),
-          counterparty: row[labelIndex(labels.value.customerColumn)] || undefined,
-          note: descriptionParts[0]?.trim() || "",
-          processingStatus: statusParts[0]?.trim() || "INCLUDED",
-          confirmationStatus: statusParts[1]?.trim() || "PENDING",
+          date: row[labelIndex(labels.value.dateColumn)] || descriptionParts[1]?.trim() || new Date().toISOString().slice(0, 10),
+          contentSummary: row[labelIndex(labels.value.summary)] || descriptionParts[0]?.trim() || "",
+          transactionCategory: row[labelIndex(labels.value.bankTransactionType)] || undefined,
+          financialInstitutionName: bankParts[0]?.trim() || undefined,
+          bankBranchName: bankParts[1]?.trim() || undefined,
+          note: row[labelIndex(labels.value.remark)] || undefined,
+          processingStatus: "INCLUDED",
+          confirmationStatus: "PENDING",
           details: [{ feeItemId: defaultFeeItemId, value: String(Number(amountParts[1] || 0)) }],
         });
       }),

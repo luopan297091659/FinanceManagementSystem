@@ -218,7 +218,7 @@ const resourceColumns = ref([
 const showColumnPanel = ref(false);
 const roomContractOptions = computed(() => contracts.value
   .filter((contract) => contract.roomId === form.value.id)
-  .map((contract) => ({ id: contract.id, label: joinValues(contract.contractNumber, contract.contractorName), searchText: [contract.contractNumber, contract.contractorName, contract.bankSummaryName, contract.status].filter(Boolean).join(" ").toLowerCase() })));
+  .map((contract) => ({ id: contract.id, label: joinValues(contract.contractNumber, contract.contractorName), searchText: [contract.contractNumber, contract.contractorName, contract.bankSummaryName, contract.bankStatementSummary, contract.status].filter(Boolean).join(" ").toLowerCase() })));
 const visibleResourceColumns = computed(() => resourceColumns.value.filter((column) => column.visible));
 const exportResourceColumns = computed(() => visibleResourceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
 const paginatedResources = computed(() => resources.value);

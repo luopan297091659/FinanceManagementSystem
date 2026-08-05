@@ -152,8 +152,11 @@
               <tr>
                 <th v-if="isBankColumnVisible('source')">{{ t.table.source }}</th>
                 <th v-if="isBankColumnVisible('date')">{{ t.table.date }}</th>
+                <th v-if="isBankColumnVisible('category')">{{ t.table.category }}</th>
                 <th v-if="isBankColumnVisible('summary')">{{ t.table.summary }}</th>
                 <th v-if="isBankColumnVisible('amount')">{{ t.table.amount }}</th>
+                <th v-if="isBankColumnVisible('transactionCategory')">{{ t.table.transactionCategory }}</th>
+                <th v-if="isBankColumnVisible('bank')">{{ t.table.financialInstitutionBranch }}</th>
                 <th v-if="isBankColumnVisible('room')">{{ roomColumnLabel }}</th>
                 <th v-if="isBankColumnVisible('contract')">{{ contractColumnLabel }}</th>
                 <th v-if="isBankColumnVisible('status')">{{ t.table.status }}</th>
@@ -165,11 +168,14 @@
               <tr v-for="record in paginatedRecords" :key="record.id">
                 <td v-if="isBankColumnVisible('source')"><span v-if="record.sourceFileName">{{ record.sourceFileName }}</span><small v-if="sourcePosition(record)">{{ sourcePosition(record) }}</small></td>
                 <td v-if="isBankColumnVisible('date')"><input v-model="record.transactionDate" type="date" @change="saveRecord(record)" /></td>
+                <td v-if="isBankColumnVisible('category')"><select :value="record.withdrawalAmount ? 'expense' : 'income'" @change="changeRecordDirection(record, $event.target.value)"><option value="income">{{ t.table.deposit }}</option><option value="expense">{{ t.table.withdrawal }}</option></select></td>
                 <td v-if="isBankColumnVisible('summary')">
                   <small v-if="record.originalBankSummary">{{ record.originalBankSummary }}</small>
                   <input v-model="record.normalizedBankSummary" @change="saveRecord(record)" />
                 </td>
-                <td v-if="isBankColumnVisible('amount')"><input v-model="record.depositAmount" inputmode="decimal" @change="saveRecord(record)" /></td>
+                <td v-if="isBankColumnVisible('amount')"><input :value="record.withdrawalAmount || record.depositAmount || ''" inputmode="decimal" @input="setRecordAmount(record, $event.target.value)" @change="saveRecord(record)" /></td>
+                <td v-if="isBankColumnVisible('transactionCategory')"><input v-model="record.transactionCategory" @change="saveRecord(record)" /></td>
+                <td v-if="isBankColumnVisible('bank')"><input v-model="record.financialInstitutionName" :placeholder="t.table.financialInstitution" @change="saveRecord(record)" /><input v-model="record.bankBranchName" :placeholder="t.table.branch" @change="saveRecord(record)" /></td>
                 <td v-if="isBankColumnVisible('room')">
                   <select v-model="record.roomId" @change="loadContracts(record)">
                     <option value="">{{ t.common.select }}</option>
@@ -424,8 +430,11 @@ const draftConfiguration = ref(emptyConfiguration());
 const bankColumns = ref([
   { key: "source", visible: true },
   { key: "date", visible: true },
+  { key: "category", visible: true },
   { key: "summary", visible: true },
   { key: "amount", visible: true },
+  { key: "transactionCategory", visible: true },
+  { key: "bank", visible: true },
   { key: "room", visible: true },
   { key: "contract", visible: true },
   { key: "status", visible: true },
@@ -481,7 +490,7 @@ const contractorLabel = computed(() => t.value.matching.contractor);
 const payerLabel = computed(() => t.value.matching.payer);
 const visibleBankColumns = computed(() => bankColumns.value.filter((column) => column.visible));
 const isBankColumnVisible = (key) => bankColumns.value.find((column) => column.key === key)?.visible;
-const bankColumnLabel = (key) => ({ source: t.value.table.source, date: t.value.table.date, summary: t.value.table.summary, amount: t.value.table.amount, room: roomColumnLabel.value, contract: contractColumnLabel.value, status: t.value.table.status, remark: t.value.table.remark })[key] || key;
+const bankColumnLabel = (key) => ({ source: t.value.table.source, date: t.value.table.date, category: t.value.table.category, summary: t.value.table.summary, amount: t.value.table.amount, transactionCategory: t.value.table.transactionCategory, bank: t.value.table.financialInstitutionBranch, room: roomColumnLabel.value, contract: contractColumnLabel.value, status: t.value.table.status, remark: t.value.table.remark })[key] || key;
 const resetBankColumns = () => bankColumns.value.forEach((column) => { column.visible = true; });
 const compactJoin = (values, separator = " / ") => values.filter((value) => value !== null && value !== undefined && value !== "").join(separator);
 const sourcePosition = (record) => compactJoin([record.sourcePage, record.sourceRow]);
@@ -894,7 +903,10 @@ const assignSelectedField = (side, key) => {
   const target = rule[side === "internal" ? "leftFields" : "rightFields"];
   if (!target.includes(key)) target.push(key);
 };
-const internalFieldLabel = (key) => allInternalFields.value.find((field) => field.key === key)?.label || (key === "contract.bankTransferDescription" ? (locale.value === "zh" ? "银行摘要名义" : "銀行摘要名義") : key);
+const internalFieldLabel = (key) => {
+  if (key === "contract.bankStatementSummary") return locale.value === "zh" ? "银行账单摘要" : "銀行明細摘要";
+  return allInternalFields.value.find((field) => field.key === key)?.label || (key === "contract.bankTransferDescription" ? (locale.value === "zh" ? "银行摘要名义" : "銀行摘要名義") : key);
+};
 const appendMappedField = (rule, targetKey, event) => {
   const value = event.target.value;
   if (value && !rule[targetKey].includes(value)) rule[targetKey].push(value);
@@ -1034,7 +1046,11 @@ const exportFinalResult = async () => {
     { key: "contractorName", label: contractorLabel.value },
     { key: "payerName", label: payerLabel.value },
     { key: "originalBankSummary", label: t.value.table.summary },
-    { key: "depositAmount", label: t.value.table.amount },
+    { key: "withdrawalAmount", label: t.value.table.withdrawal },
+    { key: "depositAmount", label: t.value.table.deposit },
+    { key: "transactionCategory", label: t.value.table.transactionCategory },
+    { key: "financialInstitutionName", label: t.value.table.financialInstitution },
+    { key: "bankBranchName", label: t.value.table.branch },
     { key: "paymentMonth", label: t.value.matching.month },
     { key: "transactionDate", label: t.value.table.date },
     { key: "matchStatus", label: t.value.table.status },
@@ -1065,13 +1081,28 @@ const saveRecord = async (record) => {
     await api.updateReconciliationRecord(record.id, {
       transactionDate: record.transactionDate,
       depositAmount: record.depositAmount,
+      withdrawalAmount: record.withdrawalAmount,
       normalizedBankSummary: record.normalizedBankSummary,
+      transactionCategory: record.transactionCategory,
+      financialInstitutionName: record.financialInstitutionName,
+      bankBranchName: record.bankBranchName,
       paymentMonth: record.paymentMonth,
       remark: record.remark,
     });
   } catch (error) {
     errorMessage.value = error.message;
   }
+};
+
+const setRecordAmount = (record, value) => {
+  if (record.withdrawalAmount !== null && record.withdrawalAmount !== undefined && record.withdrawalAmount !== "") record.withdrawalAmount = value;
+  else record.depositAmount = value;
+};
+const changeRecordDirection = (record, direction) => {
+  const amount = record.withdrawalAmount || record.depositAmount || "";
+  record.withdrawalAmount = direction === "expense" ? amount : "";
+  record.depositAmount = direction === "income" ? amount : "";
+  saveRecord(record);
 };
 
 const deleteRecord = async (record) => {
@@ -1104,7 +1135,11 @@ const manualMatch = async (record) => {
     payerName: contract?.payerName,
     normalizedBankSummary: record.normalizedBankSummary,
     depositAmount: record.depositAmount,
+    withdrawalAmount: record.withdrawalAmount,
     transactionDate: record.transactionDate,
+    transactionCategory: record.transactionCategory,
+    financialInstitutionName: record.financialInstitutionName,
+    bankBranchName: record.bankBranchName,
     paymentMonth: record.paymentMonth,
     remark: record.remark,
   });

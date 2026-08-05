@@ -31,12 +31,37 @@
 
       <label>
         {{ labels.room }}
-        <select v-model="form.roomId">
+        <select v-model="form.roomId" @change="clearMismatchedContract">
           <option value="">{{ labels.noRoom }}</option>
           <option v-for="room in rooms" :key="room.id" :value="room.id">
-            {{ room.houseNumber || room.number }} / {{ room.number }}
+            {{ [room.projectName, room.buildingName, room.number || room.displayName].filter(Boolean).join(" / ") }}
           </option>
         </select>
+      </label>
+
+      <label>
+        {{ labels.contractNumber }}
+        <select v-model="form.contractId">
+          <option value="">{{ labels.noContract }}</option>
+          <option v-for="contract in filteredContracts" :key="contract.id" :value="contract.id">
+            {{ contract.contractNumber || contract.id }} / {{ contract.contractorName || "-" }}
+          </option>
+        </select>
+      </label>
+
+      <label>
+        {{ labels.bankTransactionType }}
+        <input v-model="form.transactionCategory" />
+      </label>
+
+      <label>
+        {{ labels.financialInstitution }}
+        <input v-model="form.financialInstitutionName" />
+      </label>
+
+      <label>
+        {{ labels.bankBranch }}
+        <input v-model="form.bankBranchName" />
       </label>
 
       <label>
@@ -63,8 +88,13 @@
       </label>
 
       <label class="wide-field">
-        {{ labels.note }}
+        {{ labels.summary }}
         <input v-model="form.description" :placeholder="labels.notePlaceholder" />
+      </label>
+
+      <label class="wide-field">
+        {{ labels.remark }}
+        <input v-model="form.remark" />
       </label>
     </div>
 
@@ -91,6 +121,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  contracts: {
+    type: Array,
+    default: () => [],
+  },
   labels: {
     type: Object,
     required: true,
@@ -108,4 +142,9 @@ const editing = computed(() => Boolean(props.modelValue.id));
 const filteredFeeItems = computed(() =>
   props.feeItems.filter((item) => item.enabled && (item.category === props.modelValue.kind || item.category === "both")),
 );
+const filteredContracts = computed(() => props.contracts.filter((contract) => !props.modelValue.roomId || contract.roomId === props.modelValue.roomId));
+const clearMismatchedContract = () => {
+  if (!props.modelValue.contractId) return;
+  if (!filteredContracts.value.some((contract) => contract.id === props.modelValue.contractId)) props.modelValue.contractId = "";
+};
 </script>
