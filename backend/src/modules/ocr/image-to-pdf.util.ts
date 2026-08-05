@@ -13,6 +13,29 @@ export type WebhookFile = {
   convertedToPdf: boolean;
 };
 
+export type SourceWebhookFile = Omit<WebhookFile, 'convertedToPdf'>;
+
+export async function preparePdfFilesForWebhook(files: SourceWebhookFile[]): Promise<WebhookFile[]> {
+  const preparedFiles = await Promise.all(files.map((file) => prepareFileForWebhook(
+    file.buffer,
+    file.fileName,
+    file.mimeType,
+  )));
+  const invalidFiles = preparedFiles.filter((file) => (
+    file.mimeType !== PDF_MIME_TYPE || !hasPdfSignature(file.buffer)
+  ));
+
+  if (invalidFiles.length) {
+    const details = invalidFiles.map((file) => `${file.fileName} (${file.mimeType})`).join(', ');
+    throw new Error(
+      `Webhook accepts PDF output only. Unsupported or invalid file(s): ${details}. `
+      + 'Upload PDF, JPG/JPEG or PNG files.',
+    );
+  }
+
+  return preparedFiles;
+}
+
 export async function prepareFileForWebhook(
   buffer: Buffer,
   fileName: string,
@@ -57,4 +80,8 @@ export async function prepareFileForWebhook(
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to convert image "${fileName}" to PDF: ${detail}`);
   }
+}
+
+function hasPdfSignature(buffer: Buffer): boolean {
+  return buffer.subarray(0, Math.min(buffer.length, 1024)).includes(Buffer.from('%PDF-'));
 }

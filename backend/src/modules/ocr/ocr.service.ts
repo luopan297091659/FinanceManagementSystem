@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
-import { prepareFileForWebhook } from './image-to-pdf.util';
+import { preparePdfFilesForWebhook } from './image-to-pdf.util';
 
 type WorkflowInput = {
   name: string;
@@ -94,12 +94,13 @@ export class OcrService {
     let attempts = 0;
 
     try {
-      const preparedFiles = await Promise.all(task.storagePaths.map(async (storagePath, index) => {
+      const sourceFiles = await Promise.all(task.storagePaths.map(async (storagePath, index) => {
         const buffer = await readFile(storagePath);
         const fileName = task.fileNames[index] || `request-file-${index + 1}`;
         const mimeType = detectMimeType(fileName, task.fileMimeTypes[index]);
-        return prepareFileForWebhook(buffer, fileName, mimeType);
+        return { buffer, fileName, mimeType };
       }));
+      const preparedFiles = await preparePdfFilesForWebhook(sourceFiles);
       const totalBytes = preparedFiles.reduce((sum, file) => sum + file.buffer.length, 0);
       totalMegabytes = (totalBytes / 1024 / 1024).toFixed(1);
 

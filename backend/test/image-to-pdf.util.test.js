@@ -2,7 +2,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createCanvas } = require('@napi-rs/canvas');
 const { PDFDocument } = require('pdf-lib');
-const { prepareFileForWebhook } = require('../dist/modules/ocr/image-to-pdf.util.js');
+const {
+  prepareFileForWebhook,
+  preparePdfFilesForWebhook,
+} = require('../dist/modules/ocr/image-to-pdf.util.js');
 
 function createImage(mimeType, width = 120, height = 80) {
   const canvas = createCanvas(width, height);
@@ -60,5 +63,42 @@ test('rejects corrupt image data with the file name in the error', async () => {
   await assert.rejects(
     prepareFileForWebhook(Buffer.from('not-an-image'), 'broken.png', 'image/png'),
     /Failed to convert image "broken\.png" to PDF/,
+  );
+});
+
+test('prepares mixed PDF and image input as PDF-only webhook files', async () => {
+  const existingDocument = await PDFDocument.create();
+  existingDocument.addPage();
+  const existingPdf = Buffer.from(await existingDocument.save());
+  const files = await preparePdfFilesForWebhook([
+    { buffer: existingPdf, fileName: 'existing.pdf', mimeType: 'application/pdf' },
+    { buffer: createImage('image/jpeg'), fileName: 'photo.jpg', mimeType: 'image/jpeg' },
+    { buffer: createImage('image/png'), fileName: 'scan.png', mimeType: 'image/png' },
+  ]);
+
+  assert.deepEqual(files.map((file) => file.fileName), ['existing.pdf', 'photo.pdf', 'scan.pdf']);
+  assert.deepEqual(files.map((file) => file.mimeType), [
+    'application/pdf',
+    'application/pdf',
+    'application/pdf',
+  ]);
+  assert.equal(files.every((file) => file.buffer.includes(Buffer.from('%PDF-'))), true);
+});
+
+test('blocks non-PDF output before the webhook request', async () => {
+  await assert.rejects(
+    preparePdfFilesForWebhook([
+      { buffer: Buffer.from('plain text'), fileName: 'notes.txt', mimeType: 'text/plain' },
+    ]),
+    /Webhook accepts PDF output only[\s\S]*notes\.txt/,
+  );
+});
+
+test('blocks files mislabeled as PDF before the webhook request', async () => {
+  await assert.rejects(
+    preparePdfFilesForWebhook([
+      { buffer: Buffer.from('not really a PDF'), fileName: 'fake.pdf', mimeType: 'application/pdf' },
+    ]),
+    /Webhook accepts PDF output only[\s\S]*fake\.pdf/,
   );
 });
