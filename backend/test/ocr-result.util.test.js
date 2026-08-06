@@ -23,6 +23,9 @@ test('expands Make records stored as a nested JSON string', () => {
   assert.deepEqual(records.map((record) => record.original_file_name), ['statement.pdf', 'statement.pdf']);
   assert.deepEqual(records.map((record) => record._recordId), ['ocr-record-1', 'ocr-record-2']);
   assert.equal(records[1].net_amount, 200);
+  assert.equal(records[1].sourceFileName, 'statement.pdf');
+  assert.equal(records[1].statisticalAmount, 200);
+  assert.equal(records[1].schemaVersion, 'finance-transaction-v1');
 });
 
 test('keeps an ordinary flat records array', () => {
@@ -71,6 +74,44 @@ test('expands a single Make result wrapper supplied as an object', () => {
   assert.equal(records.length, 1);
   assert.equal(records[0].original_file_name, 'object.pdf');
   assert.equal(records[0].net_amount, 500);
+});
+
+test('keeps finance-center fields and normalizes legacy OCR fields', () => {
+  const [record] = extractOcrResultRecords({ records: [{
+    record_no: 7,
+    document_type: '送金明細',
+    money_direction: '出金',
+    outflow_party: 'Vendor A',
+    summary: 'Repair payment',
+    transaction_type: '修繕費',
+    target_month: '2026-07',
+    document_amount: 12000,
+    additional_fee: 330,
+    net_amount: 12330,
+    date: '2026-08-06',
+    date_basis: '支払日',
+    start_page: 2,
+    end_page: 3,
+    statistical_treatment: '计入',
+    review_status: '需人工确认',
+    notes: 'check room',
+  }] });
+  assert.equal(record.sequenceNo, 7);
+  assert.equal(record.fileType, '送金明細');
+  assert.equal(record.type, 'expense');
+  assert.equal(record.counterparty, 'Vendor A');
+  assert.equal(record.contentSummary, 'Repair payment');
+  assert.equal(record.transactionCategory, '修繕費');
+  assert.equal(record.paymentMonth, '2026-07');
+  assert.equal(record.fileAmount, 12000);
+  assert.equal(record.transferFeeAmount, 330);
+  assert.equal(record.statisticalAmount, 12330);
+  assert.equal(record.evidenceDateType, '支払日');
+  assert.equal(record.sourcePageStart, 2);
+  assert.equal(record.sourcePageEnd, 3);
+  assert.equal(record.processingStatus, 'INCLUDED');
+  assert.equal(record.confirmationStatus, 'PENDING');
+  assert.equal(record.note, 'check room');
 });
 
 test('summarizes automatic, manual, manual-sync and pending records', () => {
