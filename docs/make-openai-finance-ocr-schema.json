@@ -1,0 +1,86 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["finance-transaction-v1"],
+      "description": "财务中心 OCR 回调字段版本，固定为 finance-transaction-v1"
+    },
+    "sourceFileName": {
+      "type": "string",
+      "description": "当前输入文件的完整原始文件名，必须与 Make 提供的文件名一致"
+    },
+    "totalPages": {
+      "type": "integer",
+      "description": "当前输入文件总页数"
+    },
+    "records": {
+      "type": "array",
+      "description": "可写入或匹配财务中心 Transaction 的业务记录；没有有效资金记录时返回空数组",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sequenceNo": { "type": "integer", "description": "当前文件内从 1 开始的记录序号" },
+          "fileType": { "type": ["string", "null"], "description": "单据或文件类型" },
+          "type": { "type": "string", "enum": ["income", "expense"], "description": "财务中心交易类型：收入为 income，支出为 expense" },
+          "date": { "type": ["string", "null"], "description": "交易发生日期，格式 YYYY-MM-DD" },
+          "counterparty": { "type": ["string", "null"], "description": "相对于本公司的交易对方名称" },
+          "counterpartyRaw": { "type": ["string", "null"], "description": "文件中识别到的交易对方原文，不得改写" },
+          "contentSummary": { "type": ["string", "null"], "description": "对应财务中心内容摘要" },
+          "transactionCategory": { "type": ["string", "null"], "description": "交易区分，例如租金、汇款、修缮费、押金、手续费" },
+          "financialInstitutionName": { "type": ["string", "null"], "description": "金融机构名称" },
+          "bankBranchName": { "type": ["string", "null"], "description": "银行支店名称" },
+          "propertyName": { "type": ["string", "null"], "description": "用于匹配系统物件的文件原文名称" },
+          "roomNumber": { "type": ["string", "null"], "description": "用于匹配系统房间的房间号或单位编号" },
+          "contractorName": { "type": ["string", "null"], "description": "用于匹配系统合同或租客的契约者名称" },
+          "contractNumber": { "type": ["string", "null"], "description": "文件明确记载的合同编号；无法确认时为 null" },
+          "paymentMonth": { "type": ["string", "null"], "description": "收付款归属月份，格式 YYYY-MM；实际月份由系统侧人工维护" },
+          "feeItemName": { "type": ["string", "null"], "description": "财务中心费用项目名称；系统匹配后转换为 feeItemId" },
+          "fileAmount": { "type": ["number", "null"], "description": "文件记载的主要金额" },
+          "transferFeeAmount": { "type": "number", "description": "转账手续费；没有时必须为 0" },
+          "statisticalAmount": { "type": ["number", "null"], "description": "最终计入财务统计的金额" },
+          "evidenceDateType": { "type": ["string", "null"], "description": "日期依据，例如入金日、汇款日、请求日、支付日" },
+          "sourcePageStart": { "type": "integer", "description": "记录来源起始页码" },
+          "sourcePageEnd": { "type": "integer", "description": "记录来源结束页码" },
+          "processingStatus": {
+            "type": "string",
+            "enum": ["INCLUDED", "DETAIL_ONLY", "DUPLICATE_EXCLUDED"],
+            "description": "财务处理状态：计入、仅保留明细、重复件排除"
+          },
+          "confirmationStatus": {
+            "type": "string",
+            "enum": ["PENDING", "CONFIRMED", "REJECTED"],
+            "description": "确认状态；识别不确定时必须为 PENDING"
+          },
+          "note": { "type": "string", "description": "缺页、模糊、手写忽略、金额矛盾或归属不确定等说明；没有时为空字符串" },
+          "details": {
+            "type": "array",
+            "description": "财务中心 TransactionDetail 候选明细；feeItemName 匹配成功后由系统写入 feeItemId",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sequenceNo": { "type": "integer", "description": "当前交易内的明细序号" },
+                "feeItemName": { "type": ["string", "null"], "description": "费用项目名称" },
+                "valueMoney": { "type": ["number", "null"], "description": "金额型值" },
+                "valueNumber": { "type": ["number", "null"], "description": "数量型值" },
+                "valueText": { "type": ["string", "null"], "description": "文本型值或明细摘要" },
+                "valueDate": { "type": ["string", "null"], "description": "日期型值，格式 YYYY-MM-DD" },
+                "propertyName": { "type": ["string", "null"], "description": "明细对应物件名称" },
+                "roomNumber": { "type": ["string", "null"], "description": "明细对应房间号" },
+                "contractorName": { "type": ["string", "null"], "description": "明细对应契约者或租客名称" },
+                "paymentMonth": { "type": ["string", "null"], "description": "明细归属月份，格式 YYYY-MM" },
+                "note": { "type": "string", "description": "明细识别说明；没有时为空字符串" }
+              },
+              "required": ["sequenceNo", "feeItemName", "valueMoney", "valueNumber", "valueText", "valueDate", "propertyName", "roomNumber", "contractorName", "paymentMonth", "note"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["sequenceNo", "fileType", "type", "date", "counterparty", "counterpartyRaw", "contentSummary", "transactionCategory", "financialInstitutionName", "bankBranchName", "propertyName", "roomNumber", "contractorName", "contractNumber", "paymentMonth", "feeItemName", "fileAmount", "transferFeeAmount", "statisticalAmount", "evidenceDateType", "sourcePageStart", "sourcePageEnd", "processingStatus", "confirmationStatus", "note", "details"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "sourceFileName", "totalPages", "records"],
+  "additionalProperties": false
+}

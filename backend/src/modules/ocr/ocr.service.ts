@@ -418,7 +418,7 @@ export class OcrService {
       throw new BadRequestException('实际月份格式必须为 YYYY-MM');
     }
     const before = records[recordIndex];
-    records[recordIndex] = { ...before, actual_month: actualMonth };
+    records[recordIndex] = { ...before, actualMonth, actual_month: actualMonth };
     const normalizedResult = { ...result, records };
     const [updated] = await this.prisma.$transaction([
       this.prisma.ocrTask.update({
@@ -644,12 +644,12 @@ export class OcrService {
 
   private validateMatchConfiguration(value: unknown): OcrMatchConfiguration {
     const legacyMappings: Record<string, [string, string]> = {
-      partyName: ['contract.payerName', 'inflow_party'],
-      summary: ['contract.bankStatementSummary', 'summary'],
-      propertyName: ['property.name', 'property_name'],
-      roomNumber: ['room.roomNumber', 'room_number'],
-      contractNumber: ['contract.contractNumber', 'contract_number'],
-      amount: ['contract.monthlyRent', 'net_amount'],
+      partyName: ['contract.payerName', 'counterparty'],
+      summary: ['contract.bankStatementSummary', 'contentSummary'],
+      propertyName: ['property.name', 'propertyName'],
+      roomNumber: ['room.roomNumber', 'roomNumber'],
+      contractNumber: ['contract.contractNumber', 'contractNumber'],
+      amount: ['contract.monthlyRent', 'statisticalAmount'],
       date: ['contract.validDate', 'date'],
     };
     const supportedFields = new Set([
