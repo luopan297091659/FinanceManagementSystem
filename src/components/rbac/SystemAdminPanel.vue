@@ -700,7 +700,7 @@ const editUser = (user) => {
   userForm.value = {
     username: user.username,
     name: user.name,
-    email: user.email,
+    email: user.email || '',
     password: '',
     roleId: user.userRoles?.[0]?.roleId || '',
     isActive: user.isActive,
@@ -710,10 +710,14 @@ const editUser = (user) => {
 
 const saveUser = async () => {
   try {
+    const payload = {
+      ...userForm.value,
+      email: userForm.value.email?.trim() || null,
+    };
     if (editingUser.value) {
-      await api.updateUser(editingUser.value.id, userForm.value);
+      await api.updateUser(editingUser.value.id, payload);
     } else {
-      await api.createUser(userForm.value);
+      await api.createUser(payload);
     }
     closeUserModal();
     await loadUsers();

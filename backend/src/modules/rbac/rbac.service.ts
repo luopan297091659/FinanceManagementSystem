@@ -1,6 +1,6 @@
-import { Injectable, ForbiddenException, BadRequestException, UnauthorizedException, OnModuleInit } from '@nestjs/common';
+import { Injectable, ForbiddenException, BadRequestException, ConflictException, UnauthorizedException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { DataScopeType } from '@prisma/client';
+import { DataScopeType, Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -413,6 +413,14 @@ export class RbacService implements OnModuleInit {
   async updateUser(id: string, data: { name?: string; email?: string | null; phone?: string | null; password?: string; isActive?: boolean; roleId?: string; defaultDataScope?: DataScopeType; defaultDataScopeValue?: string }) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new BadRequestException('User not found');
+    const email = data.email === undefined ? undefined : data.email?.trim() || null;
+    if (email) {
+      const emailOwner = await this.prisma.user.findFirst({
+        where: { email, id: { not: id } },
+        select: { id: true },
+      });
+      if (emailOwner) throw new ConflictException('该邮箱已被其他用户使用');
+    }
     const passwordHash = data.password ? await this.hashPassword(data.password) : undefined;
     const updateData: {
       name?: string;
@@ -429,9 +437,17 @@ export class RbacService implements OnModuleInit {
       defaultDataScope: data.defaultDataScope,
       defaultDataScopeValue: data.defaultDataScopeValue,
     };
-    if (data.email !== undefined) updateData.email = data.email?.trim() || null;
+    if (email !== undefined) updateData.email = email;
     if (data.phone !== undefined) updateData.phone = data.phone || null;
-    await this.prisma.user.update({ where: { id }, data: updateData });
+    try {
+      await this.prisma.user.update({ where: { id }, data: updateData });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const fields = Array.isArray(error.meta?.target) ? error.meta.target.map(String) : [];
+        if (fields.includes('email')) throw new ConflictException('该邮箱已被其他用户使用');
+      }
+      throw error;
+    }
     if (data.roleId !== undefined) {
       await this.prisma.userRole.deleteMany({ where: { userId: id } });
       if (data.roleId) {
