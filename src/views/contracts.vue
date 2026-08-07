@@ -36,7 +36,7 @@
               <tr v-for="(contract, index) in paginatedContracts" :key="contract.id">
                 <td class="select-cell"><input type="checkbox" :checked="selectedIds.includes(contract.id)" @change="toggleContractSelection(contract.id)" /></td>
                 <td>{{ (page - 1) * pageSize + index + 1 }}</td>
-                <td v-for="column in visibleContractColumns" :key="column.key"><span v-if="column.key === 'status'" class="status-chip" :class="`contract-status-${String(contract.status).toLowerCase()}`">{{ statusLabel(contract.status) }}</span><template v-else>{{ getContractColumnValue(contract, column.key) }}</template></td>
+                <td v-for="column in visibleContractColumns" :key="column.key"><span v-if="column.key === 'status'" class="status-chip" :class="`contract-status-${String(contract.status).toLowerCase()}`">{{ statusLabel(contract.status) }}</span><TextDetailDialog v-else-if="column.key === 'remark'" :text="contract.remark" :title="labels.remark" :common="common" /><template v-else>{{ getContractColumnValue(contract, column.key) }}</template></td>
                 <td><div class="row-actions"><button class="ghost-button mini" type="button" @click="openDetail(contract.id)">{{ labels.details }}</button><button class="ghost-button mini" type="button" @click="openEdit(contract)">{{ common.edit }}</button><button class="danger-button mini" type="button" @click="deleteContract(contract.id)">{{ common.delete }}</button></div></td>
               </tr>
             </tbody>
@@ -148,6 +148,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import DataPagination from "../components/DataPagination.vue";
 import DualScrollTable from "../components/DualScrollTable.vue";
+import TextDetailDialog from "../components/TextDetailDialog.vue";
 import { useI18n } from "../i18n";
 import { api } from "../services/api";
 import { requestConfirm } from "../services/confirm";
@@ -226,7 +227,7 @@ const filteredRoomOptions = computed(() => {
 const paginatedContracts = computed(() => contracts.value);
 const pageContractIds = computed(() => paginatedContracts.value.map((contract) => contract.id));
 const allPageSelected = computed(() => pageContractIds.value.length > 0 && pageContractIds.value.every((id) => selectedIds.value.includes(id)));
-const sortableContractKeys = new Set(["startDate", "endDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
+const sortableContractKeys = new Set(["startDate", "endDate", "insuranceStartDate", "insuranceEndDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
 const sortIcon = (key) => sortBy.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '';
 const readyCount = computed(() => Math.max(0, (importResult.value?.batch?.totalRows || 0) - (importResult.value?.batch?.successRows || 0) - (importResult.value?.batch?.skippedRows || 0) - (importResult.value?.batch?.failedRows || 0) - (importResult.value?.batch?.conflictRows || 0)));
 let contractSearchTimer;

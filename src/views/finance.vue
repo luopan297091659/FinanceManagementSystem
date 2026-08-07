@@ -31,6 +31,9 @@
           :columns="financeColumns"
           :labels="labels"
           :common="common"
+          :sort-by="sortBy"
+          :sort-dir="sortDir"
+          @sort="toggleSort"
           @edit="editFinance"
           @delete="deleteFinance"
         />
@@ -88,6 +91,8 @@ const fileInput = ref(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
+const sortBy = ref("date");
+const sortDir = ref("desc");
 const showFinanceModal = ref(false);
 const financeModalTitle = ref("");
 const financeColumns = ref([
@@ -108,7 +113,17 @@ const financeColumns = ref([
 const showColumnPanel = ref(false);
 const visibleFinanceColumns = computed(() => financeColumns.value.filter((column) => column.visible));
 const exportFinanceColumns = computed(() => visibleFinanceColumns.value.map((column) => ({ ...column, label: labels.value[column.labelKey] })));
-const filteredItems = computed(() => items.value.filter(matchesFinanceSearch));
+const filteredItems = computed(() => [...items.value]
+  .filter(matchesFinanceSearch)
+  .sort((left, right) => {
+    const direction = sortDir.value === "asc" ? 1 : -1;
+    return String(left.occurredAt || "").localeCompare(String(right.occurredAt || "")) * direction;
+  }));
+
+const toggleSort = (key) => {
+  if (sortBy.value === key) sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
+  else { sortBy.value = key; sortDir.value = "asc"; }
+};
 
 const resetForm = () => {
   form.value = blankForm();

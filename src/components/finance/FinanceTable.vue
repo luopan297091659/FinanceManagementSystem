@@ -12,7 +12,12 @@
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
             </th>
             <th class="index-cell">{{ common.index }}</th>
-            <th v-for="column in visibleColumns" :key="column.key">{{ labels[column.labelKey] }}</th>
+            <th v-for="column in visibleColumns" :key="column.key">
+              <button v-if="column.key === 'date'" type="button" class="table-sort-button" @click="emit('sort', column.key)">
+                {{ labels[column.labelKey] }} <span class="sort-icon">{{ sortIcon(column.key) }}</span>
+              </button>
+              <span v-else>{{ labels[column.labelKey] }}</span>
+            </th>
             <th class="actions-cell">{{ common.actions }}</th>
           </tr>
         </thead>
@@ -54,7 +59,7 @@
                 <p>{{ join(item.financialInstitutionName, item.bankBranchName) || "-" }}</p>
               </template>
               <template v-else-if="column.key === 'remark'">
-                <p>{{ item.remark || "-" }}</p>
+                <TextDetailDialog :text="item.remark" :title="labels.remark" :common="common" />
               </template>
               <template v-else-if="column.key === 'manualReconciliation'">
                 <span class="status-pill neutral">{{ item.manuallyReconciled ? labels.yes : labels.no }}</span>
@@ -83,6 +88,7 @@
 <script setup>
 import { computed } from "vue";
 import DualScrollTable from "../DualScrollTable.vue";
+import TextDetailDialog from "../TextDetailDialog.vue";
 import { appPath } from "../../utils/appPath";
 
 const props = defineProps({
@@ -106,13 +112,16 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  sortBy: { type: String, default: "date" },
+  sortDir: { type: String, default: "desc" },
 });
 
-const emit = defineEmits(["edit", "delete", "update:selectedIds"]);
+const emit = defineEmits(["edit", "delete", "sort", "update:selectedIds"]);
 
 const visibleColumns = computed(() => props.columns.filter((column) => column.visible));
 const pageIds = computed(() => props.items.map((item) => item.id));
 const allSelected = computed(() => pageIds.value.length > 0 && pageIds.value.every((id) => props.selectedIds.includes(id)));
+const sortIcon = (key) => props.sortBy === key ? (props.sortDir === "asc" ? "▲" : "▼") : "";
 
 const toggleAll = () => {
   const selected = new Set(props.selectedIds);

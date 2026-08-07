@@ -697,6 +697,9 @@ button:disabled {
 }
 
 .data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: #eef6ff;
   color: var(--muted);
   font-size: 13px;
@@ -737,7 +740,31 @@ button:disabled {
 
 .data-table thead .actions-cell {
   background: #eef6ff;
-  z-index: 2;
+  z-index: 3;
+}
+
+.table-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+.table-sort-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.sort-icon {
+  min-width: 1em;
+  font-size: .8em;
+  opacity: .65;
 }
 
 .compact-binding-list {

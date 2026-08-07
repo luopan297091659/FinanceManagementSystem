@@ -78,7 +78,8 @@ onBeforeUnmount(() => {
 
 .dual-scroll-content {
   max-width: 100%;
-  overflow-x: auto;
+  max-height: calc(100vh - 300px);
+  overflow: auto;
 }
 
 .table-top-scroll {

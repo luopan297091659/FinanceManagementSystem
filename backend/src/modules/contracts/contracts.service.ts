@@ -115,6 +115,8 @@ export class ContractsService {
     const sortableFields: Record<string, boolean> = {
       startDate: true,
       endDate: true,
+      insuranceStartDate: true,
+      insuranceEndDate: true,
       monthlyRent: true,
       managementFee: true,
       deposit: true,

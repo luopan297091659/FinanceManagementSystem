@@ -56,7 +56,7 @@
                 <button v-if="item.currentContractId" class="table-link-button" type="button" @click="openContract(item.currentContractId)">{{ item.currentContract }}</button>
               </template>
               <template v-else-if="column.key === 'note'">
-                {{ item.note || "" }}
+                <TextDetailDialog :text="item.note" :title="labels.note" :common="common" />
               </template>
             </td>
             <td class="actions-cell">
@@ -75,6 +75,7 @@
 <script setup>
 import { computed } from "vue";
 import DualScrollTable from "../DualScrollTable.vue";
+import TextDetailDialog from "../TextDetailDialog.vue";
 import { appPath } from "../../utils/appPath";
 
 const props = defineProps({
