@@ -361,7 +361,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DataPagination from "../components/DataPagination.vue";
 import DualScrollTable from "../components/DualScrollTable.vue";
 import { locale, messages } from "../i18n";
@@ -379,6 +379,7 @@ const showProviderDialog = ref(false);
 const aiProviders = ref([]);
 const providerLoading = ref(false);
 const providerMessage = ref("");
+let providerMessageTimer;
 const emptyProviderForm = () => ({ id: "", displayName: "", providerType: "OPENAI", transport: "OPENAI_RESPONSES", baseUrl: "https://api.openai.com", apiPath: "/v1/responses", modelName: "", structuringModelName: "", structuringApiPath: "", apiKey: "", apiKeyMasked: "", supportsPdfInput: true, supportsStructuredJson: true, supportsJapanese: true, enabled: true, isDefault: false, timeoutMs: 120000, maxRetries: 2 });
 const providerForm = ref(emptyProviderForm());
 const batches = ref([]);
@@ -410,6 +411,7 @@ const fieldSearch = ref("");
 const excelSearch = ref("");
 const previewResult = ref(null);
 const templateValidationMessage = ref("");
+let templateMessageTimer;
 const activeRule = ref({ groupIndex: 0, ruleIndex: 0 });
 const draggedField = ref(null);
 const emptyConfiguration = () => ({ groups: [] });
@@ -663,20 +665,32 @@ const pollScanTask = async (scanId) => {
   }
 };
 
+const clearProviderMessage = () => {
+  clearTimeout(providerMessageTimer);
+  providerMessageTimer = undefined;
+  providerMessage.value = "";
+};
+
+const showProviderMessage = (message, isError = false) => {
+  clearTimeout(providerMessageTimer);
+  providerMessage.value = message;
+  providerMessageTimer = setTimeout(clearProviderMessage, isError ? 6000 : 3500);
+};
+
 const openProviderDialog = async () => {
   showProviderDialog.value = true;
-  providerMessage.value = "";
+  clearProviderMessage();
   try {
     aiProviders.value = await api.listBankStatementAiProviders();
     if (aiProviders.value[0]) editProvider(aiProviders.value[0]); else newProvider();
   } catch (error) {
-    providerMessage.value = error.message;
+    showProviderMessage(error.message, true);
   }
 };
 
 const newProvider = () => {
   providerForm.value = emptyProviderForm();
-  providerMessage.value = "";
+  clearProviderMessage();
 };
 
 const applyProviderTypeDefaults = () => {
@@ -709,19 +723,19 @@ const applyProviderTypeDefaults = () => {
 
 const editProvider = (provider) => {
   providerForm.value = { ...emptyProviderForm(), ...provider, apiKey: "" };
-  providerMessage.value = "";
+  clearProviderMessage();
 };
 
 const saveProvider = async () => {
   providerLoading.value = true;
-  providerMessage.value = "";
+  clearProviderMessage();
   try {
     const saved = await api.saveBankStatementAiProvider(providerForm.value, providerForm.value.id);
     aiProviders.value = await api.listBankStatementAiProviders();
     editProvider(saved);
-    providerMessage.value = locale.value === "zh" ? "AI 模型配置已保存。" : "AI モデル設定を保存しました。";
+    showProviderMessage(locale.value === "zh" ? "AI 模型配置已保存。" : "AI モデル設定を保存しました。");
   } catch (error) {
-    providerMessage.value = error.message;
+    showProviderMessage(error.message, true);
   } finally {
     providerLoading.value = false;
   }
@@ -732,9 +746,9 @@ const testProvider = async () => {
   providerLoading.value = true;
   try {
     const result = await api.testBankStatementAiProvider(providerForm.value.id);
-    providerMessage.value = `${locale.value === "zh" ? "连接成功" : "接続成功"} · ${result.latencyMs} ms · ${result.model}`;
+    showProviderMessage(`${locale.value === "zh" ? "连接成功" : "接続成功"} · ${result.latencyMs} ms · ${result.model}`);
   } catch (error) {
-    providerMessage.value = error.message;
+    showProviderMessage(error.message, true);
   } finally {
     providerLoading.value = false;
   }
@@ -849,6 +863,16 @@ const openSavedTemplate = (template) => {
   templateName.value = template.name;
   openMatchingDialog(template.configurationJson);
 };
+const clearTemplateMessage = () => {
+  clearTimeout(templateMessageTimer);
+  templateMessageTimer = undefined;
+  templateValidationMessage.value = "";
+};
+const showTemplateMessage = (message, autoDismiss = false) => {
+  clearTimeout(templateMessageTimer);
+  templateValidationMessage.value = message;
+  if (autoDismiss) templateMessageTimer = setTimeout(clearTemplateMessage, 3500);
+};
 const openMatchingDialog = async (initialConfiguration) => {
   if (!activeBatchId.value) return;
   loading.value = true;
@@ -866,7 +890,7 @@ const openMatchingDialog = async (initialConfiguration) => {
     draftConfiguration.value = normalizeConfigurationFields(initialConfiguration || { groups: [newRuleGroup()] });
     activeRule.value = { groupIndex: 0, ruleIndex: 0 };
     previewResult.value = null;
-    templateValidationMessage.value = "";
+    clearTemplateMessage();
     showMatchingDialog.value = true;
   } catch (error) {
     errorMessage.value = error.message;
@@ -887,7 +911,7 @@ const duplicateRuleGroup = (index) => {
 };
 const addRule = (groupIndex) => { draftConfiguration.value.groups[groupIndex].rules.push(newRule()); activeRule.value = { groupIndex, ruleIndex: draftConfiguration.value.groups[groupIndex].rules.length - 1 }; };
 const removeRule = (groupIndex, ruleIndex) => { draftConfiguration.value.groups[groupIndex].rules.splice(ruleIndex, 1); };
-const resetConfiguration = () => { draftConfiguration.value = { groups: [newRuleGroup()] }; selectedTemplateId.value = ""; templateName.value = ""; previewResult.value = null; templateValidationMessage.value = ""; dialogError.value = ""; };
+const resetConfiguration = () => { draftConfiguration.value = { groups: [newRuleGroup()] }; selectedTemplateId.value = ""; templateName.value = ""; previewResult.value = null; clearTemplateMessage(); dialogError.value = ""; };
 const startFieldDrag = (side, key) => { draggedField.value = { side, key }; };
 const dropField = (groupIndex, ruleIndex, side) => {
   if (!draggedField.value || draggedField.value.side !== side) return;
@@ -967,7 +991,7 @@ const saveAsTemplate = async () => {
   if (!name || !draftValid.value) return;
   templateSaving.value = true;
   dialogError.value = "";
-  templateValidationMessage.value = "";
+  clearTemplateMessage();
   try {
     const selected = templates.value.find((item) => item.id === selectedTemplateId.value);
     const isUpdate = selected?.name === name;
@@ -982,7 +1006,7 @@ const saveAsTemplate = async () => {
     await api.saveReconciliationConfiguration(activeBatchId.value, draftConfiguration.value, template.id);
     matchingConfiguration.value = clonePlain(draftConfiguration.value);
     updateCurrentBatchTemplate(template);
-    templateValidationMessage.value = isUpdate ? ui.value.templateUpdated : ui.value.templateSaved;
+    showTemplateMessage(isUpdate ? ui.value.templateUpdated : ui.value.templateSaved, true);
   } catch (error) {
     dialogError.value = error.message;
   } finally {
@@ -990,7 +1014,7 @@ const saveAsTemplate = async () => {
   }
 };
 const loadSelectedTemplate = async () => {
-  templateValidationMessage.value = "";
+  clearTemplateMessage();
   dialogError.value = "";
   const template = templates.value.find((item) => item.id === selectedTemplateId.value);
   if (!template) {
@@ -1007,7 +1031,7 @@ const loadSelectedTemplate = async () => {
   }
   const available = new Set(excelHeaders.value.map((header) => header.name));
   const missing = draftConfiguration.value.groups.flatMap((group) => group.rules || []).flatMap((rule) => rule.rightFields || []).filter((name) => !available.has(name));
-  if (missing.length) templateValidationMessage.value = `${ui.value.invalidTemplate} ${[...new Set(missing)].join(", ")}`;
+  if (missing.length) showTemplateMessage(`${ui.value.invalidTemplate} ${[...new Set(missing)].join(", ")}`);
 };
 
 const submitBatch = async () => {
@@ -1160,6 +1184,10 @@ onMounted(async () => {
     loadBatches(),
     loadScanTasks(),
   ]);
+});
+onBeforeUnmount(() => {
+  clearProviderMessage();
+  clearTemplateMessage();
 });
 </script>
 

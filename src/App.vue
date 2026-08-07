@@ -46,7 +46,7 @@
             :aria-expanded="isAiAnalysisExpanded"
             @click="toggleAiAnalysis"
           >
-            <AppIcon name="brain" class="nav-icon" :size="19" />
+            <AppIcon name="sparkles" class="nav-icon" :size="19" />
             <span class="nav-label">{{ aiMenuTitle }}</span>
             <AppIcon name="chevron-right" class="nav-chevron" :size="16" />
           </button>
@@ -178,9 +178,9 @@ const navItems = computed(() => [
   { key: "resources", label: dictionary.value.resources, icon: "building", permissions: ["property.view", "property:view"] },
   { key: "contracts", label: dictionary.value.contracts, icon: "users", permissions: ["contract.view"] },
   { key: "finance", label: dictionary.value.finance, icon: "finance", permissions: ["payment:view"] },
-  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: "finance", permissions: ["reconciliation.bank.view"] },
-  { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: "search", permissions: ["reconciliation.ocr.view", "ocr:execute"] },
-  { key: "knowledge", label: dictionary.value.knowledge, icon: "brain", permissions: ["knowledge:view"] },
+  { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: "landmark", permissions: ["reconciliation.bank.view"] },
+  { key: "ocr", label: reconciliationMenuLabels.value.ocr, icon: "scan-search", permissions: ["reconciliation.ocr.view", "ocr:execute"] },
+  { key: "knowledge", label: dictionary.value.knowledge, icon: "book-open", permissions: ["knowledge:view"] },
   { key: "system-users", view: "system", tab: "users", label: dictionary.value.systemUsers, icon: "user-cog", permissions: ["user:view"] },
   { key: "system-roles", view: "system", tab: "roles", label: dictionary.value.systemRoles, icon: "shield", permissions: ["role:view"] },
   { key: "system-logs", view: "system", tab: "logs", label: dictionary.value.systemLogs, icon: "scroll", permissions: ["audit_log:view"] },

@@ -246,7 +246,7 @@ const reviewingRecord = ref(null), matchCandidates = ref([]), candidateSearch = 
 const loadingCandidates = ref(false), savingReview = ref(false);
 const matchConfigOpen = ref(false), matchConfiguration = ref({ logicalOperator:'AND', rules:[] }), draftMatchConfiguration = ref({ logicalOperator:'AND', rules:[] });
 const savingMatchConfig = ref(false), matchingRunning = ref(false), savingActualMonthId = ref(''), jsonDetailRecord = ref(null);
-let pollTimer, progressTimer;
+let pollTimer, progressTimer, messageTimer;
 const availableMatchFields = [
   { key:'partyName', label:'对方名称', help:'入金方/出金方 ↔ 租客、付款人或契约者' },
   { key:'summary', label:'银行摘要', help:'OCR 摘要 ↔ 合同银行摘要/入金名义' },
@@ -303,7 +303,7 @@ async function confirmTaskDelete() { if (!taskPendingDelete.value) return; delet
 function handleFileSelection(event) { selectedFiles.value.push(...Array.from(event.target.files || [])); event.target.value = ''; }
 function handleDrop(event) { isDragging.value = false; if (!isExecuting.value) selectedFiles.value.push(...Array.from(event.dataTransfer?.files || [])); }
 async function executeWorkflow() {
-  submitting.value = true; message.value = ''; executionPhase.value = 'uploading'; progressPercent.value = 1;
+  submitting.value = true; clearMessage(); executionPhase.value = 'uploading'; progressPercent.value = 1;
   try {
     const form = new FormData(); form.append('workflowId', executionWorkflowId); form.append('taskName', taskName.value.trim()); selectedFiles.value.forEach((file) => form.append('files', file, file.name));
     activeTask.value = await api.uploadOcrTaskWithProgress(form, (percent) => { progressPercent.value = Math.max(progressPercent.value, percent * .58); });
@@ -318,7 +318,7 @@ async function executeWorkflow() {
     executionPhase.value = 'waiting'; progressPercent.value = 72;
     progressTimer = setInterval(() => { if (progressPercent.value < 92) progressPercent.value += 1; }, 1200);
     await pollExecution(activeTask.value.taskId);
-  } catch (error) { clearTimers(); executionPhase.value = 'failed'; message.value = error.message; messageIsError.value = true; }
+  } catch (error) { clearTimers(); executionPhase.value = 'failed'; showMessage(error.message, true); }
   finally { submitting.value = false; }
 }
 async function pollExecution(taskId) {
@@ -349,7 +349,8 @@ async function loadMatchCandidates() { if (!reviewingRecord.value) return; loadi
 async function confirmManualMatch() { if (!reviewingRecord.value || !selectedContractId.value) return; savingReview.value = true; try { detailTask.value = await api.reviewOcrRecord(detailTaskId, reviewingRecord.value._recordId, { action: 'MATCH', contractId: selectedContractId.value }); closeMatchDialog(); showMessage('系统侧数据匹配成功，已标记为手工匹配。'); } catch (error) { showMessage(error.message, true); } finally { savingReview.value = false; } }
 async function markManualSync(record) { if (!record || !window.confirm('确认该记录无法匹配系统数据，并标记为手工同步？')) return; savingReview.value = true; try { detailTask.value = await api.reviewOcrRecord(detailTaskId, record._recordId, { action: 'MANUAL_SYNC' }); reviewingRecord.value = null; matchCandidates.value = []; selectedContractId.value = ''; showMessage('该记录已标记为手工同步。'); } catch (error) { showMessage(error.message, true); } finally { savingReview.value = false; } }
 function clearTimers() { clearTimeout(pollTimer); clearInterval(progressTimer); pollTimer = undefined; progressTimer = undefined; }
-function showMessage(text, error = false) { message.value = text; messageIsError.value = error; }
+function clearMessage() { clearTimeout(messageTimer); messageTimer = undefined; message.value = ''; messageIsError.value = false; }
+function showMessage(text, error = false) { clearTimeout(messageTimer); message.value = text; messageIsError.value = error; messageTimer = setTimeout(clearMessage, error ? 6000 : 3500); }
 function compactUrl(value) { return value?.length > 36 ? `${value.slice(0, 25)}…${value.slice(-8)}` : value || '—'; }
 function formatDate(value) { return value ? new Date(value).toLocaleString() : '—'; }
 function formatSize(bytes) { if (!bytes) return '0 B'; const units=['B','KB','MB','GB']; const index=Math.min(Math.floor(Math.log(bytes)/Math.log(1024)),3); return `${(bytes/1024**index).toFixed(index?1:0)} ${units[index]}`; }
@@ -362,7 +363,7 @@ function valueOf(record,...keys) { return keys.map((key)=>record?.[key]).find((v
 function money(value) { if(value===undefined||value===null||value==='') return '—'; const number=Number(value); return Number.isFinite(number)?`¥${number.toLocaleString()}`:value; }
 
 onMounted(async () => { try { if (pageMode === 'detail') await loadDetailTask(); else { await loadPage(); if (pageMode === 'execute' && !executionWorkflow.value) showMessage('工作流不存在或已删除。', true); if (pageMode === 'history' && !historyWorkflow.value) showMessage('工作流不存在或已删除，无法加载执行历史。', true); } } catch (error) { showMessage(error.message, true); } finally { loading.value = false; } });
-onBeforeUnmount(clearTimers);
+onBeforeUnmount(() => { clearTimers(); clearMessage(); });
 </script>
 
 <style scoped>

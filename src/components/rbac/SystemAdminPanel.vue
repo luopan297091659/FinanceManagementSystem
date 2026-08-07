@@ -256,27 +256,27 @@
       </DualScrollTable>
     </div>
 
-    <div v-if="notice" :class="['notice', notice.type]">{{ notice.message }}</div>
+    <div v-if="notice" :class="['notice', notice.type]" role="status" aria-live="polite">{{ notice.message }}</div>
 
     <!-- User Modal -->
     <div v-if="showUserModal" class="modal-overlay" @click="closeUserModal">
-      <div class="modal-card" @click.stop>
+      <form class="modal-card" autocomplete="off" @click.stop @submit.prevent="saveUser">
         <h2>{{ editingUser ? dict.editUser : dict.newUser }}</h2>
         <div class="form-group">
           <label>{{ dict.username }}</label>
-          <input v-model="userForm.username" type="text" :disabled="!!editingUser" />
+          <input v-model="userForm.username" name="managed-user-username" type="text" autocomplete="off" data-lpignore="true" :disabled="!!editingUser" />
         </div>
         <div class="form-group">
           <label>{{ dict.name }}</label>
-          <input v-model="userForm.name" type="text" />
+          <input v-model="userForm.name" name="managed-user-display-name" type="text" autocomplete="off" data-lpignore="true" />
         </div>
         <div class="form-group">
           <label>{{ dict.email }}</label>
-          <input v-model="userForm.email" type="email" />
+          <input v-model="userForm.email" name="managed-user-email" type="email" autocomplete="off" data-lpignore="true" data-1p-ignore />
         </div>
         <div class="form-group">
           <label>{{ dict.password }}</label>
-          <input v-model="userForm.password" type="password" :placeholder="editingUser ? dict.leaveBlank : ''" />
+          <input v-model="userForm.password" name="managed-user-new-password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore :placeholder="editingUser ? dict.leaveBlank : ''" />
         </div>
         <div class="form-group">
           <label>{{ dict.role }}</label>
@@ -292,10 +292,10 @@
           {{ dict.active }}
         </label>
         <div class="modal-actions">
-          <button @click="saveUser" class="modal-button primary">{{ dict.save }}</button>
-          <button @click="closeUserModal" class="modal-button">{{ dict.cancel }}</button>
+          <button type="submit" class="modal-button primary">{{ dict.save }}</button>
+          <button type="button" class="modal-button" @click="closeUserModal">{{ dict.cancel }}</button>
         </div>
-      </div>
+      </form>
     </div>
 
     <!-- Role Modal -->
@@ -400,7 +400,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { getTranslationMatrixRows, locale, messages, reloadPublishedTranslations } from '../../i18n.js';
 import { api } from '../../services/api.js';
 import { requestConfirm } from '../../services/confirm.js';
@@ -424,6 +424,7 @@ const roles = ref([]);
 const logs = ref([]);
 const allPermissions = ref([]);
 const notice = ref(null);
+let noticeTimer;
 const sentToday = ref(0);
 const testEmail = ref('');
 const translations = ref([]);
@@ -588,8 +589,16 @@ const tabs = computed(() => [
   { key: 'translations', label: dict.value.translationManagement, permission: 'i18n.translation.view' },
 ].filter((tab) => can(tab.permission)));
 
+const clearNotice = () => {
+  clearTimeout(noticeTimer);
+  noticeTimer = undefined;
+  notice.value = null;
+};
+
 const showNotice = (message, type = 'error') => {
+  clearTimeout(noticeTimer);
   notice.value = { message, type };
+  noticeTimer = setTimeout(clearNotice, type === 'success' ? 3000 : 6000);
 };
 
 const formatDate = (dateStr) => {
@@ -654,7 +663,7 @@ const loadTranslations = async () => {
 };
 
 const loadData = async () => {
-  notice.value = null;
+  clearNotice();
   const loaders = {
     users: loadUsers,
     roles: loadRoles,
@@ -664,6 +673,8 @@ const loadData = async () => {
   };
   await loaders[activeTab.value]?.();
 };
+
+onBeforeUnmount(clearNotice);
 
 const resetUserForm = () => {
   editingUser.value = null;
