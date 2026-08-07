@@ -1155,6 +1155,7 @@ model OcrTask {
   storagePaths    String[]      @default([])
   resultJson      Json?
   matchedResultJson Json?
+  resultSummary   Json?
   callbackPayload Json?
   reviewStatus    String?       @default("PENDING")
   errorMessage    String?

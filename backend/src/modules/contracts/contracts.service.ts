@@ -6,6 +6,52 @@ import { detectUnitType, normalizeAddress, normalizeMatchText, normalizePostalCo
 
 type SourceRow = Record<string, unknown>;
 
+// List and export responses do not need the imported sourceDataJson blob or
+// audit-only columns. Keeping this projection explicit prevents a large import
+// payload from being read and serialized for every row in a management page.
+const contractListSelect = {
+  id: true,
+  propertyId: true,
+  roomId: true,
+  tenantId: true,
+  contractNumber: true,
+  externalContractId: true,
+  contractorName: true,
+  contractorNameKana: true,
+  contractorType: true,
+  payerName: true,
+  payerNameKana: true,
+  bankSummaryName: true,
+  bankStatementSummary: true,
+  startDate: true,
+  endDate: true,
+  paymentMethod: true,
+  paymentMonthType: true,
+  monthlyRent: true,
+  managementFee: true,
+  deposit: true,
+  keyMoney: true,
+  guaranteeDeposit: true,
+  guaranteeFee: true,
+  keyReplacementFee: true,
+  renewalAdministrativeFee: true,
+  guaranteeCompanyName: true,
+  guaranteeCompanyNameKana: true,
+  insuranceName: true,
+  insuranceFee: true,
+  insurancePeriod: true,
+  insuranceStartDate: true,
+  insuranceEndDate: true,
+  collectionAccount: true,
+  managementContractType: true,
+  remark: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  property: { select: { id: true, name: true } },
+  room: { select: { id: true, roomNumber: true } },
+} satisfies Prisma.ContractSelect;
+
 const H = {
   contractNumber: '契約番号', externalContractId: '外部契約ID',
   propertyName: '【物件情報】物件名', roomNumber: '【基本情報】部屋番号', postalCode: '【物件情報】郵便番号', address: '【物件情報】住所',
@@ -52,7 +98,7 @@ export class ContractsService {
     const [contracts, total] = await Promise.all([
       this.prisma.contract.findMany({
         where,
-        include: { property: { select: { id: true, name: true } }, room: { select: { id: true, roomNumber: true } } },
+        select: contractListSelect,
         orderBy: this.contractOrderBy(sortBy, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -102,7 +148,7 @@ export class ContractsService {
   async exportRows(search?: string) {
     const contracts = await this.prisma.contract.findMany({
       where: this.contractWhere(search),
-      include: { property: { select: { id: true, name: true } }, room: { select: { id: true, roomNumber: true } } },
+      select: contractListSelect,
       orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
     });
     return contracts.map((contract) => this.toContract(contract));

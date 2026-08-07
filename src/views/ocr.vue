@@ -300,7 +300,7 @@ function openExecution(item) { window.open(`${appEntryPath}?view=ocr&mode=execut
 function openWorkflowHistory(item) { window.location.href = `${appEntryPath}?view=ocr&mode=history&workflowId=${encodeURIComponent(item.id)}`; }
 function goToWorkflowList() { window.location.href = `${appEntryPath}?view=ocr`; }
 async function loadPage() { [workflows.value, tasks.value] = await Promise.all([api.listOcrWorkflows(), api.listOcrTasks(pageMode === 'history' ? historyWorkflowId : '')]); }
-function historyResultText(task) { const summary=task.resultJson?.summary || task.matchedResultJson?.summary; if (!summary) return task.state === 'FAILED' ? '执行失败' : '暂无回调结果'; return `共 ${summary.total || 0} 条 / 已匹配 ${summary.matched || 0} 条 / 待处理 ${summary.unmatched || 0} 条`; }
+function historyResultText(task) { const summary=task.resultSummary || task.resultJson?.summary || task.matchedResultJson?.summary; if (!summary) return task.state === 'FAILED' ? '执行失败' : '暂无回调结果'; return `共 ${summary.total || 0} 条 / 已匹配 ${summary.matched || 0} 条 / 待处理 ${summary.unmatched || 0} 条`; }
 async function confirmTaskDelete() { if (!taskPendingDelete.value) return; deletingTask.value=true; try { await api.deleteOcrTask(taskPendingDelete.value.taskId); taskPendingDelete.value=null; await loadPage(); showMessage('历史执行记录已删除。'); } catch(error) { showMessage(error.message,true); } finally { deletingTask.value=false; } }
 function handleFileSelection(event) { selectedFiles.value.push(...Array.from(event.target.files || [])); event.target.value = ''; }
 function handleDrop(event) { isDragging.value = false; if (!isExecuting.value) selectedFiles.value.push(...Array.from(event.dataTransfer?.files || [])); }

@@ -28,10 +28,12 @@ export class PropertiesService {
         where,
         include: {
           property: { include: { project: true } },
+          _count: { select: { contracts: { where: { deletedAt: null } } } },
           contracts: {
             where: { deletedAt: null },
-            select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, bankStatementSummary: true, status: true, startDate: true },
+            select: { id: true, contractNumber: true, contractorName: true, status: true, startDate: true },
             orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+            take: 1,
           },
         },
         orderBy: [{ property: { name: 'asc' } }, { roomNumber: 'asc' }, { createdAt: 'asc' }],
@@ -40,8 +42,29 @@ export class PropertiesService {
       }),
       this.prisma.room.count({ where }),
     ]);
+    const roomIds = rooms.map((room) => room.id);
+    const currentContractIds = rooms.map((room) => room.currentContractId).filter((id): id is string => Boolean(id));
+    const preferredContracts = roomIds.length
+      ? await this.prisma.contract.findMany({
+          where: {
+            deletedAt: null,
+            OR: [
+              ...(currentContractIds.length ? [{ id: { in: currentContractIds } }] : []),
+              { roomId: { in: roomIds }, status: 'ACTIVE' },
+            ],
+          },
+          select: { id: true, roomId: true, contractNumber: true, contractorName: true, status: true, startDate: true },
+          orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+        })
+      : [];
+    const contractsByRoom = new Map<string, typeof preferredContracts>();
+    for (const contract of preferredContracts) {
+      const existing = contractsByRoom.get(contract.roomId) ?? [];
+      existing.push(contract);
+      contractsByRoom.set(contract.roomId, existing);
+    }
     return {
-      items: rooms.map((room) => this.toRoomListItem(room)),
+      items: rooms.map((room) => this.toRoomListItem(room, contractsByRoom.get(room.id))),
       pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
     };
   }
@@ -116,10 +139,12 @@ export class PropertiesService {
     };
   }
 
-  private toRoomListItem(room: any) {
-    const currentContract = room.contracts.find((contract: any) => contract.id === room.currentContractId)
-      ?? room.contracts.find((contract: any) => contract.status === 'ACTIVE')
-      ?? room.contracts[0]
+  private toRoomListItem(room: any, preferredContracts: any[] = []) {
+    const contracts = [...preferredContracts, ...room.contracts]
+      .filter((contract, index, all) => all.findIndex((candidate) => candidate.id === contract.id) === index);
+    const currentContract = contracts.find((contract: any) => contract.id === room.currentContractId)
+      ?? contracts.find((contract: any) => contract.status === 'ACTIVE')
+      ?? contracts[0]
       ?? null;
     const property = room.property;
     return {
@@ -156,7 +181,7 @@ export class PropertiesService {
       status: room.status,
       note: room.note ?? '',
       roomRemark: room.remark ?? '',
-      contractPresence: room.contracts.length > 0,
+      contractPresence: (room._count?.contracts ?? room.contracts.length) > 0,
       currentContractId: currentContract?.id ?? '',
       currentContract: currentContract ? [currentContract.contractNumber, currentContract.contractorName].filter(Boolean).join(' / ') : '',
       currentContractStatus: currentContract?.status ?? 'UNCONTRACTED',

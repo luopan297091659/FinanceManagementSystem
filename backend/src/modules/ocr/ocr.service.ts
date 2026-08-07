@@ -59,7 +59,23 @@ export class OcrService {
   listTasks(workflowId?: string) {
     return this.prisma.ocrTask.findMany({
       where: workflowId ? { workflowId } : undefined,
-      include: { workflow: true },
+      select: {
+        id: true,
+        taskId: true,
+        sessionId: true,
+        workflowId: true,
+        taskName: true,
+        state: true,
+        fileNames: true,
+        reviewStatus: true,
+        errorMessage: true,
+        startedAt: true,
+        completedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        resultSummary: true,
+        workflow: { select: { id: true, name: true, enabled: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
@@ -73,7 +89,7 @@ export class OcrService {
     if (!workflow || !workflow.enabled) throw new BadRequestException('请选择有效的 LLM 工作流');
     const taskId = `OCR-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const sessionId = dto.sessionId?.trim() || randomUUID();
-    return this.prisma.ocrTask.create({
+    const task = await this.prisma.ocrTask.create({
       data: {
         taskId,
         sessionId,
@@ -88,6 +104,7 @@ export class OcrService {
       },
       include: { workflow: true },
     });
+    return this.toPublicTask(task);
   }
 
   async startTask(taskId: string) {
@@ -95,7 +112,7 @@ export class OcrService {
     if (!task) throw new NotFoundException('OCR 任务不存在');
     if (!task.workflow?.enabled) throw new BadRequestException('该 LLM 工作流已停用或删除');
     if (!task.storagePaths.length) throw new BadRequestException('任务没有可发送的文件');
-    if (task.state === 'PROCESSING') return task;
+    if (task.state === 'PROCESSING') return this.toPublicTask(task);
 
     await this.prisma.ocrTask.update({
       where: { taskId },
@@ -193,13 +210,14 @@ export class OcrService {
         data: {
           resultJson: normalizedResult,
           matchedResultJson: normalizedResult,
+          resultSummary: normalizedResult.summary,
           state: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
           reviewStatus: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
         },
         include: { workflow: true },
       });
     }
-    return task;
+    return this.toPublicTask(task);
   }
 
   async deleteTask(taskId: string, actorUserId?: string) {
@@ -244,11 +262,12 @@ export class OcrService {
       ...result,
       matchConfig: { ...normalizedConfiguration, updatedAt: new Date().toISOString(), updatedBy: actorUserId || null },
     };
-    return this.prisma.ocrTask.update({
+    const updated = await this.prisma.ocrTask.update({
       where: { taskId },
-      data: { resultJson: normalizedResult, matchedResultJson: normalizedResult },
+      data: { resultJson: normalizedResult, matchedResultJson: normalizedResult, resultSummary: (result as any).summary || null },
       include: { workflow: true },
     });
+    return this.toPublicTask(updated);
   }
 
   async executeMatching(taskId: string, configuration: unknown, recordIds: unknown, actorUserId?: string) {
@@ -298,6 +317,7 @@ export class OcrService {
         data: {
           resultJson: normalizedResult,
           matchedResultJson: normalizedResult,
+          resultSummary: summary,
           state: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
           reviewStatus: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
         },
@@ -313,7 +333,7 @@ export class OcrService {
         },
       }),
     ]);
-    return updated;
+    return this.toPublicTask(updated);
   }
 
   async listMatchCandidates(query = '') {
@@ -416,6 +436,7 @@ export class OcrService {
         data: {
           resultJson: normalizedResult,
           matchedResultJson: normalizedResult,
+          resultSummary: normalizedResult.summary,
           state: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
           reviewStatus: pending ? 'REVIEW_REQUIRED' : 'COMPLETED',
         },
@@ -432,7 +453,7 @@ export class OcrService {
         },
       }),
     ]);
-    return updated;
+    return this.toPublicTask(updated);
   }
 
   async updateRecordFields(
@@ -458,7 +479,7 @@ export class OcrService {
     const [updated] = await this.prisma.$transaction([
       this.prisma.ocrTask.update({
         where: { taskId },
-        data: { resultJson: normalizedResult, matchedResultJson: normalizedResult },
+        data: { resultJson: normalizedResult, matchedResultJson: normalizedResult, resultSummary: result.summary || null },
         include: { workflow: true },
       }),
       this.prisma.auditLog.create({
@@ -472,7 +493,7 @@ export class OcrService {
         },
       }),
     ]);
-    return updated;
+    return this.toPublicTask(updated);
   }
 
   async handleCallback(payload: any) {
@@ -502,19 +523,35 @@ export class OcrService {
       matchHistory: [],
     };
 
-    return this.prisma.ocrTask.update({
+    const updated = await this.prisma.ocrTask.update({
       where: { taskId: task.taskId },
       data: {
         state,
         callbackPayload: callback,
         resultJson: normalizedResult,
         matchedResultJson: normalizedResult,
+        resultSummary: summary,
         reviewStatus: unmatchedCount ? 'REVIEW_REQUIRED' : 'COMPLETED',
         errorMessage: failed ? String(callback?.error || callback?.message || callback?.data?.error || '工作流执行失败') : null,
         completedAt: new Date(),
       },
       include: { workflow: true },
     });
+    return this.toPublicTask(updated);
+  }
+
+  private toPublicTask(task: any) {
+    // These fields contain duplicate OCR records or server-only routing data.
+    // The management UI only consumes resultJson.
+    const {
+      matchedResultJson: _matchedResultJson,
+      callbackPayload: _callbackPayload,
+      storagePaths: _storagePaths,
+      webhookUrl: _webhookUrl,
+      callbackUrl: _callbackUrl,
+      ...publicTask
+    } = task;
+    return publicTask;
   }
 
   private normalizeCallbackPayload(payload: any) {
