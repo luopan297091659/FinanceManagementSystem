@@ -1043,19 +1043,21 @@ onBeforeUnmount(() => {
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 24px 28px;
+  padding: 0 clamp(14px, 1.5vw, 28px) 28px;
   background: #edf2f6;
 }
 
 .workspace > * {
-  width: min(100%, 1440px);
-  margin-inline: auto;
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
 }
 
 .topbar {
   flex-wrap: wrap;
   gap: 16px;
-  padding: 20px 0;
+  margin-bottom: 10px;
+  padding: 14px 0;
   border-bottom-color: #d8e1ea;
 }
 

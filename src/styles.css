@@ -1394,9 +1394,14 @@ body,
 
 .page-shell {
   width: 100%;
-  max-width: 1440px;
-  margin-inline: auto;
+  max-width: none;
+  margin-inline: 0;
   gap: 16px;
+}
+
+.data-page > .panel-card,
+.data-page > .content-grid > .panel-card {
+  width: 100%;
 }
 
 .content-grid {
