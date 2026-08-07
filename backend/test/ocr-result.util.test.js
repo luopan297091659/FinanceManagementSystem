@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
 const { extractOcrResultRecords, summarizeOcrRecords } = require('../dist/modules/ocr/ocr-result.util.js');
 
 test('expands Make records stored as a nested JSON string', () => {
@@ -130,3 +132,22 @@ test('summarizes automatic, manual, manual-sync and pending records', () => {
     unmatched: 1,
   });
 });
+
+test('finance OCR response schema is strict and complete for OpenAI Structured Outputs', () => {
+  const schemaPath = path.resolve(__dirname, '../../docs/make-openai-finance-ocr-schema.json');
+  const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+  assert.equal(schema.type, 'object');
+  validateStrictObjectSchemas(schema, '$');
+});
+
+function validateStrictObjectSchemas(schema, location) {
+  if (!schema || typeof schema !== 'object') return;
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  if (types.includes('object')) {
+    assert.equal(schema.additionalProperties, false, `${location} must set additionalProperties=false`);
+    const propertyNames = Object.keys(schema.properties || {}).sort();
+    assert.deepEqual([...(schema.required || [])].sort(), propertyNames, `${location} must require every property`);
+    for (const [key, property] of Object.entries(schema.properties || {})) validateStrictObjectSchemas(property, `${location}.${key}`);
+  }
+  if (schema.items) validateStrictObjectSchemas(schema.items, `${location}[]`);
+}

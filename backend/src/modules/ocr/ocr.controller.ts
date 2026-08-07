@@ -62,6 +62,12 @@ export class OcrController {
   @RequirePermission('reconciliation.ocr.view')
   getTask(@Param('taskId') taskId: string) { return this.ocrService.getTask(taskId); }
 
+  @Delete('tasks/:taskId')
+  @RequirePermission('ocr:execute')
+  deleteTask(@Param('taskId') taskId: string, @Req() request: Request) {
+    return this.ocrService.deleteTask(taskId, this.actorUserId(request));
+  }
+
   @Get('tasks/:taskId/match-candidates')
   @RequirePermission('reconciliation.ocr.view')
   matchCandidates(@Query('query') query?: string) { return this.ocrService.listMatchCandidates(query); }

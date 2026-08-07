@@ -477,6 +477,10 @@ export const api = {
     return request(`/ocr/tasks${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ''}`);
   },
 
+  async deleteOcrTask(taskId) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+  },
+
   async uploadOcrTask(payload) {
     return request('/ocr/tasks/upload', { method: 'POST', body: payload });
   },

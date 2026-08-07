@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { readFile } from 'fs/promises';
+import { readFile, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { isAbsolute, relative, resolve } from 'path';
 import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
 import { preparePdfFilesForWebhook } from './image-to-pdf.util';
@@ -199,6 +200,40 @@ export class OcrService {
       });
     }
     return task;
+  }
+
+  async deleteTask(taskId: string, actorUserId?: string) {
+    const task = await this.prisma.ocrTask.findUnique({ where: { taskId } });
+    if (!task) throw new NotFoundException('OCR 历史执行任务不存在');
+    if (task.state === 'PROCESSING') throw new BadRequestException('工作流正在执行中，暂时不能删除');
+    await this.prisma.$transaction([
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.ocr.task.delete',
+          entityType: 'OcrTask',
+          entityId: taskId,
+          before: {
+            taskId: task.taskId,
+            sessionId: task.sessionId,
+            workflowId: task.workflowId,
+            taskName: task.taskName,
+            state: task.state,
+            fileNames: task.fileNames,
+            createdAt: task.createdAt.toISOString(),
+          },
+        },
+      }),
+      this.prisma.ocrTask.delete({ where: { taskId } }),
+    ]);
+    const uploadRoot = resolve(process.cwd(), 'uploads', 'ocr');
+    await Promise.all(task.storagePaths.map(async (storagePath) => {
+      const target = resolve(storagePath);
+      const pathFromUploadRoot = relative(uploadRoot, target);
+      if (!pathFromUploadRoot || pathFromUploadRoot.startsWith('..') || isAbsolute(pathFromUploadRoot)) return;
+      await unlink(target).catch(() => undefined);
+    }));
+    return { deleted: true, taskId };
   }
 
   async saveMatchConfig(taskId: string, configuration: unknown, actorUserId?: string) {
