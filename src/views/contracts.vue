@@ -2,7 +2,7 @@
   <section class="page-shell data-page">
     <div class="panel-card full-panel">
       <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-      <p v-if="loading" class="form-hint">{{ common.loading }}</p>
+      <p v-if="loading && !hasLoaded" class="form-hint">{{ common.loading }}</p>
       <div class="table-controls data-toolbar">
         <div class="toolbar-actions">
           <input v-model="searchQuery" class="search-input" type="search" :placeholder="labels.searchPlaceholder" />
@@ -22,7 +22,7 @@
           </div>
         </div>
       </div>
-      <div class="table-card data-table-card">
+      <div class="table-card data-table-card" :aria-busy="loading">
         <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ contractTotal }} {{ common.records }}</span></div>
         <DualScrollTable>
           <table class="data-table contract-table">
@@ -161,6 +161,7 @@ const common = computed(() => dictionary.value.common);
 const contracts = ref([]);
 const contractTotal = ref(0);
 const loading = ref(false);
+const hasLoaded = ref(false);
 const errorMessage = ref("");
 const searchQuery = ref("");
 const page = ref(1);
@@ -228,7 +229,7 @@ const paginatedContracts = computed(() => contracts.value);
 const pageContractIds = computed(() => paginatedContracts.value.map((contract) => contract.id));
 const allPageSelected = computed(() => pageContractIds.value.length > 0 && pageContractIds.value.every((id) => selectedIds.value.includes(id)));
 const sortableContractKeys = new Set(["startDate", "endDate", "insuranceStartDate", "insuranceEndDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
-const sortIcon = (key) => sortBy.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '';
+const sortIcon = (key) => sortBy.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '↕';
 const readyCount = computed(() => Math.max(0, (importResult.value?.batch?.totalRows || 0) - (importResult.value?.batch?.successRows || 0) - (importResult.value?.batch?.skippedRows || 0) - (importResult.value?.batch?.failedRows || 0) - (importResult.value?.batch?.conflictRows || 0)));
 let contractSearchTimer;
 let roomSearchTimer;
@@ -268,8 +269,13 @@ async function loadRoomOptions() {
   roomOptions.value = rows.map((room) => ({ ...room, searchText: room.label.toLowerCase() }));
 }
 
-async function loadContracts() { const requestId = ++contractRequestId; loading.value = true; errorMessage.value = ""; try { const result = await api.listContracts({ search: searchQuery.value.trim(), page: page.value, pageSize: pageSize.value, sortBy: sortBy.value, sortDir: sortDir.value }); if (requestId !== contractRequestId) return; const totalPages = result.pagination?.totalPages || 1; if (page.value > totalPages) { page.value = totalPages; return; } contracts.value = result.items || []; contractTotal.value = result.pagination?.total || 0; const existing = new Set(contracts.value.map((contract) => contract.id)); selectedIds.value = selectedIds.value.filter((id) => existing.has(id)); } catch (error) { if (requestId === contractRequestId) errorMessage.value = error.message || labels.value.loadFailed; } finally { if (requestId === contractRequestId) loading.value = false; } }
-function toggleSort(key) { if (sortBy.value === key) { sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'; } else { sortBy.value = key; sortDir.value = 'asc'; } page.value = 1; loadContracts(); }
+async function loadContracts() { const requestId = ++contractRequestId; loading.value = true; errorMessage.value = ""; try { const result = await api.listContracts({ search: searchQuery.value.trim(), page: page.value, pageSize: pageSize.value, sortBy: sortBy.value, sortDir: sortDir.value }); if (requestId !== contractRequestId) return; const totalPages = result.pagination?.totalPages || 1; if (page.value > totalPages) { page.value = totalPages; return; } contracts.value = result.items || []; contractTotal.value = result.pagination?.total || 0; const existing = new Set(contracts.value.map((contract) => contract.id)); selectedIds.value = selectedIds.value.filter((id) => existing.has(id)); } catch (error) { if (requestId === contractRequestId) errorMessage.value = error.message || labels.value.loadFailed; } finally { if (requestId === contractRequestId) { loading.value = false; hasLoaded.value = true; } } }
+function toggleSort(key) {
+  if (sortBy.value === key) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+  else { sortBy.value = key; sortDir.value = 'asc'; }
+  if (page.value !== 1) page.value = 1;
+  else loadContracts();
+}
 async function openDetail(id) { try { detail.value = await api.getContract(id); } catch (error) { errorMessage.value = error.message || labels.value.loadFailed; } }
 async function openCreate() {
   try {
