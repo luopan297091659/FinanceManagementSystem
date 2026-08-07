@@ -28,7 +28,7 @@
           <table class="data-table contract-table">
             <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th>{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">
                 <button v-if="sortableContractKeys.has(column.key)" type="button" class="table-sort-button" @click="toggleSort(column.key)">
-                  {{ labels[column.labelKey] }} <span class="sort-icon">{{ sortIcon(column.key) }}</span>
+                  {{ labels[column.labelKey] }} <span class="sort-icon" :class="{ active: sortBy === column.key }">{{ sortIcon(column.key) }}</span>
                 </button>
                 <span v-else>{{ labels[column.labelKey] }}</span>
               </th><th>{{ common.actions }}</th></tr></thead>
@@ -229,7 +229,7 @@ const paginatedContracts = computed(() => contracts.value);
 const pageContractIds = computed(() => paginatedContracts.value.map((contract) => contract.id));
 const allPageSelected = computed(() => pageContractIds.value.length > 0 && pageContractIds.value.every((id) => selectedIds.value.includes(id)));
 const sortableContractKeys = new Set(["startDate", "endDate", "insuranceStartDate", "insuranceEndDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
-const sortIcon = (key) => sortBy.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '↕';
+const sortIcon = (key) => sortBy.value === key && sortDir.value === 'desc' ? '▼' : '▲';
 const readyCount = computed(() => Math.max(0, (importResult.value?.batch?.totalRows || 0) - (importResult.value?.batch?.successRows || 0) - (importResult.value?.batch?.skippedRows || 0) - (importResult.value?.batch?.failedRows || 0) - (importResult.value?.batch?.conflictRows || 0)));
 let contractSearchTimer;
 let roomSearchTimer;

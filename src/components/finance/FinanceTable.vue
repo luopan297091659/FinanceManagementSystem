@@ -14,7 +14,7 @@
             <th class="index-cell">{{ common.index }}</th>
             <th v-for="column in visibleColumns" :key="column.key">
               <button v-if="column.key === 'date'" type="button" class="table-sort-button" @click="emit('sort', column.key)">
-                {{ labels[column.labelKey] }} <span class="sort-icon">{{ sortIcon(column.key) }}</span>
+                {{ labels[column.labelKey] }} <span class="sort-icon" :class="{ active: sortBy === column.key }">{{ sortIcon(column.key) }}</span>
               </button>
               <span v-else>{{ labels[column.labelKey] }}</span>
             </th>
@@ -121,7 +121,7 @@ const emit = defineEmits(["edit", "delete", "sort", "update:selectedIds"]);
 const visibleColumns = computed(() => props.columns.filter((column) => column.visible));
 const pageIds = computed(() => props.items.map((item) => item.id));
 const allSelected = computed(() => pageIds.value.length > 0 && pageIds.value.every((id) => props.selectedIds.includes(id)));
-const sortIcon = (key) => props.sortBy === key ? (props.sortDir === "asc" ? "▲" : "▼") : "";
+const sortIcon = (key) => props.sortBy === key && props.sortDir === "desc" ? "▼" : "▲";
 
 const toggleAll = () => {
   const selected = new Set(props.selectedIds);

@@ -762,9 +762,16 @@ button:disabled {
 }
 
 .sort-icon {
-  min-width: 1em;
+  display: inline-block;
+  width: 1em;
   font-size: .8em;
-  opacity: .65;
+  line-height: 1;
+  opacity: .45;
+  text-align: center;
+}
+
+.sort-icon.active {
+  opacity: 1;
 }
 
 .compact-binding-list {
