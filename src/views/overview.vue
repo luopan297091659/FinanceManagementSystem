@@ -87,7 +87,7 @@
               <div class="reminder-content">
                 <div class="reminder-heading"><strong>{{ label(reminder.titleKey) }}</strong><span class="severity-pill">{{ label(reminder.severity) }}</span></div>
                 <p>{{ reminder.object }}</p>
-                <span class="reminder-date">{{ t.due }} {{ formatDate(reminder.dueDate) }}</span>
+                <span class="reminder-date">{{ t[reminder.timeKey] || t.due }} {{ formatDate(reminder.dueDate) }}</span>
               </div>
               <div class="reminder-actions">
                 <button type="button" @click="navigate(reminder.route)">{{ t.openTask }}</button>
@@ -214,6 +214,7 @@ const rangeLabel = computed(() => {
 });
 const reminderTypes = computed(() => [...new Set((dashboard.value?.reminders || []).map((item) => item.type))]);
 const visibleReminders = computed(() => (dashboard.value?.reminders || []).filter((item) =>
+  item.state !== "read" &&
   (!reminderType.value || item.type === reminderType.value) &&
   (!reminderSeverity.value || item.severity === reminderSeverity.value)));
 const displayedReminders = computed(() => showAllReminders.value ? visibleReminders.value : visibleReminders.value.slice(0, 5));

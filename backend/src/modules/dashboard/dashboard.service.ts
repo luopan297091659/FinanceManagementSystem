@@ -161,6 +161,7 @@ export class DashboardService {
     const [
       propertyCount,
       abnormalPropertyCount,
+      abnormalProperties,
       activeContractCount,
       expiringContractCount,
       pendingReconciliationCount,
@@ -168,13 +169,22 @@ export class DashboardService {
       transactions,
       settlements,
       dueContracts,
+      expiringContracts,
       alerts,
+      pendingBankTransactions,
+      pendingOcrTasks,
       activities,
       config,
       reminderSetting,
     ] = await Promise.all([
       this.hasModule(context.permissions, 'property') ? this.prisma.property.count({ where: propertyWhere }) : 0,
       this.hasModule(context.permissions, 'property') ? this.prisma.property.count({ where: { ...propertyWhere, managementStatus: { not: 'ACTIVE' } } }) : 0,
+      this.hasModule(context.permissions, 'property') ? this.prisma.property.findMany({
+        where: { ...propertyWhere, managementStatus: { not: 'ACTIVE' } },
+        select: { id: true, name: true, managementStatus: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 25,
+      }) : [],
       this.hasModule(context.permissions, 'contract') ? this.prisma.contract.count({ where: { ...contractWhere, status: 'ACTIVE' } }) : 0,
       this.hasModule(context.permissions, 'contract') ? this.prisma.contract.count({ where: { ...contractWhere, status: 'ACTIVE', endDate: { gte: now, lte: expiringEnd } } }) : 0,
       this.hasModule(context.permissions, 'reconciliation') ? this.prisma.bankTransaction.count({ where: { reconciliationStatus: { not: 'MATCHED' }, ...this.dateWhere(range, 'bookedAt') } }) : 0,
@@ -187,11 +197,29 @@ export class DashboardService {
         orderBy: { nextDueDate: 'asc' },
         take: 25,
       }) : [],
+      this.hasModule(context.permissions, 'contract') ? this.prisma.contract.findMany({
+        where: { ...contractWhere, status: 'ACTIVE', endDate: { gte: now, lte: expiringEnd } },
+        select: { id: true, contractorName: true, endDate: true, room: { select: { roomNumber: true, property: { select: { name: true } } } } },
+        orderBy: { endDate: 'asc' },
+        take: 25,
+      }) : [],
       this.hasModule(context.permissions, 'property') ? this.prisma.anomalyAlert.findMany({
         where: { status: 'OPEN', ...this.dateWhere(range, 'createdAt'), ...(companyId ? { OR: [{ property: { companyId } }, { room: { property: { companyId } } }] } : {}) },
         select: { id: true, alertType: true, severity: true, occurredOn: true, createdAt: true, property: { select: { name: true } }, room: { select: { roomNumber: true } } },
         orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
         take: 20,
+      }) : [],
+      this.hasModule(context.permissions, 'reconciliation') ? this.prisma.bankTransaction.findMany({
+        where: { reconciliationStatus: { not: 'MATCHED' }, ...this.dateWhere(range, 'bookedAt') },
+        select: { id: true, bookedAt: true, amount: true, description: true, accountName: true, reconciliationStatus: true },
+        orderBy: { bookedAt: 'desc' },
+        take: 25,
+      }) : [],
+      this.hasModule(context.permissions, 'ocr') ? this.prisma.ocrTask.findMany({
+        where: { state: { in: ['PENDING', 'PROCESSING', 'REVIEW_REQUIRED', 'FAILED'] }, ...this.dateWhere(range, 'createdAt') },
+        select: { id: true, taskId: true, taskName: true, fileNames: true, state: true, createdAt: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 25,
       }) : [],
       this.prisma.auditLog.findMany({ where: this.dateWhere(range, 'createdAt'), orderBy: { createdAt: 'desc' }, take: 5 }),
       this.rawConfig(),
@@ -237,8 +265,52 @@ export class DashboardService {
       route: '/resources',
       state: reminderStates[`alert-${alert.id}`] || 'unread',
     }));
+    const propertyReminders = abnormalProperties.map((property: any) => ({
+      id: `property-${property.id}`,
+      type: 'propertyStatusAbnormal',
+      severity: 'warning',
+      titleKey: 'propertyStatusAbnormal',
+      object: [property.name, property.managementStatus].filter(Boolean).join(' · '),
+      dueDate: property.updatedAt,
+      timeKey: 'updatedAt',
+      route: '/resources',
+      state: reminderStates[`property-${property.id}`] || 'unread',
+    }));
+    const contractReminders = expiringContracts.map((contract: any) => ({
+      id: `contract-${contract.id}`,
+      type: 'contractExpiring',
+      severity: 'warning',
+      titleKey: 'contractExpiring',
+      object: [contract.room.property.name, contract.room.roomNumber, contract.contractorName].filter(Boolean).join(' · '),
+      dueDate: contract.endDate,
+      timeKey: 'due',
+      route: '/contracts',
+      state: reminderStates[`contract-${contract.id}`] || 'unread',
+    }));
+    const bankReminders = pendingBankTransactions.map((transaction: any) => ({
+      id: `bank-${transaction.id}`,
+      type: 'bankReconciliationPending',
+      severity: transaction.reconciliationStatus === 'UNMATCHED' ? 'warning' : 'info',
+      titleKey: 'bankReconciliationPending',
+      object: [transaction.description, transaction.accountName, `¥${Number(transaction.amount).toLocaleString('ja-JP')}`].filter(Boolean).join(' · '),
+      dueDate: transaction.bookedAt,
+      timeKey: 'bookedAt',
+      route: '/ai-reconciliation/bank',
+      state: reminderStates[`bank-${transaction.id}`] || 'unread',
+    }));
+    const ocrReminders = pendingOcrTasks.map((task: any) => ({
+      id: `ocr-${task.id}`,
+      type: 'ocrTaskPending',
+      severity: task.state === 'FAILED' ? 'critical' : task.state === 'REVIEW_REQUIRED' ? 'warning' : 'info',
+      titleKey: task.state === 'FAILED' ? 'ocrTaskFailed' : task.state === 'REVIEW_REQUIRED' ? 'ocrReviewRequired' : 'ocrTaskPending',
+      object: task.taskName || task.fileNames?.[0] || task.taskId,
+      dueDate: task.updatedAt || task.createdAt,
+      timeKey: 'updatedAt',
+      route: '/ai-reconciliation/ocr',
+      state: reminderStates[`ocr-${task.id}`] || 'unread',
+    }));
     const severityRank: Record<string, number> = { overdue: 0, critical: 1, warning: 2, info: 3 };
-    const reminders = [...rentReminders, ...anomalyReminders]
+    const reminders = [...rentReminders, ...propertyReminders, ...anomalyReminders, ...contractReminders, ...bankReminders, ...ocrReminders]
       .filter((item) => item.state !== 'ignored')
       .sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9) || new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime());
 
@@ -249,6 +321,13 @@ export class DashboardService {
       pendingReconciliationCount,
       pendingOcrCount,
     };
+    const abnormalMetrics: Record<string, number> = {
+      unpaidRentCount: rentReminders.length,
+      pendingReconciliationCount,
+      activeContractCount: expiringContractCount,
+      propertyCount: abnormalPropertyCount,
+      pendingOcrCount,
+    };
     const cards = config
       .filter((card) => card.enabled && this.hasModule(context.permissions, card.moduleKey))
       .filter((card) => !card.visibleRoles.length || card.visibleRoles.some((role) => context.roles.includes(role)))
@@ -257,7 +336,7 @@ export class DashboardService {
       .map((card) => ({
         ...card,
         value: metrics[card.metricKey] ?? 0,
-        abnormalCount: card.showAbnormalCount ? metrics[card.metricKey] ?? 0 : null,
+        abnormalCount: card.showAbnormalCount ? abnormalMetrics[card.metricKey] ?? 0 : null,
       }));
 
     return {
