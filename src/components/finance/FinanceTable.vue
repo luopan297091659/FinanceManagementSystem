@@ -83,6 +83,7 @@
 <script setup>
 import { computed } from "vue";
 import DualScrollTable from "../DualScrollTable.vue";
+import { appPath } from "../../utils/appPath";
 
 const props = defineProps({
   items: {
@@ -145,9 +146,7 @@ const confirmationLabel = (status) =>
   })[status] || status;
 
 const join = (...values) => values.filter(Boolean).join(" / ");
-const appBase = String(import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-const linkedPath = (path) => `${appBase}${path}` || path;
-const roomHref = (roomId) => `${linkedPath("/resources")}?roomId=${encodeURIComponent(roomId)}`;
-const contractHref = (contractId) => `${linkedPath("/contracts")}?contractId=${encodeURIComponent(contractId)}`;
+const roomHref = (roomId) => `${appPath("/resources")}?roomId=${encodeURIComponent(roomId)}`;
+const contractHref = (contractId) => `${appPath("/contracts")}?contractId=${encodeURIComponent(contractId)}`;
 const formatDateTime = (value) => new Date(value).toLocaleString();
 </script>

@@ -151,6 +151,7 @@ import AppIcon from "./components/AppIcon.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import { reloadPublishedTranslations, useI18n } from "./i18n";
 import { api } from "./services/api";
+import { APP_ENTRY_PATH as appEntryPath, appPath } from "./utils/appPath";
 
 const activeView = ref("overview");
 const activeNavKey = ref("overview");
@@ -164,13 +165,6 @@ const isAuthenticated = ref(false);
 const currentUser = ref(null);
 const currentPermissions = ref([]);
 const { locale, dictionary, setLocale } = useI18n();
-const configuredEntryPath = import.meta.env?.VITE_APP_ENTRY_PATH;
-const appEntryPath = configuredEntryPath
-  || (/^(www\.)?kotabi\.top$/i.test(window.location.hostname) ? '/finance/' : '/');
-const appPath = (route = '/') => appEntryPath === '/'
-  ? route
-  : `${appEntryPath.replace(/\/$/, '')}${route}`;
-
 const reconciliationMenuLabels = computed(() => ({
   bank: `AI / ${dictionary.value.bankReconciliation.menu.bankReconciliation}`,
   ocr: dictionary.value.ocrReconciliation,
@@ -284,7 +278,7 @@ const applyRouteFromLocation = () => {
     activeView.value = "ocr";
     isAiAnalysisExpanded.value = true;
   } else if (path === "/ai-reconciliation" || path === "/ai-reconciliation/") {
-    window.history.replaceState({}, "", "/ai-reconciliation/ocr");
+    window.history.replaceState({}, "", appPath("/ai-reconciliation/ocr"));
     activeNavKey.value = "ocr";
     activeView.value = "ocr";
   } else if (path.startsWith("/ai-reconciliation/bank")) {
@@ -296,7 +290,7 @@ const applyRouteFromLocation = () => {
     activeView.value = "ocr";
     isAiAnalysisExpanded.value = true;
   } else if (path.startsWith("/contracts") || path.startsWith("/customers")) {
-    if (path.startsWith("/customers")) window.history.replaceState({}, "", "/contracts");
+    if (path.startsWith("/customers")) window.history.replaceState({}, "", appPath("/contracts"));
     activeNavKey.value = "contracts";
     activeView.value = "contracts";
   } else if (path.startsWith("/resources")) {

@@ -75,6 +75,7 @@
 <script setup>
 import { computed } from "vue";
 import DualScrollTable from "../DualScrollTable.vue";
+import { appPath } from "../../utils/appPath";
 
 const props = defineProps({
   items: {
@@ -138,6 +139,6 @@ const statusLabel = (status) =>
 const hasValue = (value) => value !== null && value !== undefined && value !== "";
 const coordinate = (latitude, longitude) => [latitude, longitude].filter(hasValue).join(", ");
 const openContract = (contractId) => {
-  window.open(`/contracts?contractId=${encodeURIComponent(contractId)}`, "_blank", "noopener,noreferrer");
+  window.open(`${appPath("/contracts")}?contractId=${encodeURIComponent(contractId)}`, "_blank", "noopener,noreferrer");
 };
 </script>

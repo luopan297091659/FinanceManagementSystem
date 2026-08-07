@@ -151,6 +151,7 @@ import DualScrollTable from "../components/DualScrollTable.vue";
 import { useI18n } from "../i18n";
 import { api } from "../services/api";
 import { requestConfirm } from "../services/confirm";
+import { appPath } from "../utils/appPath";
 import { exportTableXls, parseTableFile } from "../utils/tableFiles";
 
 const { dictionary } = useI18n();
@@ -373,7 +374,7 @@ async function openImportBatch(batchId) {
 async function updateImportRow(row) { try { await api.updateIntegratedImportRow(importResult.value.batch.id, row.id, { contractAction: row.contractAction }); await loadImportPage(importResult.value.pagination?.page || 1); } catch (error) { errorMessage.value = error.message || labels.value.importFailed; } }
 async function commitImport() { importBusy.value = true; try { importResult.value = await api.commitIntegratedImport(importResult.value.batch.id); await loadContracts(); } catch (error) { errorMessage.value = error.message || labels.value.importFailed; } finally { importBusy.value = false; } }
 function closeImport() { showImportModal.value = false; importResult.value = null; }
-function openRoom(roomId) { window.history.pushState({}, "", `/resources?roomId=${encodeURIComponent(roomId)}`); window.dispatchEvent(new PopStateEvent("popstate")); }
+function openRoom(roomId) { window.history.pushState({}, "", `${appPath("/resources")}?roomId=${encodeURIComponent(roomId)}`); window.dispatchEvent(new PopStateEvent("popstate")); }
 const money = (value) => value === null || value === undefined || value === "" ? "" : `¥${Number(value).toLocaleString()}`;
 const compact = (first, second, separator = " / ") => [first, second].filter((value) => value !== null && value !== undefined && value !== "").join(separator);
 const statusLabel = (status) => labels.value.statuses?.[status] || status || "";

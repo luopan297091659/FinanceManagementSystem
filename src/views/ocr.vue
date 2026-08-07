@@ -224,12 +224,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { API_BASE, api } from '../services/api';
+import { APP_ENTRY_PATH as appEntryPath } from '../utils/appPath';
 
 const path = window.location.pathname;
 const routeQuery = new URLSearchParams(window.location.search);
-const configuredEntryPath = import.meta.env?.VITE_APP_ENTRY_PATH;
-const appEntryPath = configuredEntryPath
-  || (/^(www\.)?kotabi\.top$/i.test(window.location.hostname) ? '/finance/' : '/');
 // Query-based child pages work even when Nginx only exposes the base OCR SPA route.
 // Keep parsing legacy deep links so direct NestJS deployments remain compatible.
 const executionWorkflowId = routeQuery.get('mode') === 'execute'
