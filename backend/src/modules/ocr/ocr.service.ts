@@ -9,6 +9,7 @@ import { extractOcrResultRecords, summarizeOcrRecords } from './ocr-result.util'
 import {
   normalizedOcrTextContains,
   normalizedOcrTextEquals,
+  normalizedOcrPartyNameSimilarity,
   normalizedOcrTextSimilarity,
   ocrMatchSearchVariants,
 } from './ocr-match-normalization.util';
@@ -26,6 +27,7 @@ type OcrMatchRule = {
   systemFields: string[];
   sourceFields: string[];
   operator: string;
+  minScore: number;
   required: boolean;
   logicalOperator: 'AND' | 'OR';
 };
@@ -37,7 +39,7 @@ type OcrMatchConfiguration = {
 
 type OcrSystemFieldDefinition = {
   path: string[];
-  type: 'text' | 'number' | 'date' | 'valid-date';
+  type: 'text' | 'number' | 'monthly-total' | 'date' | 'valid-date';
   label: string;
 };
 
@@ -78,6 +80,7 @@ const OCR_SYSTEM_FIELDS: Record<string, OcrSystemFieldDefinition> = {
   'contract.paymentMethod': { path: ['paymentMethod'], type: 'text', label: '支付方式' },
   'contract.paymentMonthType': { path: ['paymentMonthType'], type: 'text', label: '支付月份类型' },
   'contract.monthlyRent': { path: ['monthlyRent'], type: 'number', label: '月租金额' },
+  'contract.monthlyPaymentTotal': { path: [], type: 'monthly-total', label: '每月应收合计' },
   'contract.managementFee': { path: ['managementFee'], type: 'number', label: '管理费' },
   'contract.deposit': { path: ['deposit'], type: 'number', label: '押金' },
   'contract.keyMoney': { path: ['keyMoney'], type: 'number', label: '礼金' },
@@ -670,6 +673,17 @@ export class OcrService {
     // Normalize again at the matching boundary so persisted v1 configurations and
     // internal callers that bypass the controller remain fully backward compatible.
     configuration = this.validateMatchConfiguration(configuration);
+    if (this.isExpenseRecord(record)) {
+      return {
+        ...record,
+        systemMatch: {
+          status: 'NOT_APPLICABLE',
+          matchMode: null,
+          reason: '该流水为支出，不参与租赁契约自动匹配',
+          matchingConfiguration: configuration,
+        },
+      };
+    }
     const missingRules = configuration.rules.filter((rule) => rule.required && !this.ruleSourceValues(record, rule).length);
     if (missingRules.length) {
       return {
@@ -684,6 +698,9 @@ export class OcrService {
     }
 
     const activeRules = configuration.rules.filter((rule) => this.ruleSourceValues(record, rule).length);
+    if (activeRules.some((rule) => rule.operator === 'similar')) {
+      return this.matchSystemDataWithSimilarity(record, configuration, activeRules);
+    }
     const condition = this.combineRuleConditions(activeRules, (rule) => this.buildRuleCondition(record, rule, false));
     if (!condition) {
       return { ...record, systemMatch: { status: 'UNMATCHED', matchMode: null, reason: '所选 JSON 字段没有可用于匹配的数据', matchingConfiguration: configuration } };
@@ -736,13 +753,68 @@ export class OcrService {
       ...record,
       systemMatch: {
         status: 'MATCHED', matchMode: 'AUTO', matchingConfiguration: configuration,
-        matchScore: 100,
+        matchScore: this.contractMatchScore(contract, record, activeRules),
         contractId: contract.id, contractNumber: contract.contractNumber,
         tenantId: contract.tenantId, tenantName: contract.tenant?.name || contract.contractorName,
         roomId: contract.roomId, roomNumber: contract.room.roomNumber,
         propertyId: contract.propertyId, propertyName: contract.property.name,
         bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
         reason: `按 ${activeRules.map((rule, index) => `${index ? `${rule.logicalOperator} ` : ''}${rule.systemFields.map((field) => this.systemFieldLabel(field)).join(' / ')}←${rule.sourceFields.join(' / ')}`).join('、')} 自动匹配成功${usedNormalizedFallback ? '（已统一空格、字符宽度及 Unicode 形式）' : ''}`,
+      },
+    };
+  }
+
+  private async matchSystemDataWithSimilarity(
+    record: Record<string, any>,
+    configuration: OcrMatchConfiguration,
+    activeRules: OcrMatchRule[],
+  ) {
+    const candidates = await this.prisma.contract.findMany({
+      where: { deletedAt: null },
+      include: { tenant: true, room: { include: { property: true } }, property: true },
+      take: 5000,
+    });
+    let ranked = candidates
+      .map((contract) => ({ contract, ...this.contractConfigurationResult(contract, record, activeRules) }))
+      .filter((candidate) => candidate.matches)
+      .sort((left, right) => right.score - left.score);
+    const transactionDate = this.recordDate(record);
+    if (transactionDate && ranked.length > 1) {
+      const activeOnDate = ranked.filter(({ contract }) => this.contractActiveOnDate(contract, transactionDate));
+      if (activeOnDate.length) ranked = activeOnDate;
+    }
+    const bestCandidate = ranked[0];
+    const secondCandidate = ranked[1];
+    const confidentWinner = Boolean(bestCandidate)
+      && (!secondCandidate || bestCandidate.score - secondCandidate.score >= 8);
+    if (!confidentWinner) {
+      const bestAvailableScore = bestCandidate?.score
+        ?? candidates.reduce((best, contract) => Math.max(best, this.contractConfigurationResult(contract, record, activeRules).score), 0);
+      return {
+        ...record,
+        systemMatch: {
+          status: ranked.length > 1 ? 'AMBIGUOUS' : 'UNMATCHED',
+          matchMode: null,
+          matchScore: bestAvailableScore,
+          reason: ranked.length > 1
+            ? '金额与契约者假名同时命中多个契约，候选分差不足 8 分，请手工选择'
+            : '未找到同时满足金额一致和契约者假名相似度要求的契约',
+          matchingConfiguration: configuration,
+        },
+      };
+    }
+    const contract = bestCandidate!.contract;
+    return {
+      ...record,
+      systemMatch: {
+        status: 'MATCHED', matchMode: 'AUTO', matchingConfiguration: configuration,
+        matchScore: bestCandidate!.score,
+        contractId: contract.id, contractNumber: contract.contractNumber,
+        tenantId: contract.tenantId, tenantName: contract.tenant?.name || contract.contractorName,
+        roomId: contract.roomId, roomNumber: contract.room.roomNumber,
+        propertyId: contract.propertyId, propertyName: contract.property.name,
+        bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+        reason: `金额严格一致，契约者假名相似度达到阈值${transactionDate ? '，并已使用契约有效期排除无效候选' : ''}`,
       },
     };
   }
@@ -843,7 +915,7 @@ export class OcrService {
       date: ['contract.validDate', 'date'],
     };
     const supportedFields = new Set(Object.keys(OCR_SYSTEM_FIELDS));
-    const supportedOperators = new Set(['equals', 'contains', 'normalized_equals', 'within_date_range']);
+    const supportedOperators = new Set(['equals', 'contains', 'normalized_equals', 'within_date_range', 'similar']);
     const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
     const legacyFields = Array.isArray(value) ? value : Array.isArray(raw.fields) ? raw.fields : [];
     const rawRules = Array.isArray(raw.rules)
@@ -865,6 +937,7 @@ export class OcrService {
         systemFields: [...new Set<string>(systemFields)],
         sourceFields: [...new Set<string>(sourceFields)],
         operator: supportedOperators.has(String(rule?.operator)) ? String(rule.operator) : 'equals',
+        minScore: Math.max(70, Math.min(100, Number(rule?.minScore) || 80)),
         required: rule?.required !== false,
         logicalOperator: index === 0 ? 'AND' : (rule?.logicalOperator === 'OR' ? 'OR' : globalOperator),
       };
@@ -920,6 +993,7 @@ export class OcrService {
       const amount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
       return Number.isFinite(amount) ? this.buildPathCondition(definition.path, amount) : { id: '__invalid_amount__' };
     }
+    if (definition.type === 'monthly-total') return { id: '__calculated_monthly_total__' };
     const date = new Date(rawValue);
     if (Number.isNaN(date.getTime())) return { id: '__invalid_date__' };
     if (definition.type === 'valid-date') return { AND: [{ startDate: { lte: date } }, { OR: [{ endDate: null }, { endDate: { gte: date } }] }] };
@@ -962,10 +1036,33 @@ export class OcrService {
     return combinedScore ?? 0;
   }
 
+  private contractConfigurationResult(contract: any, record: Record<string, any>, rules: OcrMatchRule[]) {
+    let matches: boolean | null = null;
+    let score: number | null = null;
+    for (const rule of rules) {
+      const scores = this.ruleSourceValues(record, rule).flatMap(({ value }) => rule.systemFields.map((systemField) => (
+        this.contractRuleScore(contract, systemField, value, rule.operator)
+      )));
+      if (!scores.length) continue;
+      const ruleScore = Math.max(...scores);
+      const ruleMatches = ruleScore >= (rule.operator === 'similar' ? rule.minScore : 100);
+      matches = matches === null
+        ? ruleMatches
+        : rule.logicalOperator === 'OR' ? matches || ruleMatches : matches && ruleMatches;
+      score = score === null
+        ? ruleScore
+        : rule.logicalOperator === 'OR' ? Math.max(score, ruleScore) : Math.round((score + ruleScore) / 2);
+    }
+    return { matches: matches ?? false, score: score ?? 0 };
+  }
+
   private contractRuleScore(contract: any, systemField: string, rawValue: any, operator: string) {
     if (this.isTextSystemField(systemField)) {
       const systemValue = this.contractSystemText(contract, systemField);
-      return normalizedOcrTextSimilarity(systemValue, rawValue);
+      if (operator === 'similar') return normalizedOcrPartyNameSimilarity(systemValue, rawValue);
+      return this.contractMatchesRule(contract, systemField, rawValue, operator)
+        ? 100
+        : normalizedOcrTextSimilarity(systemValue, rawValue);
     }
     return this.contractMatchesRule(contract, systemField, rawValue, operator) ? 100 : 0;
   }
@@ -998,7 +1095,7 @@ export class OcrService {
         ? normalizedOcrTextContains(systemValue, rawValue)
         : normalizedOcrTextEquals(systemValue, rawValue);
     }
-    if (definition.type === 'number') {
+    if (definition.type === 'number' || definition.type === 'monthly-total') {
       const sourceAmount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
       const systemAmount = this.contractSystemValue(contract, systemField);
       return Number.isFinite(sourceAmount) && systemAmount != null && Number(systemAmount) === sourceAmount;
@@ -1015,11 +1112,31 @@ export class OcrService {
   }
 
   private contractSystemValue(contract: any, systemField: string) {
+    if (systemField === 'contract.monthlyPaymentTotal') {
+      return ['monthlyRent', 'managementFee', 'otherMonthlyFee1', 'otherMonthlyFee2', 'otherMonthlyFee3']
+        .reduce((total, field) => total + Number(contract?.[field] || 0), 0);
+    }
     return OCR_SYSTEM_FIELDS[systemField]?.path.reduce<any>((current, key) => current?.[key], contract);
   }
 
   private contractSystemText(contract: any, systemField: string) {
     return this.contractSystemValue(contract, systemField);
+  }
+
+  private isExpenseRecord(record: Record<string, any>) {
+    const direction = String(this.first(record, 'type', 'money_direction', 'transactionCategory', 'transaction_type') || '').trim().toLowerCase();
+    return ['expense', '支出', '出金', 'outflow', 'withdrawal'].includes(direction);
+  }
+
+  private recordDate(record: Record<string, any>) {
+    const value = this.first(record, 'date', 'transactionDate', 'transaction_date');
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private contractActiveOnDate(contract: any, date: Date) {
+    return (!contract.startDate || contract.startDate <= date) && (!contract.endDate || contract.endDate >= date);
   }
 
   private systemFieldLabel(field: string) {

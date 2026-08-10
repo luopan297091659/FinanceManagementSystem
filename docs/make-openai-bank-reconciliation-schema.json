@@ -12,6 +12,7 @@
     },
     "totalPages": {
       "type": "integer",
+      "minimum": 1,
       "description": "Number of pages actually present in the uploaded file, not the total printed in the statement footer."
     },
     "records": {
@@ -22,6 +23,7 @@
         "properties": {
           "sequenceNo": {
             "type": ["integer", "null"],
+            "minimum": 0,
             "description": "Integer value from the bank table column 番号. It may repeat or restart and must not be renumbered. Return null when unreadable."
           },
           "fileType": {
@@ -39,15 +41,15 @@
           },
           "counterparty": {
             "type": ["string", "null"],
-            "description": "Original description text only when it clearly represents the counterparty name; otherwise null."
+            "description": "Exact source spelling from 摘要 only when the cell clearly represents a counterparty name. Do not normalize or infer a name; otherwise return null."
           },
           "counterpartyRaw": {
             "type": ["string", "null"],
-            "description": "Cleaned original text from the bank table column 摘要."
+            "description": "Exact character-level transcription of 摘要. Preserve half-width/full-width forms, small Kana, dakuten/handakuten, meaningful internal spaces, punctuation, letters, and digits. Do not autocorrect, normalize, or omit uncertain characters."
           },
           "contentSummary": {
             "type": ["string", "null"],
-            "description": "Cleaned original text from 摘要. It must equal counterpartyRaw and must not be translated or expanded."
+            "description": "Must be exactly identical to counterpartyRaw, including character width, Kana form, spacing, and punctuation. Do not translate, summarize, normalize, expand, or correct it."
           },
           "transactionCategory": {
             "type": ["string", "null"],
@@ -55,11 +57,11 @@
           },
           "financialInstitutionName": {
             "type": ["string", "null"],
-            "description": "Financial institution name extracted from the 金融機関名・支店名 cell."
+            "description": "Exact visible financial institution text from 金融機関名・支店名. Preserve Japanese character forms and do not autocorrect."
           },
           "bankBranchName": {
             "type": ["string", "null"],
-            "description": "Branch name extracted from the 金融機関名・支店名 cell."
+            "description": "Exact visible branch text from 金融機関名・支店名 when the split is clear. Preserve Japanese character forms and do not autocorrect."
           },
           "propertyName": {
             "type": ["string", "null"],
@@ -87,6 +89,7 @@
           },
           "fileAmount": {
             "type": ["number", "null"],
+            "minimum": 0,
             "description": "Amount from the applicable withdrawal or deposit column, without commas, spaces, or currency symbols."
           },
           "transferFeeAmount": {
@@ -96,6 +99,7 @@
           },
           "statisticalAmount": {
             "type": ["number", "null"],
+            "minimum": 0,
             "description": "Amount written to system statistics. It must equal fileAmount."
           },
           "evidenceDateType": {
@@ -105,10 +109,12 @@
           },
           "sourcePageStart": {
             "type": "integer",
+            "minimum": 1,
             "description": "One-based actual uploaded-file page containing the transaction row."
           },
           "sourcePageEnd": {
             "type": "integer",
+            "minimum": 1,
             "description": "Same value as sourcePageStart. Do not use the statement's printed page label."
           },
           "processingStatus": {
@@ -119,14 +125,15 @@
           "confirmationStatus": {
             "type": "string",
             "enum": ["PENDING", "CONFIRMED"],
-            "description": "CONFIRMED only when all critical fields are clear; otherwise PENDING."
+            "description": "CONFIRMED only when all critical fields and every visible summary character are clear. Any uncertain or possibly omitted summary character requires PENDING."
           },
           "note": {
             "type": "string",
-            "description": "Concise English explanation of OCR uncertainty, cropping, amount conflicts, or an uncertain institution/branch split. Empty string when there is no issue."
+            "description": "Concise English explanation of the exact OCR uncertainty, including alternative summary characters when useful, cropping, amount conflicts, or an uncertain institution/branch split. Empty string when there is no issue."
           },
           "details": {
             "type": "array",
+            "maxItems": 0,
             "description": "Bank statement rows do not create finance fee details. Always return an empty array.",
             "items": {
               "type": "object",

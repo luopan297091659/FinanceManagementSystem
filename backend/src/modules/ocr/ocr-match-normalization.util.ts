@@ -19,8 +19,38 @@ export function normalizedOcrTextContains(container: unknown, value: unknown) {
 }
 
 export function normalizedOcrTextSimilarity(left: unknown, right: unknown) {
-  const normalizedLeft = Array.from(normalizeOcrMatchText(left));
-  const normalizedRight = Array.from(normalizeOcrMatchText(right));
+  return normalizedTextSimilarity(normalizeOcrMatchText(left), normalizeOcrMatchText(right));
+}
+
+export function normalizeOcrPartyName(value: unknown) {
+  return normalizeOcrMatchText(value)
+    .replace(/[ァィゥェォャュョッヮ]/gu, (character) => ({
+      'ァ': 'ア', 'ィ': 'イ', 'ゥ': 'ウ', 'ェ': 'エ', 'ォ': 'オ',
+      'ャ': 'ヤ', 'ュ': 'ユ', 'ョ': 'ヨ', 'ッ': 'ツ', 'ヮ': 'ワ',
+    })[character] || character)
+    .replace(/^(?:株式会社|有限会社|合同会社|一般社団法人|公益社団法人)/u, '')
+    .replace(/(?:株式会社|有限会社|合同会社)$/u, '')
+    .replace(/^(?:カ|ユ|ド|ゴウドウ)[)）]+/u, '')
+    .replace(/^[（(]+(?:カ|ユ|ド|ゴウドウ)/u, '')
+    .replace(/[()（）［\]【】「」『』・･.,，。:：;；'"`]/gu, '');
+}
+
+export function normalizedOcrPartyNameSimilarity(left: unknown, right: unknown) {
+  const ordinaryScore = normalizedOcrTextSimilarity(left, right);
+  const normalizedLeft = normalizeOcrPartyName(left);
+  const normalizedRight = normalizeOcrPartyName(right);
+  const partyScore = normalizedTextSimilarity(normalizedLeft, normalizedRight);
+  const shorterLength = Math.min(Array.from(normalizedLeft).length, Array.from(normalizedRight).length);
+  const containmentScore = shorterLength >= 4
+    && (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft))
+    ? 96
+    : 0;
+  return Math.max(ordinaryScore, partyScore, containmentScore);
+}
+
+function normalizedTextSimilarity(left: string, right: string) {
+  const normalizedLeft = Array.from(left);
+  const normalizedRight = Array.from(right);
   if (!normalizedLeft.length || !normalizedRight.length) return 0;
   if (normalizedLeft.join('') === normalizedRight.join('')) return 100;
   const previous = Array.from({ length: normalizedRight.length + 1 }, (_, index) => index);

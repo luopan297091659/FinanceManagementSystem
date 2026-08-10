@@ -4,86 +4,105 @@ Current original file name: {{43.name}}
 
 Read every actual page of the current uploaded PDF or image and return exactly one JSON object that conforms to the JSON Schema configured in Output Format. Extract only visible transaction rows from the bank transaction table. Do not extract account information, inquiry periods, processing timestamps, headers, footers, report creation timestamps, printed page labels, balances, totals, or repeated table headers.
 
-1. System field mapping
+OCR accuracy is more important than linguistic correction. Transcribe first; never normalize, translate, autocorrect, complete, or rewrite names and descriptions.
 
-1.1 sourceFileName
+1. Mandatory two-pass extraction method
+
+Pass 1 — table structure:
+- Identify every actual page, table header, transaction row, and column boundary.
+- Extract row numbers, dates, withdrawal amounts, deposit amounts, transaction categories, and source-page positions.
+- Preserve page order and top-to-bottom row order.
+
+Pass 2 — character-level verification:
+- Re-read each 「摘要」 and 「金融機関名・支店名」 cell directly from the source image, independently of the first pass.
+- Compare the second reading with the first reading character by character and correct omissions before producing JSON.
+- Pay special attention to small or visually similar Japanese characters, including チ/エ/ェ, シ/ツ, ソ/ン, ク/ワ, ッ/ツ, リ/ソ, and characters with dakuten or handakuten.
+- Preserve full-width versus half-width characters, small versus standard Kana, internal spaces, punctuation, parentheses, letters, and digits exactly as visibly printed.
+- Never silently remove an uncertain character. If a character cannot be confirmed, keep the best complete transcription, set confirmationStatus to "PENDING", and describe the uncertainty in note in English, including alternatives when useful.
+
+Known accuracy check:
+- If the source visibly reads `ｲｻﾞﾜ ﾁｴｺ`, counterpartyRaw and contentSummary must both be exactly `ｲｻﾞﾜ ﾁｴｺ`.
+- Do not output `ｲｻﾞﾜ ｴｺ` because that drops `ﾁ`.
+- Do not output `イザワ チェコ` because that changes character width and Kana form.
+
+2. System field mapping
+
+2.1 sourceFileName
 - Return the current original file name supplied by Make exactly as shown above, including its extension, spaces, capitalization, symbols, and full-width or half-width characters.
 - Never infer, correct, or rewrite the file name from the document contents.
 
-1.2 totalPages
+2.2 totalPages
 - Return the number of pages actually present in the uploaded file.
 - Do not use printed statement labels such as "1/19" or "2/19" to determine totalPages. If the uploaded file contains only two actual pages, totalPages must be 2, not 19.
 
-1.3 sequenceNo
-- Map the bank table column 「番号」 directly to sequenceNo, which is the system-writable sequence field.
+2.3 sequenceNo
+- Map the bank table column 「番号」 directly to sequenceNo.
 - Return an integer. For example, 「001」 becomes 1 and 「010」 becomes 10.
-- Use the displayed number from that transaction row. Do not replace it with a newly generated continuous record number.
+- Use the displayed number from that transaction row. Do not generate a new continuous record number.
 - The displayed number may restart by date or page and may repeat. Never skip, merge, or deduplicate rows because their numbers repeat.
-- If the displayed number is unreadable, return null, keep the transaction row, set confirmationStatus to "PENDING", and explain the issue in note.
+- If the displayed number is unreadable, return null, keep the row, set confirmationStatus to "PENDING", and explain the issue in note.
 
-1.4 date and evidenceDateType
-- The column 「勘定日（起算日）」 may contain two dates. Use only the first date, which is the transaction date 「勘定日」.
+2.4 date and evidenceDateType
+- The column 「勘定日（起算日）」 may contain two dates. Use only the first date, which is 「勘定日」.
 - Ignore the value date shown in parentheses.
 - Convert the date to YYYY-MM-DD. Return null if the complete year, month, and day cannot be confirmed.
 - Always return "勘定日" in evidenceDateType.
 
-1.5 type, fileAmount, and statisticalAmount
+2.5 type, fileAmount, and statisticalAmount
 - If 「出金（円）」 contains an amount and 「入金（円）」 is blank, return type = "expense".
 - If 「入金（円）」 contains an amount and 「出金（円）」 is blank, return type = "income".
 - fileAmount is the amount in the applicable nonblank column. Remove commas, spaces, 円, ￥, and ¥, and return a JSON number.
 - statisticalAmount must equal fileAmount.
-- Determine the direction from the amount-column position, not from the description. Never swap the withdrawal and deposit columns.
-- If both amount columns are blank, both contain values, or the amount is unreadable, keep the row, return null for type, fileAmount, and statisticalAmount where applicable, set confirmationStatus to "PENDING", and explain the issue in note.
+- Determine direction only from the amount-column position. Never infer it from the description or swap the withdrawal and deposit columns.
+- If both amount columns are blank, both contain values, or the amount is unreadable, keep the row, return null for unresolved fields, set confirmationStatus to "PENDING", and explain the issue in note.
 
-1.6 transactionCategory
-- Map the bank table column 「取引区分」 to transactionCategory.
-- Preserve the original Japanese text, such as 「振込」, 「振替支払」, or 「デビット」.
-- Do not translate or rewrite the value. Return null when the cell is blank or unreadable.
+2.6 transactionCategory
+- Map 「取引区分」 to transactionCategory.
+- Preserve the exact visible Japanese text, such as 「振込」, 「振替支払」, or 「デビット」.
+- Do not translate or rewrite it. Return null when the cell is blank or unreadable.
 
-1.7 financialInstitutionName and bankBranchName
-- Extract these values from the column 「金融機関名・支店名」.
-- When the two lines are clearly distinguishable, map the first line to financialInstitutionName and the second line to bankBranchName.
-- Preserve the source Japanese text, full-width and half-width Katakana, letters, digits, and meaningful symbols. Remove only leading or trailing whitespace and OCR layout line breaks.
+2.7 financialInstitutionName and bankBranchName
+- Extract these values only from 「金融機関名・支店名」.
+- When two lines are clearly distinguishable, map the first line to financialInstitutionName and the second line to bankBranchName.
+- Preserve the visible characters exactly. Remove only leading/trailing whitespace and line breaks caused solely by cell layout; preserve meaningful internal spaces.
 - Do not use external knowledge to correct a bank or branch name.
-- If the cell can be read only as one combined string, store the complete recognized text in financialInstitutionName, return null for bankBranchName, and explain in note that the values could not be separated reliably.
+- If the cell can be read only as one combined string, store the complete transcription in financialInstitutionName, return null for bankBranchName, set confirmationStatus to "PENDING", and explain the uncertain split in note.
 - If the cell is blank, return null for both fields.
 
-1.8 counterparty, counterpartyRaw, and contentSummary
-- Use only the source text in the bank table column 「摘要」.
-- counterpartyRaw must contain the cleaned original description text.
-- contentSummary must equal counterpartyRaw. Do not translate, summarize, or expand it.
-- Return a value in counterparty only when the description clearly represents the counterparty name. Otherwise return null and do not guess.
-- Join multiline description text into one continuous string. Remove OCR layout line breaks and meaningless spacing while preserving Japanese text, full-width and half-width Katakana, letters, numbers, parentheses, and meaningful symbols.
-- If the description cell is blank, return null for counterparty, counterpartyRaw, and contentSummary.
+2.8 counterparty, counterpartyRaw, and contentSummary
+- Use only the source text in 「摘要」.
+- counterpartyRaw must be an exact character-level transcription of the visible description.
+- contentSummary must be exactly identical to counterpartyRaw. Do not translate, summarize, normalize, expand, or correct it.
+- Preserve half-width/full-width forms, small Kana, dakuten/handakuten, internal spaces, punctuation, parentheses, letters, and digits.
+- Remove only leading/trailing whitespace and line breaks introduced solely by visual cell wrapping. Never remove meaningful internal spaces or characters.
+- Return counterparty only when the cell clearly represents a counterparty name. When it does, use the same exact source spelling; otherwise return null.
+- If any description character is uncertain, do not guess silently: use the best complete transcription, set confirmationStatus to "PENDING", and explain the uncertain character in note.
+- If the cell is blank, return null for counterparty, counterpartyRaw, and contentSummary.
 
-1.9 Source page fields
-- sourcePageStart and sourcePageEnd must both equal the actual uploaded-file page containing the transaction row, starting from 1.
+2.9 Source page fields
+- sourcePageStart and sourcePageEnd must both equal the one-based actual uploaded-file page containing the transaction row.
 - Do not use the statement's printed page label.
 - Do not merge a transaction row across pages.
 
-1.10 Other system fields
+2.10 Other system fields
 - schemaVersion must always be "finance-transaction-v1".
 - fileType must contain the formal document title printed on the page. For this statement type it is normally 「入出金明細照会」. Return null if it cannot be confirmed.
-- Do not infer propertyName, roomNumber, contractorName, contractNumber, paymentMonth, or feeItemName from the bank description. Return null unless the document has a separate, explicit source field for the value.
-- transferFeeAmount must always be 0. If a transaction row itself represents a bank fee, keep the row amount in fileAmount and do not add it again as an additional transfer fee.
+- Do not infer propertyName, roomNumber, contractorName, contractNumber, paymentMonth, or feeItemName from the bank description. Return null unless the document has a separate explicit source field for the value.
+- transferFeeAmount must always be 0. If a row represents a bank fee, keep its row amount in fileAmount and do not add another transfer fee.
 - processingStatus must be "INCLUDED" for every visible transaction row.
-- Return confirmationStatus = "CONFIRMED" only when the displayed number, date, direction, amount, and other critical OCR fields are clear. Otherwise return "PENDING".
-- Return an empty string in note when there is no issue. Otherwise provide a concise English explanation of blur, cropping, conflicting amount columns, unreadable text, or an institution/branch split that could not be confirmed.
+- confirmationStatus may be "CONFIRMED" only when the row number, date, direction, amount, summary characters, and other critical OCR fields are all clear. Any uncertain or possibly omitted summary character requires "PENDING".
+- Return an empty string in note when there is no issue. Otherwise provide a concise English explanation of the exact uncertainty, such as `Uncertain summary character after ｲｻﾞﾜ: ﾁ may be missing`, cropping, conflicting amount columns, or an institution/branch split that could not be confirmed.
 - details must always be an empty array [] for bank statement rows.
 
-2. OCR and row-processing rules
+3. Row-processing rules
 
-- Process every actual page in the current file and preserve page order and top-to-bottom row order.
-- Create exactly one record for each visible transaction row. Do not omit, duplicate, merge, or split transaction rows.
+- Create exactly one record for every visible transaction row. Do not omit, duplicate, merge, split, or deduplicate rows.
 - Continue extracting individual rows when a table continues on the next page. Never combine the first row of a page with the final row of the preceding page.
-- Use table-column positions to determine field values, especially withdrawal versus deposit. Do not infer column placement from the description.
-- Preserve clearly legible source text. Do not translate company names, financial institution names, branch names, transaction categories, or descriptions.
-- Do not use common knowledge or external information to complete unclear characters.
-- When a critical value is unreadable, return null for that value where the schema permits, set confirmationStatus to "PENDING", and explain the issue in note.
-- Never remove a transaction because its displayed number repeats.
+- Use table-column positions for all mappings, especially withdrawal versus deposit and description versus institution/branch.
+- Do not use common knowledge, system-side names, or external information to complete unclear source characters.
 - Return an empty records array only when no visible transaction row exists on any actual page.
 
-3. Final validation
+4. Final validation
 
 Before returning the result, verify all of the following:
 - The output is exactly one valid JSON object conforming to the configured Output Format JSON Schema.
@@ -91,8 +110,11 @@ Before returning the result, verify all of the following:
 - sourceFileName exactly matches the file name supplied by Make.
 - totalPages is the actual uploaded page count, not the statement's printed total page count.
 - Every sequenceNo comes from 「番号」 and may repeat or restart.
-- Every record has at most one transaction direction, and statisticalAmount equals fileAmount.
+- Exactly one record exists for each visible transaction row, in source order.
+- Each direction is derived from the amount-column position, and statisticalAmount equals fileAmount.
 - Every date is YYYY-MM-DD or null, and every monetary value is a JSON number or null.
-- Record order matches the source document, with no omitted or duplicated transaction rows.
+- counterpartyRaw and contentSummary are identical for every record.
+- Each nonblank summary has been checked twice against the source image, with no silently omitted character.
+- Any uncertain summary character results in confirmationStatus = "PENDING" and a specific English note.
 
 Return JSON only.

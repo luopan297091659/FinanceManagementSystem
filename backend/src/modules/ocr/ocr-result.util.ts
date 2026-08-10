@@ -27,6 +27,7 @@ export function summarizeOcrRecords(records: JsonRecord[]) {
   const autoMatched = records.filter((record) => record.systemMatch?.status === 'MATCHED' && record.systemMatch?.matchMode !== 'MANUAL').length;
   const manualMatched = records.filter((record) => record.systemMatch?.status === 'MATCHED' && record.systemMatch?.matchMode === 'MANUAL').length;
   const manualSync = records.filter((record) => record.systemMatch?.status === 'MANUAL_SYNC').length;
+  const notApplicable = records.filter((record) => record.systemMatch?.status === 'NOT_APPLICABLE').length;
   const matched = autoMatched + manualMatched;
   return {
     total: records.length,
@@ -34,7 +35,8 @@ export function summarizeOcrRecords(records: JsonRecord[]) {
     autoMatched,
     manualMatched,
     manualSync,
-    unmatched: records.length - matched - manualSync,
+    notApplicable,
+    unmatched: records.length - matched - manualSync - notApplicable,
   };
 }
 

@@ -3,7 +3,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const { extractOcrResultRecords, summarizeOcrRecords } = require('../dist/modules/ocr/ocr-result.util.js');
-const { normalizeOcrMatchText, normalizedOcrTextEquals, normalizedOcrTextSimilarity, ocrMatchSearchVariants } = require('../dist/modules/ocr/ocr-match-normalization.util.js');
+const { normalizeOcrMatchText, normalizeOcrPartyName, normalizedOcrTextEquals, normalizedOcrTextSimilarity, normalizedOcrPartyNameSimilarity, ocrMatchSearchVariants } = require('../dist/modules/ocr/ocr-match-normalization.util.js');
 const { OcrService } = require('../dist/modules/ocr/ocr.service.js');
 
 test('expands Make records stored as a nested JSON string', () => {
@@ -79,6 +79,86 @@ test('normalizes Japanese bank summaries across spaces, Kana width, and invisibl
   assert.ok(normalizedOcrTextSimilarity('ｲｻﾞﾜ ﾁｴｺ', 'イザワ ケイコ') < 100);
   assert.ok(ocrMatchSearchVariants('ｲｻﾞﾜ　ﾁｴｺ').includes('ｲｻﾞﾜ'));
   assert.ok(ocrMatchSearchVariants('ｲｻﾞﾜ　ﾁｴｺ').includes('イザワ'));
+});
+
+test('normalizes Japanese corporate bank abbreviations for party-name matching', () => {
+  assert.equal(normalizeOcrPartyName('ﾄﾞ) ｺﾔﾏﾐｶ'), 'コヤマミカ');
+  assert.equal(normalizedOcrPartyNameSimilarity('ﾄﾞ) ｺﾔﾏﾐｶ', 'コヤマ ミカ'), 100);
+  assert.ok(normalizedOcrPartyNameSimilarity('ﾄﾞ) ｺﾔﾏﾐｶ', 'ヨシオカ コズミ') < 85);
+  assert.equal(normalizedOcrPartyNameSimilarity('イザワ チェコ', 'ｲｻﾞﾜ ﾁｴｺ'), 100);
+  assert.ok(normalizedOcrPartyNameSimilarity('イザワ チェコ', 'ｲｻﾞﾜ ｴｺ') >= 80);
+});
+
+test('rent matching requires exact amount and tolerant contractor Kana', async () => {
+  const matchingContract = {
+    id: 'contract-rent-match', contractNumber: 'CTR-RENT', tenantId: null,
+    contractorName: '小山美香', contractorNameKana: 'コヤマ ミカ', payerName: '小山美香',
+    bankSummaryName: null, bankStatementSummary: null,
+    startDate: new Date('2026-01-01'), endDate: null, monthlyRent: 390000, managementFee: 4900,
+    tenant: null,
+    room: { id: 'room-rent', roomNumber: '201', property: { id: 'property-rent', name: 'テストビル' } },
+    property: { id: 'property-rent', name: 'テストビル' },
+  };
+  const wrongAmountContract = { ...matchingContract, id: 'contract-wrong-amount', monthlyRent: 395000 };
+  const service = new OcrService({ contract: { findMany: async () => [wrongAmountContract, matchingContract] } });
+  const result = await service.matchSystemData(
+    { type: 'income', statisticalAmount: 394900, counterpartyRaw: 'ﾄﾞ) ｺﾔﾏﾐｶ', date: '2026-04-03' },
+    {
+      version: 2,
+      rules: [
+        { id: 'amount', systemFields: ['contract.monthlyPaymentTotal'], sourceFields: ['statisticalAmount'], operator: 'equals', minScore: 100, required: true, logicalOperator: 'AND' },
+        { id: 'kana', systemFields: ['contract.contractorNameKana'], sourceFields: ['counterpartyRaw'], operator: 'similar', minScore: 85, required: true, logicalOperator: 'AND' },
+      ],
+    },
+  );
+
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.contractId, 'contract-rent-match');
+  assert.equal(result.systemMatch.matchScore, 100);
+});
+
+test('expense records are excluded from rent matching statistics', async () => {
+  let queried = false;
+  const service = new OcrService({ contract: { findMany: async () => { queried = true; return []; } } });
+  const result = await service.matchSystemData(
+    { type: 'expense', statisticalAmount: 5000, counterpartyRaw: 'SMBC' },
+    {
+      version: 2,
+      rules: [
+        { id: 'amount', systemFields: ['contract.monthlyRent'], sourceFields: ['statisticalAmount'], operator: 'equals', minScore: 100, required: true, logicalOperator: 'AND' },
+        { id: 'kana', systemFields: ['contract.contractorNameKana'], sourceFields: ['counterpartyRaw'], operator: 'similar', minScore: 85, required: true, logicalOperator: 'AND' },
+      ],
+    },
+  );
+
+  assert.equal(result.systemMatch.status, 'NOT_APPLICABLE');
+  assert.equal(queried, false);
+  assert.deepEqual(summarizeOcrRecords([result]), {
+    total: 1, matched: 0, autoMatched: 0, manualMatched: 0, manualSync: 0, notApplicable: 1, unmatched: 0,
+  });
+});
+
+test('contract validity disambiguates equal amount and Kana candidates', async () => {
+  const base = {
+    contractNumber: null, tenantId: null, contractorName: '北野茂樹', contractorNameKana: 'キタノ シゲキ',
+    payerName: '北野茂樹', bankSummaryName: null, bankStatementSummary: null,
+    monthlyRent: 90000, managementFee: null,
+    tenant: null, room: { id: 'room-valid', roomNumber: '1', property: { id: 'property-valid', name: '北野ビル' } },
+    property: { id: 'property-valid', name: '北野ビル' },
+  };
+  const expired = { ...base, id: 'contract-expired', roomId: 'room-expired', startDate: new Date('2024-01-01'), endDate: new Date('2025-12-31') };
+  const active = { ...base, id: 'contract-active', roomId: 'room-active', startDate: new Date('2026-01-01'), endDate: null };
+  const service = new OcrService({ contract: { findMany: async () => [expired, active] } });
+  const result = await service.matchSystemData(
+    { type: 'income', statisticalAmount: 90000, counterpartyRaw: 'ｷﾀﾉ ｼｹﾞｷ', date: '2026-04-02' },
+    { version: 2, rules: [
+      { id: 'amount', systemFields: ['contract.monthlyPaymentTotal'], sourceFields: ['statisticalAmount'], operator: 'equals', minScore: 100, required: true, logicalOperator: 'AND' },
+      { id: 'kana', systemFields: ['contract.contractorNameKana'], sourceFields: ['counterpartyRaw'], operator: 'similar', minScore: 85, required: true, logicalOperator: 'AND' },
+    ] },
+  );
+
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.contractId, 'contract-active');
 });
 
 test('OCR matching falls back to normalized Japanese summary equality', async () => {
@@ -297,6 +377,7 @@ test('summarizes automatic, manual, manual-sync and pending records', () => {
     autoMatched: 1,
     manualMatched: 1,
     manualSync: 1,
+    notApplicable: 0,
     unmatched: 1,
   });
 });
