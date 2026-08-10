@@ -147,6 +147,63 @@ test('OCR matching reports a score below 100 without auto-matching', async () =>
   assert.ok(result.systemMatch.matchScore > 0 && result.systemMatch.matchScore < 100);
 });
 
+test('OCR matching accepts any matching pair inside multi-select fields', async () => {
+  const contract = {
+    id: 'contract-multi', contractNumber: 'CTR-MULTI', tenantId: 'tenant-multi',
+    contractorName: '山田太郎', payerName: 'ヤマダ タロウ', bankSummaryName: 'ヤマダ タロウ',
+    bankStatementSummary: null, startDate: new Date('2026-01-01'), endDate: null, monthlyRent: 70000,
+    tenant: { id: 'tenant-multi', name: '山田太郎' },
+    room: { id: 'room-multi', roomNumber: '301', property: { id: 'property-multi', name: '山田ビル' } },
+    property: { id: 'property-multi', name: '山田ビル' },
+  };
+  const queries = [];
+  const service = new OcrService({ contract: { findMany: async (query) => { queries.push(query); return [contract]; } } });
+  const result = await service.matchSystemData(
+    { contentSummary: '一致しない摘要', counterparty: 'ﾔﾏﾀﾞ ﾀﾛｳ' },
+    {
+      version: 2,
+      rules: [{
+        id: 'multi-rule',
+        systemFields: ['contract.bankStatementSummary', 'contract.payerName'],
+        sourceFields: ['contentSummary', 'counterparty'],
+        operator: 'equals', required: true, logicalOperator: 'AND',
+      }],
+    },
+  );
+
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.contractId, 'contract-multi');
+  assert.equal(result.systemMatch.matchScore, 100);
+  assert.equal(queries[0].where.AND[0].OR.length, 4);
+});
+
+test('OCR matching applies OR on an individual rule instead of a global switch', async () => {
+  const contract = {
+    id: 'contract-rule-or', contractNumber: 'CTR-OR', tenantId: null,
+    contractorName: '佐藤花子', payerName: '佐藤花子', bankSummaryName: null,
+    bankStatementSummary: null, startDate: new Date('2026-01-01'), endDate: null, monthlyRent: 80000,
+    tenant: null,
+    room: { id: 'room-or', roomNumber: '502', property: { id: 'property-or', name: 'さくらビル' } },
+    property: { id: 'property-or', name: 'さくらビル' },
+  };
+  const queries = [];
+  const service = new OcrService({ contract: { findMany: async (query) => { queries.push(query); return [contract]; } } });
+  const result = await service.matchSystemData(
+    { wrongAmount: 1, propertyName: 'さくらビル' },
+    {
+      version: 2,
+      rules: [
+        { id: 'amount-rule', systemFields: ['contract.monthlyRent'], sourceFields: ['wrongAmount'], operator: 'equals', required: true, logicalOperator: 'AND' },
+        { id: 'property-rule', systemFields: ['property.name'], sourceFields: ['propertyName'], operator: 'equals', required: true, logicalOperator: 'OR' },
+      ],
+    },
+  );
+
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.matchScore, 100);
+  assert.ok(queries[0].where.AND[0].OR);
+});
+
 test('expands concatenated Make result objects for multiple uploaded files', () => {
   const first = {
     result: {

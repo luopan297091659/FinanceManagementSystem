@@ -23,15 +23,83 @@ type WorkflowInput = {
 
 type OcrMatchRule = {
   id: string;
-  systemField: string;
-  sourceField: string;
+  systemFields: string[];
+  sourceFields: string[];
   operator: string;
   required: boolean;
+  logicalOperator: 'AND' | 'OR';
 };
 
 type OcrMatchConfiguration = {
-  logicalOperator: 'AND' | 'OR';
+  version: 2;
   rules: OcrMatchRule[];
+};
+
+type OcrSystemFieldDefinition = {
+  path: string[];
+  type: 'text' | 'number' | 'date' | 'valid-date';
+  label: string;
+};
+
+const OCR_SYSTEM_FIELDS: Record<string, OcrSystemFieldDefinition> = {
+  'property.propertyCode': { path: ['property', 'propertyCode'], type: 'text', label: '物件编号' },
+  'property.name': { path: ['property', 'name'], type: 'text', label: '物件名称' },
+  'property.nameKana': { path: ['property', 'nameKana'], type: 'text', label: '物件名称假名' },
+  'property.postalCode': { path: ['property', 'postalCode'], type: 'text', label: '邮政编码' },
+  'property.address': { path: ['property', 'address'], type: 'text', label: '地址' },
+  'property.ward': { path: ['property', 'ward'], type: 'text', label: '区' },
+  'property.city': { path: ['property', 'city'], type: 'text', label: '城市' },
+  'property.prefecture': { path: ['property', 'prefecture'], type: 'text', label: '都道府县' },
+  'property.buildingType': { path: ['property', 'buildingType'], type: 'text', label: '建筑类型' },
+  'property.usageType': { path: ['property', 'usageType'], type: 'text', label: '物件用途' },
+  'property.currentOwnerSummary': { path: ['property', 'currentOwnerSummary'], type: 'text', label: '物件业主摘要' },
+  'property.remark': { path: ['property', 'remark'], type: 'text', label: '物件备注' },
+  'room.roomCode': { path: ['room', 'roomCode'], type: 'text', label: '房间编号' },
+  'room.houseNumber': { path: ['room', 'houseNumber'], type: 'text', label: '房屋编号' },
+  'room.roomNumber': { path: ['room', 'roomNumber'], type: 'text', label: '房间号' },
+  'room.displayName': { path: ['room', 'displayName'], type: 'text', label: '房间显示名' },
+  'room.unitType': { path: ['room', 'unitType'], type: 'text', label: '单元类型' },
+  'room.floorLabel': { path: ['room', 'floorLabel'], type: 'text', label: '楼层' },
+  'room.usageType': { path: ['room', 'usageType'], type: 'text', label: '房间用途' },
+  'room.currentOwnerSummary': { path: ['room', 'currentOwnerSummary'], type: 'text', label: '房间业主摘要' },
+  'room.remark': { path: ['room', 'remark'], type: 'text', label: '房间备注' },
+  'contract.contractNumber': { path: ['contractNumber'], type: 'text', label: '合同编号' },
+  'contract.externalContractId': { path: ['externalContractId'], type: 'text', label: '外部契约ID' },
+  'contract.contractorName': { path: ['contractorName'], type: 'text', label: '契约者' },
+  'contract.contractorNameKana': { path: ['contractorNameKana'], type: 'text', label: '契约者假名' },
+  'contract.contractorType': { path: ['contractorType'], type: 'text', label: '契约者类型' },
+  'contract.payerName': { path: ['payerName'], type: 'text', label: '支付人' },
+  'contract.payerNameKana': { path: ['payerNameKana'], type: 'text', label: '支付人假名' },
+  'contract.bankStatementSummary': { path: ['bankStatementSummary'], type: 'text', label: '银行账单摘要' },
+  'contract.bankSummaryName': { path: ['bankSummaryName'], type: 'text', label: '入金名义' },
+  'contract.startDate': { path: ['startDate'], type: 'date', label: '契约开始日' },
+  'contract.endDate': { path: ['endDate'], type: 'date', label: '契约结束日' },
+  'contract.validDate': { path: [], type: 'valid-date', label: '契约有效日期' },
+  'contract.paymentMethod': { path: ['paymentMethod'], type: 'text', label: '支付方式' },
+  'contract.paymentMonthType': { path: ['paymentMonthType'], type: 'text', label: '支付月份类型' },
+  'contract.monthlyRent': { path: ['monthlyRent'], type: 'number', label: '月租金额' },
+  'contract.managementFee': { path: ['managementFee'], type: 'number', label: '管理费' },
+  'contract.deposit': { path: ['deposit'], type: 'number', label: '押金' },
+  'contract.keyMoney': { path: ['keyMoney'], type: 'number', label: '礼金' },
+  'contract.guaranteeDeposit': { path: ['guaranteeDeposit'], type: 'number', label: '保证金' },
+  'contract.guaranteeFee': { path: ['guaranteeFee'], type: 'number', label: '保证费' },
+  'contract.guaranteeCompanyName': { path: ['guaranteeCompanyName'], type: 'text', label: '保证公司' },
+  'contract.guaranteeCompanyNameKana': { path: ['guaranteeCompanyNameKana'], type: 'text', label: '保证公司假名' },
+  'contract.keyReplacementFee': { path: ['keyReplacementFee'], type: 'number', label: '换锁费' },
+  'contract.renewalAdministrativeFee': { path: ['renewalAdministrativeFee'], type: 'number', label: '更新事务手续费' },
+  'contract.insuranceName': { path: ['insuranceName'], type: 'text', label: '保险名称' },
+  'contract.insuranceFee': { path: ['insuranceFee'], type: 'number', label: '保险费' },
+  'contract.insurancePeriod': { path: ['insurancePeriod'], type: 'text', label: '保险期间' },
+  'contract.insuranceStartDate': { path: ['insuranceStartDate'], type: 'date', label: '保险开始日' },
+  'contract.insuranceEndDate': { path: ['insuranceEndDate'], type: 'date', label: '保险结束日' },
+  'contract.collectionAccount': { path: ['collectionAccount'], type: 'text', label: '收租账户' },
+  'contract.managementContractType': { path: ['managementContractType'], type: 'text', label: '管理委托契约方式' },
+  'contract.remark': { path: ['remark'], type: 'text', label: '契约备注' },
+  'tenant.customerCode': { path: ['tenant', 'customerCode'], type: 'text', label: '租客编号' },
+  'tenant.name': { path: ['tenant', 'name'], type: 'text', label: '租客名称' },
+  'tenant.nameKana': { path: ['tenant', 'nameKana'], type: 'text', label: '租客名称假名' },
+  'tenant.phone': { path: ['tenant', 'phone'], type: 'text', label: '租客电话' },
+  'tenant.email': { path: ['tenant', 'email'], type: 'text', label: '租客邮箱' },
 };
 
 @Injectable()
@@ -207,7 +275,7 @@ export class OcrService {
         ...(storedResult || {}),
         records: normalizedRecords,
         summary: summarizeOcrRecords(normalizedRecords),
-        matchConfig: (storedResult as any)?.matchConfig || { logicalOperator: 'AND', rules: [] },
+        matchConfig: (storedResult as any)?.matchConfig || { version: 2, rules: [] },
         matchHistory: Array.isArray((storedResult as any)?.matchHistory) ? (storedResult as any).matchHistory : [],
       };
       const pending = normalizedResult.summary.unmatched > 0;
@@ -542,7 +610,7 @@ export class OcrService {
     const normalizedResult = {
       records: parsedRecords,
       summary,
-      matchConfig: { logicalOperator: 'AND', rules: [] },
+      matchConfig: { version: 2, rules: [] },
       matchHistory: [],
     };
 
@@ -599,55 +667,50 @@ export class OcrService {
   }
 
   private async matchSystemData(record: Record<string, any>, configuration: OcrMatchConfiguration) {
-    const missingRules = configuration.rules.filter((rule) => rule.required && !this.recordValue(record, rule.sourceField));
+    // Normalize again at the matching boundary so persisted v1 configurations and
+    // internal callers that bypass the controller remain fully backward compatible.
+    configuration = this.validateMatchConfiguration(configuration);
+    const missingRules = configuration.rules.filter((rule) => rule.required && !this.ruleSourceValues(record, rule).length);
     if (missingRules.length) {
       return {
         ...record,
         systemMatch: {
           status: 'UNMATCHED',
           matchMode: null,
-          reason: `回调数据缺少必填字段：${missingRules.map((rule) => rule.sourceField).join('、')}`,
+          reason: `回调数据缺少规则所需字段：${missingRules.map((rule) => rule.sourceFields.join(' / ')).join('、')}`,
           matchingConfiguration: configuration,
         },
       };
     }
 
-    const activeRules = configuration.rules.filter((rule) => this.recordValue(record, rule.sourceField));
-    const conditions = activeRules.map((rule) => this.buildSystemCondition(
-      rule.systemField,
-      this.recordValue(record, rule.sourceField),
-      rule.operator,
-    ));
-    if (!conditions.length) {
+    const activeRules = configuration.rules.filter((rule) => this.ruleSourceValues(record, rule).length);
+    const condition = this.combineRuleConditions(activeRules, (rule) => this.buildRuleCondition(record, rule, false));
+    if (!condition) {
       return { ...record, systemMatch: { status: 'UNMATCHED', matchMode: null, reason: '所选 JSON 字段没有可用于匹配的数据', matchingConfiguration: configuration } };
     }
     const directContracts = await this.prisma.contract.findMany({
-      where: { deletedAt: null, [configuration.logicalOperator]: conditions },
+      where: { deletedAt: null, AND: [condition] },
       include: { tenant: true, room: { include: { property: true } }, property: true },
       take: 2,
     });
     let usedNormalizedFallback = false;
     const directRankedCandidates = directContracts
-      .map((contract) => ({ contract, score: this.contractMatchScore(contract, record, activeRules, configuration.logicalOperator) }))
+      .map((contract) => ({ contract, score: this.contractMatchScore(contract, record, activeRules) }))
       .sort((left, right) => right.score - left.score);
     let bestCandidateScore = directRankedCandidates[0]?.score ?? 0;
     let contracts = directRankedCandidates
       .filter((candidate) => candidate.score === 100)
       .map((candidate) => candidate.contract)
       .slice(0, 2);
-    if (!contracts.length && activeRules.some((rule) => this.isTextSystemField(rule.systemField))) {
-      const candidateConditions = activeRules.map((rule) => this.buildNormalizedCandidateCondition(
-        rule.systemField,
-        this.recordValue(record, rule.sourceField),
-        rule.operator,
-      ));
+    if (!contracts.length && activeRules.some((rule) => rule.systemFields.some((field) => this.isTextSystemField(field)))) {
+      const candidateCondition = this.combineRuleConditions(activeRules, (rule) => this.buildRuleCondition(record, rule, true));
       const candidates = await this.prisma.contract.findMany({
-        where: { deletedAt: null, [configuration.logicalOperator]: candidateConditions },
+        where: { deletedAt: null, AND: candidateCondition ? [candidateCondition] : [{ id: '__no_candidate__' }] },
         include: { tenant: true, room: { include: { property: true } }, property: true },
         take: 100,
       });
       const rankedCandidates = candidates
-        .map((contract) => ({ contract, score: this.contractMatchScore(contract, record, activeRules, configuration.logicalOperator) }))
+        .map((contract) => ({ contract, score: this.contractMatchScore(contract, record, activeRules) }))
         .sort((left, right) => right.score - left.score);
       bestCandidateScore = Math.max(bestCandidateScore, rankedCandidates[0]?.score ?? 0);
       contracts = rankedCandidates
@@ -679,7 +742,7 @@ export class OcrService {
         roomId: contract.roomId, roomNumber: contract.room.roomNumber,
         propertyId: contract.propertyId, propertyName: contract.property.name,
         bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
-        reason: `按 ${activeRules.map((rule) => `${this.systemFieldLabel(rule.systemField)}←${rule.sourceField}`).join('、')} 自动匹配成功${usedNormalizedFallback ? '（已统一空格、字符宽度及 Unicode 形式）' : ''}`,
+        reason: `按 ${activeRules.map((rule, index) => `${index ? `${rule.logicalOperator} ` : ''}${rule.systemFields.map((field) => this.systemFieldLabel(field)).join(' / ')}←${rule.sourceFields.join(' / ')}`).join('、')} 自动匹配成功${usedNormalizedFallback ? '（已统一空格、字符宽度及 Unicode 形式）' : ''}`,
       },
     };
   }
@@ -779,11 +842,7 @@ export class OcrService {
       amount: ['contract.monthlyRent', 'statisticalAmount'],
       date: ['contract.validDate', 'date'],
     };
-    const supportedFields = new Set([
-      'contract.payerName', 'contract.contractorName', 'tenant.name',
-      'contract.bankStatementSummary', 'contract.bankSummaryName', 'property.name',
-      'room.roomNumber', 'contract.contractNumber', 'contract.monthlyRent', 'contract.validDate',
-    ]);
+    const supportedFields = new Set(Object.keys(OCR_SYSTEM_FIELDS));
     const supportedOperators = new Set(['equals', 'contains', 'normalized_equals', 'within_date_range']);
     const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
     const legacyFields = Array.isArray(value) ? value : Array.isArray(raw.fields) ? raw.fields : [];
@@ -793,15 +852,25 @@ export class OcrService {
         const mapping = legacyMappings[String(field)];
         return mapping ? { systemField: mapping[0], sourceField: mapping[1] } : null;
       }).filter(Boolean);
-    const rules: OcrMatchRule[] = rawRules.map((rule: any, index: number) => ({
-      id: String(rule?.id || `rule-${index + 1}`),
-      systemField: String(rule?.systemField || ''),
-      sourceField: String(rule?.sourceField || '').trim(),
-      operator: supportedOperators.has(String(rule?.operator)) ? String(rule.operator) : 'equals',
-      required: rule?.required !== false,
-    })).filter((rule: OcrMatchRule) => supportedFields.has(rule.systemField) && Boolean(rule.sourceField));
+    const globalOperator = raw.logicalOperator === 'OR' ? 'OR' : 'AND';
+    const rules: OcrMatchRule[] = rawRules.map<OcrMatchRule>((rule: any, index: number) => {
+      const systemFields = (Array.isArray(rule?.systemFields) ? rule.systemFields : [rule?.systemField])
+        .map((field: unknown) => String(field || '').trim())
+        .filter((field: string) => supportedFields.has(field));
+      const sourceFields = (Array.isArray(rule?.sourceFields) ? rule.sourceFields : [rule?.sourceField])
+        .map((field: unknown) => String(field || '').trim())
+        .filter(Boolean);
+      return {
+        id: String(rule?.id || `rule-${index + 1}`),
+        systemFields: [...new Set<string>(systemFields)],
+        sourceFields: [...new Set<string>(sourceFields)],
+        operator: supportedOperators.has(String(rule?.operator)) ? String(rule.operator) : 'equals',
+        required: rule?.required !== false,
+        logicalOperator: index === 0 ? 'AND' : (rule?.logicalOperator === 'OR' ? 'OR' : globalOperator),
+      };
+    }).filter((rule: OcrMatchRule) => rule.systemFields.length > 0 && rule.sourceFields.length > 0);
     if (!rules.length) throw new BadRequestException('执行匹配前，请至少配置一条有效的系统字段与 JSON 字段映射');
-    return { logicalOperator: raw.logicalOperator === 'OR' ? 'OR' : 'AND', rules };
+    return { version: 2, rules };
   }
 
   private recordValue(record: Record<string, any>, path: string) {
@@ -809,24 +878,52 @@ export class OcrService {
     return value === undefined || value === null || String(value).trim() === '' ? '' : value;
   }
 
+  private ruleSourceValues(record: Record<string, any>, rule: OcrMatchRule) {
+    return rule.sourceFields
+      .map((field) => ({ field, value: this.recordValue(record, field) }))
+      .filter((item) => item.value !== '');
+  }
+
+  private buildRuleCondition(record: Record<string, any>, rule: OcrMatchRule, normalizedFallback: boolean) {
+    const conditions = this.ruleSourceValues(record, rule).flatMap(({ value }) => rule.systemFields.map((systemField) => (
+      normalizedFallback
+        ? this.buildNormalizedCandidateCondition(systemField, value, rule.operator)
+        : this.buildSystemCondition(systemField, value, rule.operator)
+    )));
+    if (!conditions.length) return null;
+    return conditions.length === 1 ? conditions[0] : { OR: conditions };
+  }
+
+  private combineRuleConditions(
+    rules: OcrMatchRule[],
+    conditionForRule: (rule: OcrMatchRule) => Record<string, any> | null,
+  ): Record<string, any> | null {
+    let combined: Record<string, any> | null = null;
+    for (const rule of rules) {
+      const condition = conditionForRule(rule);
+      if (!condition) continue;
+      combined = combined === null
+        ? condition
+        : { [rule.logicalOperator]: [combined, condition] };
+    }
+    return combined;
+  }
+
   private buildSystemCondition(systemField: string, rawValue: any, operator: string): Record<string, any> {
+    const definition = OCR_SYSTEM_FIELDS[systemField];
+    if (!definition) return { id: '__unsupported_field__' };
     const stringFilter = operator === 'contains'
       ? { contains: String(rawValue).trim(), mode: 'insensitive' }
       : { equals: String(rawValue).trim(), mode: 'insensitive' };
-    if (this.isTextSystemField(systemField)) return this.buildTextSystemCondition(systemField, stringFilter);
-    switch (systemField) {
-      case 'contract.monthlyRent': {
-        const amount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
-        return Number.isFinite(amount) ? { monthlyRent: amount } : { id: '__invalid_amount__' };
-      }
-      case 'contract.validDate': {
-        const date = new Date(rawValue);
-        return Number.isNaN(date.getTime())
-          ? { id: '__invalid_date__' }
-          : { AND: [{ startDate: { lte: date } }, { OR: [{ endDate: null }, { endDate: { gte: date } }] }] };
-      }
-      default: return { id: '__unsupported_field__' };
+    if (definition.type === 'text') return this.buildPathCondition(definition.path, stringFilter);
+    if (definition.type === 'number') {
+      const amount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
+      return Number.isFinite(amount) ? this.buildPathCondition(definition.path, amount) : { id: '__invalid_amount__' };
     }
+    const date = new Date(rawValue);
+    if (Number.isNaN(date.getTime())) return { id: '__invalid_date__' };
+    if (definition.type === 'valid-date') return { AND: [{ startDate: { lte: date } }, { OR: [{ endDate: null }, { endDate: { gte: date } }] }] };
+    return this.buildPathCondition(definition.path, date);
   }
 
   private buildNormalizedCandidateCondition(systemField: string, rawValue: any, operator: string): Record<string, any> {
@@ -834,43 +931,35 @@ export class OcrService {
     const variants = ocrMatchSearchVariants(rawValue);
     if (!variants.length) return { id: '__invalid_text__' };
     return {
-      OR: variants.map((value) => this.buildTextSystemCondition(systemField, { contains: value, mode: 'insensitive' })),
+      OR: variants.map((value) => this.buildPathCondition(OCR_SYSTEM_FIELDS[systemField].path, { contains: value, mode: 'insensitive' })),
     };
   }
 
-  private buildTextSystemCondition(systemField: string, stringFilter: Record<string, any>): Record<string, any> {
-    switch (systemField) {
-      case 'contract.payerName': return { payerName: stringFilter };
-      case 'contract.contractorName': return { contractorName: stringFilter };
-      case 'tenant.name': return { tenant: { name: stringFilter } };
-      case 'contract.bankStatementSummary': return { bankStatementSummary: stringFilter };
-      case 'contract.bankSummaryName': return { bankSummaryName: stringFilter };
-      case 'property.name': return { property: { name: stringFilter } };
-      case 'room.roomNumber': return { room: { roomNumber: stringFilter } };
-      case 'contract.contractNumber': return { contractNumber: stringFilter };
-      default: return { id: '__unsupported_text_field__' };
-    }
+  private buildPathCondition(path: string[], value: unknown): Record<string, any> {
+    if (!path.length) return { id: '__unsupported_path__' };
+    const [head, ...tail] = path;
+    return { [head]: tail.length ? this.buildPathCondition(tail, value) : value };
   }
 
   private isTextSystemField(systemField: string) {
-    return [
-      'contract.payerName', 'contract.contractorName', 'tenant.name',
-      'contract.bankStatementSummary', 'contract.bankSummaryName', 'property.name',
-      'room.roomNumber', 'contract.contractNumber',
-    ].includes(systemField);
+    return OCR_SYSTEM_FIELDS[systemField]?.type === 'text';
   }
 
-  private contractMatchScore(contract: any, record: Record<string, any>, rules: OcrMatchRule[], logicalOperator: 'AND' | 'OR') {
-    const scores = rules.map((rule) => this.contractRuleScore(
-      contract,
-      rule.systemField,
-      this.recordValue(record, rule.sourceField),
-      rule.operator,
-    ));
-    if (!scores.length) return 0;
-    return logicalOperator === 'OR'
-      ? Math.max(...scores)
-      : Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
+  private contractMatchScore(contract: any, record: Record<string, any>, rules: OcrMatchRule[]) {
+    let combinedScore: number | null = null;
+    for (const rule of rules) {
+      const scores = this.ruleSourceValues(record, rule).flatMap(({ value }) => rule.systemFields.map((systemField) => (
+        this.contractRuleScore(contract, systemField, value, rule.operator)
+      )));
+      if (!scores.length) continue;
+      const ruleScore = Math.max(...scores);
+      combinedScore = combinedScore === null
+        ? ruleScore
+        : rule.logicalOperator === 'OR'
+          ? Math.max(combinedScore, ruleScore)
+          : Math.round((combinedScore + ruleScore) / 2);
+    }
+    return combinedScore ?? 0;
   }
 
   private contractRuleScore(contract: any, systemField: string, rawValue: any, operator: string) {
@@ -901,44 +990,40 @@ export class OcrService {
   }
 
   private contractMatchesRule(contract: any, systemField: string, rawValue: any, operator: string) {
-    if (this.isTextSystemField(systemField)) {
-      const systemValue = this.contractSystemText(contract, systemField);
+    const definition = OCR_SYSTEM_FIELDS[systemField];
+    if (!definition) return false;
+    if (definition.type === 'text') {
+      const systemValue = this.contractSystemValue(contract, systemField);
       return operator === 'contains'
         ? normalizedOcrTextContains(systemValue, rawValue)
         : normalizedOcrTextEquals(systemValue, rawValue);
     }
-    if (systemField === 'contract.monthlyRent') {
+    if (definition.type === 'number') {
       const sourceAmount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
-      return Number.isFinite(sourceAmount) && contract.monthlyRent != null && Number(contract.monthlyRent) === sourceAmount;
+      const systemAmount = this.contractSystemValue(contract, systemField);
+      return Number.isFinite(sourceAmount) && systemAmount != null && Number(systemAmount) === sourceAmount;
     }
-    if (systemField === 'contract.validDate') {
+    if (definition.type === 'valid-date') {
       const date = new Date(rawValue);
       if (Number.isNaN(date.getTime())) return false;
       return contract.startDate <= date && (!contract.endDate || contract.endDate >= date);
     }
-    return false;
+    const sourceDate = new Date(rawValue);
+    const systemDate = this.contractSystemValue(contract, systemField);
+    return !Number.isNaN(sourceDate.getTime()) && systemDate instanceof Date
+      && systemDate.toISOString().slice(0, 10) === sourceDate.toISOString().slice(0, 10);
+  }
+
+  private contractSystemValue(contract: any, systemField: string) {
+    return OCR_SYSTEM_FIELDS[systemField]?.path.reduce<any>((current, key) => current?.[key], contract);
   }
 
   private contractSystemText(contract: any, systemField: string) {
-    return ({
-      'contract.payerName': contract.payerName,
-      'contract.contractorName': contract.contractorName,
-      'tenant.name': contract.tenant?.name,
-      'contract.bankStatementSummary': contract.bankStatementSummary,
-      'contract.bankSummaryName': contract.bankSummaryName,
-      'property.name': contract.property?.name,
-      'room.roomNumber': contract.room?.roomNumber,
-      'contract.contractNumber': contract.contractNumber,
-    } as Record<string, unknown>)[systemField];
+    return this.contractSystemValue(contract, systemField);
   }
 
   private systemFieldLabel(field: string) {
-    return ({
-      'contract.payerName': '支付人', 'contract.contractorName': '契约者', 'tenant.name': '租客',
-      'contract.bankStatementSummary': '银行账单摘要', 'contract.bankSummaryName': '入金名义',
-      'property.name': '物件名称', 'room.roomNumber': '房间号', 'contract.contractNumber': '合同编号',
-      'contract.monthlyRent': '月租金额', 'contract.validDate': '合同有效日期',
-    } as Record<string, string>)[field] || field;
+    return OCR_SYSTEM_FIELDS[field]?.label || field;
   }
 
   private validateMatchFields(fields: unknown): string[] {
