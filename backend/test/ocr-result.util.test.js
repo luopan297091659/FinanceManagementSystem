@@ -3,6 +3,8 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const { extractOcrResultRecords, summarizeOcrRecords } = require('../dist/modules/ocr/ocr-result.util.js');
+const { normalizeOcrMatchText, normalizedOcrTextEquals, normalizedOcrTextSimilarity, ocrMatchSearchVariants } = require('../dist/modules/ocr/ocr-match-normalization.util.js');
+const { OcrService } = require('../dist/modules/ocr/ocr.service.js');
 
 test('expands Make records stored as a nested JSON string', () => {
   const payload = {
@@ -65,6 +67,84 @@ test('normalizes bank-native transactions and maps displayed 番号 into sequenc
   assert.equal(records[0].contentSummary, 'フリコミテスウリヨウ');
   assert.equal(records[0].sourcePageStart, 2);
   assert.equal(records[0].sourcePageEnd, 2);
+});
+
+test('normalizes Japanese bank summaries across spaces, Kana width, and invisible characters', () => {
+  assert.equal(normalizeOcrMatchText('ｲｻﾞﾜ ﾁｴｺ'), 'イザワチエコ');
+  assert.equal(normalizeOcrMatchText('イザワ　チエコ'), 'イザワチエコ');
+  assert.equal(normalizeOcrMatchText('ｲｻﾞﾜ\u200B ﾁｴｺ'), 'イザワチエコ');
+  assert.equal(normalizedOcrTextEquals('ｲｻﾞﾜ ﾁｴｺ', 'イザワ　チエコ'), true);
+  assert.equal(normalizedOcrTextEquals('ｲｻﾞﾜ ﾁｴｺ', 'イザワ ケイコ'), false);
+  assert.equal(normalizedOcrTextSimilarity('ｲｻﾞﾜ ﾁｴｺ', 'イザワ　チエコ'), 100);
+  assert.ok(normalizedOcrTextSimilarity('ｲｻﾞﾜ ﾁｴｺ', 'イザワ ケイコ') < 100);
+  assert.ok(ocrMatchSearchVariants('ｲｻﾞﾜ　ﾁｴｺ').includes('ｲｻﾞﾜ'));
+  assert.ok(ocrMatchSearchVariants('ｲｻﾞﾜ　ﾁｴｺ').includes('イザワ'));
+});
+
+test('OCR matching falls back to normalized Japanese summary equality', async () => {
+  const contract = {
+    id: 'contract-1',
+    contractNumber: 'CTR-1',
+    tenantId: 'tenant-1',
+    contractorName: '井沢千恵子',
+    payerName: '井沢千恵子',
+    bankSummaryName: null,
+    bankStatementSummary: 'イザワ　チエコ',
+    startDate: new Date('2026-01-01'),
+    endDate: null,
+    monthlyRent: 49500,
+    tenant: { id: 'tenant-1', name: '井沢千恵子' },
+    room: { id: 'room-1', roomNumber: '101', property: { id: 'property-1', name: 'Test Building' } },
+    property: { id: 'property-1', name: 'Test Building' },
+  };
+  let queryCount = 0;
+  const service = new OcrService({
+    contract: {
+      findMany: async () => (++queryCount === 1 ? [] : [contract]),
+    },
+  });
+  const result = await service.matchSystemData(
+    { contentSummary: 'ｲｻﾞﾜ ﾁｴｺ' },
+    {
+      logicalOperator: 'AND',
+      rules: [{
+        id: 'summary-rule',
+        systemField: 'contract.bankStatementSummary',
+        sourceField: 'contentSummary',
+        operator: 'equals',
+        required: true,
+      }],
+    },
+  );
+
+  assert.equal(queryCount, 2);
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.contractId, 'contract-1');
+  assert.equal(result.systemMatch.matchScore, 100);
+  assert.match(result.systemMatch.reason, /Unicode/);
+});
+
+test('OCR matching reports a score below 100 without auto-matching', async () => {
+  const contract = {
+    id: 'contract-2', contractNumber: 'CTR-2', tenantId: 'tenant-2',
+    contractorName: '井沢千恵子', payerName: '井沢千恵子', bankSummaryName: null,
+    bankStatementSummary: 'イザワ チエコ', startDate: new Date('2026-01-01'), endDate: null, monthlyRent: 49500,
+    tenant: { id: 'tenant-2', name: '井沢千恵子' },
+    room: { id: 'room-2', roomNumber: '202', property: { id: 'property-2', name: 'Test Building' } },
+    property: { id: 'property-2', name: 'Test Building' },
+  };
+  let queryCount = 0;
+  const service = new OcrService({ contract: { findMany: async () => (++queryCount === 1 ? [] : [contract]) } });
+  const result = await service.matchSystemData(
+    { contentSummary: 'ｲｻﾞﾜ ｹｲｺ' },
+    {
+      logicalOperator: 'AND',
+      rules: [{ id: 'summary-rule', systemField: 'contract.bankStatementSummary', sourceField: 'contentSummary', operator: 'equals', required: true }],
+    },
+  );
+
+  assert.equal(result.systemMatch.status, 'UNMATCHED');
+  assert.ok(result.systemMatch.matchScore > 0 && result.systemMatch.matchScore < 100);
 });
 
 test('expands concatenated Make result objects for multiple uploaded files', () => {

@@ -6,6 +6,12 @@ import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
 import { preparePdfFilesForWebhook } from './image-to-pdf.util';
 import { extractOcrResultRecords, summarizeOcrRecords } from './ocr-result.util';
+import {
+  normalizedOcrTextContains,
+  normalizedOcrTextEquals,
+  normalizedOcrTextSimilarity,
+  ocrMatchSearchVariants,
+} from './ocr-match-normalization.util';
 
 type WorkflowInput = {
   name: string;
@@ -338,40 +344,54 @@ export class OcrService {
 
   async listMatchCandidates(query = '') {
     const search = query.trim();
-    const contracts = await this.prisma.contract.findMany({
+    const searchVariants = ocrMatchSearchVariants(search);
+    let contracts = await this.prisma.contract.findMany({
       where: {
         deletedAt: null,
-        ...(search ? {
-          OR: [
-            { contractNumber: { contains: search, mode: 'insensitive' as const } },
-            { contractorName: { contains: search, mode: 'insensitive' as const } },
-            { payerName: { contains: search, mode: 'insensitive' as const } },
-            { bankSummaryName: { contains: search, mode: 'insensitive' as const } },
-            { bankStatementSummary: { contains: search, mode: 'insensitive' as const } },
-            { tenant: { name: { contains: search, mode: 'insensitive' as const } } },
-            { room: { roomNumber: { contains: search, mode: 'insensitive' as const } } },
-            { property: { name: { contains: search, mode: 'insensitive' as const } } },
-          ],
+        ...(searchVariants.length ? {
+          OR: searchVariants.flatMap((value) => [
+            { contractNumber: { contains: value, mode: 'insensitive' as const } },
+            { contractorName: { contains: value, mode: 'insensitive' as const } },
+            { payerName: { contains: value, mode: 'insensitive' as const } },
+            { bankSummaryName: { contains: value, mode: 'insensitive' as const } },
+            { bankStatementSummary: { contains: value, mode: 'insensitive' as const } },
+            { tenant: { name: { contains: value, mode: 'insensitive' as const } } },
+            { room: { roomNumber: { contains: value, mode: 'insensitive' as const } } },
+            { property: { name: { contains: value, mode: 'insensitive' as const } } },
+          ]),
         } : {}),
       },
       include: { tenant: true, room: { include: { property: true } }, property: true },
       orderBy: { updatedAt: 'desc' },
-      take: 50,
+      take: 100,
     });
-    return contracts.map((contract) => ({
-      id: contract.id,
-      contractNumber: contract.contractNumber,
-      propertyId: contract.propertyId,
-      propertyName: contract.property.name,
-      roomId: contract.roomId,
-      roomNumber: contract.room.roomNumber,
-      tenantId: contract.tenantId,
-      tenantName: contract.tenant?.name,
-      contractorName: contract.contractorName,
-      payerName: contract.payerName,
-      bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
-      status: contract.status,
-    }));
+    if (search && !contracts.length) {
+      contracts = await this.prisma.contract.findMany({
+        where: { deletedAt: null },
+        include: { tenant: true, room: { include: { property: true } }, property: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+      });
+    }
+    return contracts
+      .map((contract) => ({ contract, score: this.candidateMatchScore(search, contract) }))
+      .sort((left, right) => right.score.matchScore - left.score.matchScore)
+      .slice(0, 50)
+      .map(({ contract, score }) => ({
+        id: contract.id,
+        contractNumber: contract.contractNumber,
+        propertyId: contract.propertyId,
+        propertyName: contract.property.name,
+        roomId: contract.roomId,
+        roomNumber: contract.room.roomNumber,
+        tenantId: contract.tenantId,
+        tenantName: contract.tenant?.name,
+        contractorName: contract.contractorName,
+        payerName: contract.payerName,
+        bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+        status: contract.status,
+        ...score,
+      }));
   }
 
   async reviewRecord(
@@ -407,6 +427,8 @@ export class OcrService {
         include: { tenant: true, room: { include: { property: true } }, property: true },
       });
       if (!contract) throw new BadRequestException('选择的系统合同不存在或已删除');
+      const sourceSummary = this.first(before, 'contentSummary', 'counterpartyRaw', 'counterparty', 'summary', 'description');
+      const manualScore = this.candidateMatchScore(sourceSummary, contract).matchScore;
       records[recordIndex] = {
         ...before,
         systemMatch: {
@@ -421,6 +443,7 @@ export class OcrService {
           propertyId: contract.propertyId,
           propertyName: contract.property.name,
           bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+          matchScore: manualScore,
           reason: input.reason?.trim() || '已由操作员选择系统合同并完成匹配',
           reviewedAt: new Date().toISOString(),
           reviewedBy: actorUserId || null,
@@ -598,17 +621,48 @@ export class OcrService {
     if (!conditions.length) {
       return { ...record, systemMatch: { status: 'UNMATCHED', matchMode: null, reason: '所选 JSON 字段没有可用于匹配的数据', matchingConfiguration: configuration } };
     }
-    const contracts = await this.prisma.contract.findMany({
+    const directContracts = await this.prisma.contract.findMany({
       where: { deletedAt: null, [configuration.logicalOperator]: conditions },
       include: { tenant: true, room: { include: { property: true } }, property: true },
       take: 2,
     });
+    let usedNormalizedFallback = false;
+    const directRankedCandidates = directContracts
+      .map((contract) => ({ contract, score: this.contractMatchScore(contract, record, activeRules, configuration.logicalOperator) }))
+      .sort((left, right) => right.score - left.score);
+    let bestCandidateScore = directRankedCandidates[0]?.score ?? 0;
+    let contracts = directRankedCandidates
+      .filter((candidate) => candidate.score === 100)
+      .map((candidate) => candidate.contract)
+      .slice(0, 2);
+    if (!contracts.length && activeRules.some((rule) => this.isTextSystemField(rule.systemField))) {
+      const candidateConditions = activeRules.map((rule) => this.buildNormalizedCandidateCondition(
+        rule.systemField,
+        this.recordValue(record, rule.sourceField),
+        rule.operator,
+      ));
+      const candidates = await this.prisma.contract.findMany({
+        where: { deletedAt: null, [configuration.logicalOperator]: candidateConditions },
+        include: { tenant: true, room: { include: { property: true } }, property: true },
+        take: 100,
+      });
+      const rankedCandidates = candidates
+        .map((contract) => ({ contract, score: this.contractMatchScore(contract, record, activeRules, configuration.logicalOperator) }))
+        .sort((left, right) => right.score - left.score);
+      bestCandidateScore = Math.max(bestCandidateScore, rankedCandidates[0]?.score ?? 0);
+      contracts = rankedCandidates
+        .filter((candidate) => candidate.score === 100)
+        .map((candidate) => candidate.contract)
+        .slice(0, 2);
+      usedNormalizedFallback = contracts.length > 0;
+    }
     if (contracts.length !== 1) {
       return {
         ...record,
         systemMatch: {
           status: contracts.length > 1 ? 'AMBIGUOUS' : 'UNMATCHED',
           matchMode: null,
+          matchScore: contracts.length > 1 ? 100 : bestCandidateScore,
           reason: contracts.length > 1 ? '匹配到多个系统合同，请手工选择' : '未找到满足所配置规则的系统合同',
           matchingConfiguration: configuration,
         },
@@ -619,12 +673,13 @@ export class OcrService {
       ...record,
       systemMatch: {
         status: 'MATCHED', matchMode: 'AUTO', matchingConfiguration: configuration,
+        matchScore: 100,
         contractId: contract.id, contractNumber: contract.contractNumber,
         tenantId: contract.tenantId, tenantName: contract.tenant?.name || contract.contractorName,
         roomId: contract.roomId, roomNumber: contract.room.roomNumber,
         propertyId: contract.propertyId, propertyName: contract.property.name,
         bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
-        reason: `按 ${activeRules.map((rule) => `${this.systemFieldLabel(rule.systemField)}←${rule.sourceField}`).join('、')} 自动匹配成功`,
+        reason: `按 ${activeRules.map((rule) => `${this.systemFieldLabel(rule.systemField)}←${rule.sourceField}`).join('、')} 自动匹配成功${usedNormalizedFallback ? '（已统一空格、字符宽度及 Unicode 形式）' : ''}`,
       },
     };
   }
@@ -758,15 +813,8 @@ export class OcrService {
     const stringFilter = operator === 'contains'
       ? { contains: String(rawValue).trim(), mode: 'insensitive' }
       : { equals: String(rawValue).trim(), mode: 'insensitive' };
+    if (this.isTextSystemField(systemField)) return this.buildTextSystemCondition(systemField, stringFilter);
     switch (systemField) {
-      case 'contract.payerName': return { payerName: stringFilter };
-      case 'contract.contractorName': return { contractorName: stringFilter };
-      case 'tenant.name': return { tenant: { name: stringFilter } };
-      case 'contract.bankStatementSummary': return { bankStatementSummary: stringFilter };
-      case 'contract.bankSummaryName': return { bankSummaryName: stringFilter };
-      case 'property.name': return { property: { name: stringFilter } };
-      case 'room.roomNumber': return { room: { roomNumber: stringFilter } };
-      case 'contract.contractNumber': return { contractNumber: stringFilter };
       case 'contract.monthlyRent': {
         const amount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
         return Number.isFinite(amount) ? { monthlyRent: amount } : { id: '__invalid_amount__' };
@@ -779,6 +827,109 @@ export class OcrService {
       }
       default: return { id: '__unsupported_field__' };
     }
+  }
+
+  private buildNormalizedCandidateCondition(systemField: string, rawValue: any, operator: string): Record<string, any> {
+    if (!this.isTextSystemField(systemField)) return this.buildSystemCondition(systemField, rawValue, operator);
+    const variants = ocrMatchSearchVariants(rawValue);
+    if (!variants.length) return { id: '__invalid_text__' };
+    return {
+      OR: variants.map((value) => this.buildTextSystemCondition(systemField, { contains: value, mode: 'insensitive' })),
+    };
+  }
+
+  private buildTextSystemCondition(systemField: string, stringFilter: Record<string, any>): Record<string, any> {
+    switch (systemField) {
+      case 'contract.payerName': return { payerName: stringFilter };
+      case 'contract.contractorName': return { contractorName: stringFilter };
+      case 'tenant.name': return { tenant: { name: stringFilter } };
+      case 'contract.bankStatementSummary': return { bankStatementSummary: stringFilter };
+      case 'contract.bankSummaryName': return { bankSummaryName: stringFilter };
+      case 'property.name': return { property: { name: stringFilter } };
+      case 'room.roomNumber': return { room: { roomNumber: stringFilter } };
+      case 'contract.contractNumber': return { contractNumber: stringFilter };
+      default: return { id: '__unsupported_text_field__' };
+    }
+  }
+
+  private isTextSystemField(systemField: string) {
+    return [
+      'contract.payerName', 'contract.contractorName', 'tenant.name',
+      'contract.bankStatementSummary', 'contract.bankSummaryName', 'property.name',
+      'room.roomNumber', 'contract.contractNumber',
+    ].includes(systemField);
+  }
+
+  private contractMatchScore(contract: any, record: Record<string, any>, rules: OcrMatchRule[], logicalOperator: 'AND' | 'OR') {
+    const scores = rules.map((rule) => this.contractRuleScore(
+      contract,
+      rule.systemField,
+      this.recordValue(record, rule.sourceField),
+      rule.operator,
+    ));
+    if (!scores.length) return 0;
+    return logicalOperator === 'OR'
+      ? Math.max(...scores)
+      : Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
+  }
+
+  private contractRuleScore(contract: any, systemField: string, rawValue: any, operator: string) {
+    if (this.isTextSystemField(systemField)) {
+      const systemValue = this.contractSystemText(contract, systemField);
+      return normalizedOcrTextSimilarity(systemValue, rawValue);
+    }
+    return this.contractMatchesRule(contract, systemField, rawValue, operator) ? 100 : 0;
+  }
+
+  private candidateMatchScore(search: string, contract: any) {
+    if (!search) return { matchScore: 0, matchedField: null };
+    const fields = [
+      ['bankStatementSummary', contract.bankStatementSummary],
+      ['bankSummaryName', contract.bankSummaryName],
+      ['payerName', contract.payerName],
+      ['contractorName', contract.contractorName],
+      ['tenantName', contract.tenant?.name],
+      ['contractNumber', contract.contractNumber],
+      ['roomNumber', contract.room?.roomNumber],
+      ['propertyName', contract.property?.name],
+    ] as Array<[string, unknown]>;
+    const ranked = fields
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
+      .map(([matchedField, value]) => ({ matchedField, matchScore: normalizedOcrTextSimilarity(search, value) }))
+      .sort((left, right) => right.matchScore - left.matchScore);
+    return ranked[0] ?? { matchScore: 0, matchedField: null };
+  }
+
+  private contractMatchesRule(contract: any, systemField: string, rawValue: any, operator: string) {
+    if (this.isTextSystemField(systemField)) {
+      const systemValue = this.contractSystemText(contract, systemField);
+      return operator === 'contains'
+        ? normalizedOcrTextContains(systemValue, rawValue)
+        : normalizedOcrTextEquals(systemValue, rawValue);
+    }
+    if (systemField === 'contract.monthlyRent') {
+      const sourceAmount = Number(String(rawValue).replace(/[,￥¥\s]/g, ''));
+      return Number.isFinite(sourceAmount) && contract.monthlyRent != null && Number(contract.monthlyRent) === sourceAmount;
+    }
+    if (systemField === 'contract.validDate') {
+      const date = new Date(rawValue);
+      if (Number.isNaN(date.getTime())) return false;
+      return contract.startDate <= date && (!contract.endDate || contract.endDate >= date);
+    }
+    return false;
+  }
+
+  private contractSystemText(contract: any, systemField: string) {
+    return ({
+      'contract.payerName': contract.payerName,
+      'contract.contractorName': contract.contractorName,
+      'tenant.name': contract.tenant?.name,
+      'contract.bankStatementSummary': contract.bankStatementSummary,
+      'contract.bankSummaryName': contract.bankSummaryName,
+      'property.name': contract.property?.name,
+      'room.roomNumber': contract.room?.roomNumber,
+      'contract.contractNumber': contract.contractNumber,
+    } as Record<string, unknown>)[systemField];
   }
 
   private systemFieldLabel(field: string) {

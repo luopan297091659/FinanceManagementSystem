@@ -4,130 +4,130 @@
     "schemaVersion": {
       "type": "string",
       "enum": ["finance-transaction-v1"],
-      "description": "系统财务交易字段版本，固定为 finance-transaction-v1"
+      "description": "System finance transaction schema version. Always finance-transaction-v1."
     },
     "sourceFileName": {
       "type": "string",
-      "description": "Make 提供的当前完整原始文件名，必须原样返回"
+      "description": "Complete original file name supplied by Make. It must be returned without modification."
     },
     "totalPages": {
       "type": "integer",
-      "description": "当前实际上传文件的总页数，不使用账票页脚打印的总页数"
+      "description": "Number of pages actually present in the uploaded file, not the total printed in the statement footer."
     },
     "records": {
       "type": "array",
-      "description": "按实际页面和页面内顺序排列的银行交易行",
+      "description": "Bank transaction rows in actual page order and top-to-bottom order within each page.",
       "items": {
         "type": "object",
         "properties": {
           "sequenceNo": {
             "type": ["integer", "null"],
-            "description": "银行表格「番号」列的整数值；直接使用显示番号，允许重复或重新开始，不得重新连续编号；无法辨认时为 null"
+            "description": "Integer value from the bank table column 番号. It may repeat or restart and must not be renumbered. Return null when unreadable."
           },
           "fileType": {
             "type": ["string", "null"],
-            "description": "页面正式标题，例如入出金明細照会"
+            "description": "Formal document title printed on the page, such as 入出金明細照会."
           },
           "type": {
             "type": ["string", "null"],
             "enum": ["income", "expense", null],
-            "description": "入金列有金额为 income，出金列有金额为 expense；无法确认时为 null"
+            "description": "income when the deposit column contains the amount, expense when the withdrawal column contains the amount, or null when unresolved."
           },
           "date": {
             "type": ["string", "null"],
-            "description": "勘定日，格式 YYYY-MM-DD；无法确认时为 null"
+            "description": "Transaction date from 勘定日 in YYYY-MM-DD format, or null when unreadable."
           },
           "counterparty": {
             "type": ["string", "null"],
-            "description": "仅当摘要明确表示交易对方名称时返回摘要原文，否则为 null"
+            "description": "Original description text only when it clearly represents the counterparty name; otherwise null."
           },
           "counterpartyRaw": {
             "type": ["string", "null"],
-            "description": "银行表格「摘要」列的清理后原文"
+            "description": "Cleaned original text from the bank table column 摘要."
           },
           "contentSummary": {
             "type": ["string", "null"],
-            "description": "银行表格「摘要」列的清理后原文，与 counterpartyRaw 相同"
+            "description": "Cleaned original text from 摘要. It must equal counterpartyRaw and must not be translated or expanded."
           },
           "transactionCategory": {
             "type": ["string", "null"],
-            "description": "银行表格「取引区分」列的日文原文"
+            "description": "Original Japanese text from the bank table column 取引区分."
           },
           "financialInstitutionName": {
             "type": ["string", "null"],
-            "description": "银行表格「金融機関名・支店名」单元格中的金融机构名称"
+            "description": "Financial institution name extracted from the 金融機関名・支店名 cell."
           },
           "bankBranchName": {
             "type": ["string", "null"],
-            "description": "银行表格「金融機関名・支店名」单元格中的支店名称"
+            "description": "Branch name extracted from the 金融機関名・支店名 cell."
           },
           "propertyName": {
             "type": ["string", "null"],
-            "description": "文件明确独立记载的物件名称；不得从摘要猜测，通常为 null"
+            "description": "Property name only when explicitly provided in a separate source field. Do not infer it from the bank description."
           },
           "roomNumber": {
             "type": ["string", "null"],
-            "description": "文件明确独立记载的部屋番号；不得从摘要猜测，通常为 null"
+            "description": "Room or unit number only when explicitly provided in a separate source field. Do not infer it from the bank description."
           },
           "contractorName": {
             "type": ["string", "null"],
-            "description": "文件明确独立记载的契约者名称；不得从摘要猜测，通常为 null"
+            "description": "Contractor or tenant name only when explicitly provided in a separate source field. Do not infer it from the bank description."
           },
           "contractNumber": {
             "type": ["string", "null"],
-            "description": "文件明确独立记载的合同编号；无法确认时为 null"
+            "description": "Contract number only when explicitly printed in a separate source field; otherwise null."
           },
           "paymentMonth": {
             "type": ["string", "null"],
-            "description": "文件明确独立记载的归属月份 YYYY-MM；不得从勘定日推断"
+            "description": "Explicitly printed payment month in YYYY-MM format. Do not infer it from the transaction date."
           },
           "feeItemName": {
             "type": ["string", "null"],
-            "description": "文件明确记载且可匹配系统费用项目的名称；银行流水通常为 null"
+            "description": "System fee item name only when explicitly stated and directly matchable; normally null for bank statements."
           },
           "fileAmount": {
             "type": ["number", "null"],
-            "description": "当前交易行非空的出金或入金金额，不含逗号和货币符号"
+            "description": "Amount from the applicable withdrawal or deposit column, without commas, spaces, or currency symbols."
           },
           "transferFeeAmount": {
             "type": "number",
             "enum": [0],
-            "description": "银行流水交易行不拆分附加转账手续费，固定为 0"
+            "description": "Additional transfer fee is not split from a bank statement transaction row. Always 0."
           },
           "statisticalAmount": {
             "type": ["number", "null"],
-            "description": "系统统计金额，必须与 fileAmount 相等"
+            "description": "Amount written to system statistics. It must equal fileAmount."
           },
           "evidenceDateType": {
             "type": "string",
             "enum": ["勘定日"],
-            "description": "日期依据固定为勘定日"
+            "description": "Date evidence type. Always 勘定日."
           },
           "sourcePageStart": {
             "type": "integer",
-            "description": "交易行所在的实际上传文件页码，从 1 开始"
+            "description": "One-based actual uploaded-file page containing the transaction row."
           },
           "sourcePageEnd": {
             "type": "integer",
-            "description": "与 sourcePageStart 相同，不使用账票打印页码"
+            "description": "Same value as sourcePageStart. Do not use the statement's printed page label."
           },
           "processingStatus": {
             "type": "string",
             "enum": ["INCLUDED"],
-            "description": "可见银行交易行固定写入 INCLUDED"
+            "description": "Every visible bank transaction row is included. Always INCLUDED."
           },
           "confirmationStatus": {
             "type": "string",
             "enum": ["PENDING", "CONFIRMED"],
-            "description": "关键字段清楚时为 CONFIRMED，存在 OCR 疑点时为 PENDING"
+            "description": "CONFIRMED only when all critical fields are clear; otherwise PENDING."
           },
           "note": {
             "type": "string",
-            "description": "OCR 模糊、裁切、金额冲突或银行支店无法拆分等说明；没有问题时为空字符串"
+            "description": "Concise English explanation of OCR uncertainty, cropping, amount conflicts, or an uncertain institution/branch split. Empty string when there is no issue."
           },
           "details": {
             "type": "array",
-            "description": "银行流水不生成财务费用明细，必须为空数组",
+            "description": "Bank statement rows do not create finance fee details. Always return an empty array.",
             "items": {
               "type": "object",
               "properties": {},

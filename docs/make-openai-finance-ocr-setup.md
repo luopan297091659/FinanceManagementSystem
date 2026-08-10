@@ -4,9 +4,9 @@
 
 银行流水对账不要继续使用通用财务单据的提示词和超大 Schema。`Generate a response` 模块应成对使用：
 
-- **Text Prompt**：完整粘贴 `make-openai-bank-reconciliation-prompt.txt`
+- **Text Prompt**：完整粘贴英文版 `make-openai-bank-reconciliation-prompt.txt`
 - **Name**：`bank_reconciliation_finance_transaction_v1`
-- **Schema**：完整粘贴 `make-openai-bank-reconciliation-schema.json`
+- **Schema**：完整粘贴英文说明版 `make-openai-bank-reconciliation-schema.json`
 - **Strict**：开启
 
 该银行专用输出仍使用系统现有的 `finance-transaction-v1` 字段名，因此无需在 Make 回调前改名。其中银行表格的「番号」直接写入 `sequenceNo`；该值允许按日期重新开始或重复，不是 Make 自行生成的数组序号。
