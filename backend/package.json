@@ -14,6 +14,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:check": "node scripts/check-db.js",
     "test:ocr-mime": "node --test test/mime-type.util.test.js test/image-to-pdf.util.test.js test/ocr-result.util.test.js",
+    "test:contracts-import": "node --test test/integrated-import-headers.util.test.js test/contract-import-comparison.util.test.js",
     "prisma:studio": "prisma studio"
   },
   "dependencies": {

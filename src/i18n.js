@@ -831,6 +831,8 @@ Object.assign(messages.en.common, {
 });
 
 Object.assign(messages.ja.contractsLabels, {
+  importItems: "取込項目",
+  processingResult: "システム処理結果",
   importHistory: "インポート履歴",
   noImportHistory: "インポート履歴はありません。",
   editTitle: "契約を編集",
@@ -866,6 +868,8 @@ Object.assign(messages.ja.contractsLabels, {
 });
 
 Object.assign(messages.zh.contractsLabels, {
+  importItems: "导入项",
+  processingResult: "系统处理结果",
   importHistory: "导入历史",
   noImportHistory: "暂无导入历史。",
   editTitle: "编辑合同",
@@ -901,6 +905,8 @@ Object.assign(messages.zh.contractsLabels, {
 });
 
 Object.assign(messages.en.contractsLabels, {
+  importItems: "Imported fields",
+  processingResult: "System processing result",
   importHistory: "Import history",
   noImportHistory: "No import history.",
   editTitle: "Edit contract",
@@ -933,6 +939,16 @@ Object.assign(messages.en.contractsLabels, {
   insurancePeriod: "Insurance period",
   insuranceStartDate: "Insurance start date",
   insuranceEndDate: "Insurance end date",
+});
+
+Object.assign(messages.ja.contractsLabels.reasons, {
+  "integrated.info.contractUnchanged": "取込データは既存契約と一致しているため、更新は不要です",
+});
+Object.assign(messages.zh.contractsLabels.reasons, {
+  "integrated.info.contractUnchanged": "导入数据与现有契约一致，无需更新",
+});
+Object.assign(messages.en.contractsLabels.reasons, {
+  "integrated.info.contractUnchanged": "The imported data matches the existing contract; no update is required",
 });
 
 Object.assign(messages.ja.resourcesLabels, {

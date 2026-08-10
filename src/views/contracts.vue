@@ -130,9 +130,23 @@
         <div v-if="importView === 'preview'" class="import-summary"><span>{{ labels.total }}: {{ importResult.batch.totalRows }}</span><span>{{ labels.ready }}: {{ readyCount }}</span><span>{{ labels.conflict }}: {{ importResult.batch.conflictRows }}</span><span>{{ labels.error }}: {{ importResult.batch.failedRows }}</span><span>{{ labels.committed }}: {{ importResult.batch.successRows }}</span></div>
         <div v-if="importView === 'preview'" class="table-controls import-controls"><button class="primary-button" type="button" :disabled="!readyCount || importBusy" @click="commitImport">{{ labels.commit }}</button></div>
         <div v-if="importView === 'preview'" class="import-table-wrap">
-          <table class="import-table"><thead><tr><th>{{ labels.sourceRow }}</th><th>{{ labels.propertyRoom }}</th><th>{{ labels.contractor }}</th><th>{{ labels.period }}</th><th>{{ labels.rentFees }}</th><th>{{ labels.propertyAction }}</th><th>{{ labels.contractAction }}</th><th>{{ labels.status }}</th><th>{{ labels.reason }}</th></tr></thead>
+          <table class="import-table"><thead>
+            <tr class="import-group-header">
+              <th rowspan="2">{{ labels.sourceRow }}</th>
+              <th :colspan="Math.max(importHeaders.length, 1)" class="import-items-heading">{{ labels.importItems }}（{{ importHeaders.length }}）</th>
+              <th colspan="4" class="processing-items-heading">{{ labels.processingResult }}</th>
+            </tr>
+            <tr>
+              <th v-if="!importHeaders.length" class="import-source-header">—</th>
+              <th v-for="header in importHeaders" :key="header" class="import-source-header">{{ header }}</th>
+              <th>{{ labels.propertyAction }}</th><th>{{ labels.contractAction }}</th><th>{{ labels.status }}</th><th>{{ labels.reason }}</th>
+            </tr>
+          </thead>
             <tbody><tr v-for="row in importResult.rows" :key="row.id" :class="`import-status-${row.status.toLowerCase()}`">
-              <td>{{ row.sourceRow }}</td><td>{{ compact(row.propertyName, row.roomNumber) }}</td><td>{{ row.contractDataJson?.contractorName || "" }}</td><td>{{ compact(row.contractDataJson?.startDate, row.contractDataJson?.endDate, " ～ ") }}</td><td>{{ money(row.contractDataJson?.monthlyRent) }}</td><td>{{ actionLabel(row.action) }}</td>
+              <td>{{ row.sourceRow }}</td>
+              <td v-if="!importHeaders.length" class="import-source-cell">—</td>
+              <td v-for="header in importHeaders" :key="header" class="import-source-cell">{{ importCellValue(row, header) }}</td>
+              <td>{{ actionLabel(row.action) }}</td>
               <td><select v-model="row.contractAction" :disabled="row.status === 'COMMITTED'" @change="updateImportRow(row)"><option value="CREATE_CONTRACT">{{ labels.createContract }}</option><option value="UPDATE_CONTRACT">{{ labels.updateContract }}</option><option value="NO_CONTRACT">{{ labels.noContract }}</option><option value="SKIP">{{ labels.skip }}</option></select></td>
               <td>{{ statusLabel(row.contractStatus) }}</td><td>{{ reasonLabel(row.contractConflictReason || row.errorMessage) }}</td>
             </tr></tbody>
@@ -231,6 +245,12 @@ const allPageSelected = computed(() => pageContractIds.value.length > 0 && pageC
 const sortableContractKeys = new Set(["startDate", "endDate", "insuranceStartDate", "insuranceEndDate", "monthlyRent", "managementFee", "deposit", "keyMoney", "guaranteeDeposit", "guaranteeFee", "keyReplacementFee", "renewalAdministrativeFee", "insuranceFee"]);
 const sortIcon = (key) => sortBy.value === key && sortDir.value === 'desc' ? '▼' : '▲';
 const readyCount = computed(() => Math.max(0, (importResult.value?.batch?.totalRows || 0) - (importResult.value?.batch?.successRows || 0) - (importResult.value?.batch?.skippedRows || 0) - (importResult.value?.batch?.failedRows || 0) - (importResult.value?.batch?.conflictRows || 0)));
+const importHeaders = computed(() => {
+  const responseHeaders = importResult.value?.importHeaders;
+  if (Array.isArray(responseHeaders) && responseHeaders.length) return responseHeaders;
+  const source = importResult.value?.rows?.[0]?.sourceDataJson;
+  return source && typeof source === "object" && !Array.isArray(source) ? Object.keys(source) : [];
+});
 let contractSearchTimer;
 let roomSearchTimer;
 let contractRequestId = 0;
@@ -387,6 +407,12 @@ const compact = (first, second, separator = " / ") => [first, second].filter((va
 const statusLabel = (status) => labels.value.statuses?.[status] || status || "";
 const actionLabel = (action) => labels.value.actions?.[action] || action || "";
 const reasonLabel = (reason) => labels.value.reasons?.[reason] || reason || "";
+function importCellValue(row, header) {
+  const value = row.sourceDataJson?.[header];
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
 onMounted(async () => {
   await loadContracts();
   const contractId = new URLSearchParams(window.location.search).get("contractId");
@@ -431,6 +457,11 @@ onMounted(async () => {
 .import-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
 .import-table th, .import-table td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
 .import-table th { position: sticky; top: 0; z-index: 1; background: #edf5f4; }
+.import-table .import-group-header th { top: 0; text-align: center; }
+.import-table thead tr:nth-child(2) th { top: 33px; }
+.import-table .import-items-heading { background: #dff3ef; color: #087d70; }
+.import-table .processing-items-heading { background: #edf2f7; color: #526579; }
+.import-source-header, .import-source-cell { min-width: 150px; max-width: 260px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .import-status-conflict, .import-status-error, .import-status-failed { background: #fff4f2; }
 .import-status-committed { background: #f1faf5; }
 .import-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 14px; }

@@ -3,6 +3,8 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { detectUnitType, normalizeAddress, normalizeMatchText, normalizePostalCode, normalizeText } from '../properties/property-import.service';
+import { hasProvidedContractChanges } from './contract-import-comparison.util';
+import { extractIntegratedImportHeaders } from './integrated-import-headers.util';
 
 type SourceRow = Record<string, unknown>;
 
@@ -290,19 +292,33 @@ export class ContractsService {
 
     const properties = await this.prisma.property.findMany({
       where: { deletedAt: null },
-      include: { rooms: { where: { deletedAt: null }, include: { contracts: { where: { deletedAt: null } } } } },
+      include: { rooms: { where: { deletedAt: null }, include: { contracts: { where: { deletedAt: null }, include: { charges: true } } } } },
     });
     const contracts = await this.prisma.contract.findMany({
       where: { deletedAt: null },
-      include: { property: true, room: true },
+      include: { property: true, room: true, charges: true },
     });
-    const preview = rows.map((source, index) => hasPropertyIdentity
-      ? this.previewRow(source, index + 2, properties, providedHeaders)
-      : this.previewPartialContractRow(source, index + 2, contracts, providedHeaders));
+    const preview = rows.map((source, index) => ({
+      ...(hasPropertyIdentity
+        ? this.previewRow(source, index + 2, properties, providedHeaders)
+        : this.previewPartialContractRow(source, index + 2, contracts, providedHeaders)),
+      // Preserve the uploaded row exactly as supplied. This powers the dynamic
+      // preview columns and prevents internal canonical aliases from leaking into UI.
+      sourceDataJson: inputRows[index] as Prisma.InputJsonObject,
+    }));
     const batchNo = `ICI-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${fileHash.slice(0, 6).toUpperCase()}`;
     const batch = await this.prisma.$transaction(async (tx) => {
       const created = await tx.propertyImportBatch.create({
-        data: { batchNo, originalName: normalizeText(body.originalName) || 'integrated-import.xls', fileHash, importType: 'INTEGRATED', totalRows: preview.length, status: 'PREVIEW_READY', createdBy: actorUserId, mappingJson: Object.fromEntries(headerMapping) },
+        data: {
+          batchNo,
+          originalName: normalizeText(body.originalName) || 'integrated-import.xls',
+          fileHash,
+          importType: 'INTEGRATED',
+          totalRows: preview.length,
+          status: 'PREVIEW_READY',
+          createdBy: actorUserId,
+          mappingJson: { ...Object.fromEntries(headerMapping), __importHeaders: Object.keys(inputRows[0] ?? {}) },
+        },
       });
       await tx.propertyImportRow.createMany({ data: preview.map((row) => ({ ...row, batchId: created.id })) });
       await tx.auditLog.create({ data: { actorUserId, action: 'integrated.import.upload', entityType: 'PropertyImportBatch', entityId: created.id, after: { batchNo, totalRows: preview.length } } });
@@ -331,11 +347,13 @@ export class ContractsService {
       ...(query.status ? { status: String(query.status) } : {}),
       ...(search ? { OR: [{ propertyName: { contains: search, mode: 'insensitive' } }, { roomNumber: { contains: search, mode: 'insensitive' } }] } : {}),
     };
-    const [importRows, total] = await Promise.all([
+    const [importRows, total, firstSourceRow] = await Promise.all([
       this.prisma.propertyImportRow.findMany({ where, include: { property: true, room: true, contract: true }, orderBy: { sourceRow: 'asc' }, skip: (page - 1) * pageSize, take: pageSize }),
       this.prisma.propertyImportRow.count({ where }),
+      this.prisma.propertyImportRow.findFirst({ where: { batchId }, orderBy: { sourceRow: 'asc' }, select: { sourceDataJson: true } }),
     ]);
-    return { batch, rows: importRows, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    const importHeaders = extractIntegratedImportHeaders(firstSourceRow?.sourceDataJson, batch.mappingJson, Object.values(H));
+    return { batch, importHeaders, rows: importRows, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
   async updateImportRow(batchId: string, rowId: string, body: any, actorUserId?: string) {
@@ -393,14 +411,17 @@ export class ContractsService {
     let contractConflictReason: string | null = null;
     let status = 'READY';
     if (room && contractData.hasContract) {
-      const exactContract = room.contracts.find((contract: any) => normalizeMatchText(contract.contractorName) === normalizeMatchText(contractData.contractorName) && iso(contract.startDate) === contractData.startDate && iso(contract.endDate) === contractData.endDate);
-      if (exactContract) {
-        contractId = exactContract.id;
-        if (!hasProvidedContractChanges(exactContract, contractData)) {
-          contractAction = 'SKIP'; status = 'SKIPPED';
+      const matchingContracts = matchRoomContracts(source, room.contracts, providedHeaders, contractData);
+      if (matchingContracts.length === 1) {
+        const matchingContract = matchingContracts[0];
+        contractId = matchingContract.id;
+        if (!hasProvidedContractChanges(matchingContract, contractData)) {
+          contractAction = 'SKIP'; status = 'SKIPPED'; contractConflictReason = 'integrated.info.contractUnchanged';
         } else {
           contractAction = 'UPDATE_CONTRACT'; status = 'CONFLICT'; contractConflictReason = 'integrated.error.existingContractDiffers';
         }
+      } else if (matchingContracts.length > 1) {
+        contractAction = 'SKIP'; status = 'CONFLICT'; contractConflictReason = 'integrated.error.contractMatchAmbiguous';
       } else if (room.contracts.some((contract: any) => periodsOverlap(contract.startDate, contract.endDate, contractData.startDate, contractData.endDate))) {
         status = 'CONFLICT'; contractConflictReason = 'integrated.error.overlappingContract';
       }
@@ -425,15 +446,16 @@ export class ContractsService {
       return this.previewError(source, sourceRow, propertyName, normalizeText(source[H.address]), roomNumber, reason, contractData);
     }
     const contract = matches[0];
+    const hasChanges = hasProvidedContractChanges(contract, contractData);
     return {
       sourceRow, sourceDataJson: source as Prisma.InputJsonObject,
       propertyName: contract.property.name, normalizedPropertyName: contract.property.normalizedName || normalizeMatchText(contract.property.name),
       roomNumber: contract.room.roomNumber, normalizedRoomNumber: contract.room.normalizedRoomNumber || normalizeMatchText(contract.room.roomNumber),
       postalCode: contract.property.postalCode, address: contract.property.address, normalizedAddress: contract.property.normalizedAddress || normalizeAddress(contract.property.address),
       detectedUnitType: contract.room.unitType, propertyId: contract.propertyId, roomId: contract.roomId,
-      action: 'UPDATE_ROOM', status: 'READY', contractId: contract.id, contractAction: 'UPDATE_CONTRACT', contractStatus: contract.status,
+      action: 'UPDATE_ROOM', status: hasChanges ? 'READY' : 'SKIPPED', contractId: contract.id, contractAction: hasChanges ? 'UPDATE_CONTRACT' : 'SKIP', contractStatus: contract.status,
       contractDataJson: { ...contractData, status: contract.status } as unknown as Prisma.InputJsonObject,
-      contractConflictReason: null, conflictReason: null, errorMessage: null,
+      contractConflictReason: hasChanges ? null : 'integrated.info.contractUnchanged', conflictReason: null, errorMessage: null,
     };
   }
 
@@ -629,6 +651,24 @@ function matchExistingContracts(source: SourceRow, contracts: any[], providedHea
   return [];
 }
 
+function matchRoomContracts(source: SourceRow, contracts: any[], providedHeaders: Set<IntegratedHeaderKey>, data: Record<string, unknown>) {
+  const contractNumberValue = normalizeText(source[H.contractNumber]);
+  if (providedHeaders.has('contractNumber') && contractNumberValue) {
+    return contracts.filter((contract) => normalizeText(contract.contractNumber) === contractNumberValue);
+  }
+  const externalContractIdValue = normalizeText(source[H.externalContractId]);
+  if (providedHeaders.has('externalContractId') && externalContractIdValue) {
+    return contracts.filter((contract) => normalizeText(contract.externalContractId) === externalContractIdValue);
+  }
+  const contractorNameValue = normalizeMatchText(source[H.contractorName]);
+  if (!providedHeaders.has('contractorName') || !contractorNameValue) return [];
+
+  let matches = contracts.filter((contract) => normalizeMatchText(contract.contractorName) === contractorNameValue);
+  if (providedHeaders.has('startDate') && data.startDate) matches = matches.filter((contract) => iso(contract.startDate) === data.startDate);
+  if (providedHeaders.has('endDate') && data.endDate) matches = matches.filter((contract) => iso(contract.endDate) === data.endDate);
+  return matches;
+}
+
 function contractProvidedFields(providedHeaders: Set<IntegratedHeaderKey>) {
   const fieldsByHeader: Partial<Record<IntegratedHeaderKey, string[]>> = {
     contractorName: ['contractorName', 'tenantId'], payerNameKana: ['payerNameKana'],
@@ -659,22 +699,6 @@ function pickProvidedContractData(fullData: Record<string, unknown>, providedFie
   return update;
 }
 
-function hasProvidedContractChanges(contract: Record<string, unknown>, data: Record<string, unknown>) {
-  const moneyFields = new Set(['monthlyRent', 'managementFee', 'deposit', 'keyMoney', 'guaranteeDeposit', 'guaranteeFee', 'keyReplacementFee', 'renewalAdministrativeFee', 'insuranceFee']);
-  const dateFields = new Set(['startDate', 'endDate', 'insuranceStartDate', 'insuranceEndDate']);
-  for (const field of Array.isArray(data._providedFields) ? data._providedFields : []) {
-    if (typeof field !== 'string' || field === 'tenantId') continue;
-    if (moneyFields.has(field)) {
-      if (!sameMoney(contract[field], data[field])) return true;
-    } else if (dateFields.has(field)) {
-      if (iso(contract[field]) !== iso(data[field])) return true;
-    } else if (normalizeText(contract[field]) !== normalizeText(data[field])) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function parseDate(value: unknown): Date | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   const text = normalizeText(value);
@@ -691,7 +715,6 @@ function monthCount(value: unknown) { const match = normalizeText(value).match(/
 function charge(chargeType: string, itemName: unknown, amount: unknown, months: unknown, sortOrder: number) { const name = normalizeText(itemName); const money = moneyString(amount); const count = monthCount(months); return name || (money !== null && Number(money) !== 0) || count ? { chargeType, itemName: name || chargeType, amount: money, monthCount: count, sortOrder } : null; }
 function calculateStatus(start: string | null, end: string | null) { const today = new Date().toISOString().slice(0, 10); if (!start) return 'DRAFT'; if (start > today) return 'FUTURE'; if (end && end < today) return 'EXPIRED'; return 'ACTIVE'; }
 function periodsOverlap(startA: unknown, endA: unknown, startB: string | null, endB: string | null) { const a1 = iso(startA); const a2 = iso(endA) || '9999-12-31'; const b1 = startB; const b2 = endB || '9999-12-31'; return Boolean(a1 && b1 && a1 <= b2 && b1 <= a2); }
-function sameMoney(left: unknown, right: unknown) { return moneyString(left) === moneyString(right); }
 function code(prefix: string, seed: string) { return `${prefix}-${createHash('sha256').update(seed).digest('hex').slice(0, 16).toUpperCase()}`; }
 function contractNumber(row: any) { const month = String((row.contractDataJson as any)?.startDate || new Date().toISOString().slice(0, 7)).replace(/-/g, '').slice(0, 6); return `CTR-${month}-${String(row.sourceRow).padStart(6, '0')}-${createHash('sha1').update(row.id).digest('hex').slice(0, 4).toUpperCase()}`; }
 function json(value: unknown) { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; }
