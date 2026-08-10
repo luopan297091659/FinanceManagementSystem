@@ -1,5 +1,20 @@
 # Make OpenAI 财务 OCR 配置
 
+## 银行流水对账专用配置
+
+银行流水对账不要继续使用通用财务单据的提示词和超大 Schema。`Generate a response` 模块应成对使用：
+
+- **Text Prompt**：完整粘贴 `make-openai-bank-reconciliation-prompt.txt`
+- **Name**：`bank_reconciliation_finance_transaction_v1`
+- **Schema**：完整粘贴 `make-openai-bank-reconciliation-schema.json`
+- **Strict**：开启
+
+该银行专用输出仍使用系统现有的 `finance-transaction-v1` 字段名，因此无需在 Make 回调前改名。其中银行表格的「番号」直接写入 `sequenceNo`；该值允许按日期重新开始或重复，不是 Make 自行生成的数组序号。
+
+系统回调还兼容历史银行结构中的 `transactions`/`rows`、`transactionNumber`/`sequenceNumber`、`depositAmount`/`withdrawalAmount`、`transactionType`、`branchName` 和 `description`。历史输出中的「001」会规范化为系统整数 `sequenceNo = 1`，但新流程仍应优先使用本专用 Schema，避免依赖兼容层。
+
+通用请款书、送金明细、费用单据等非银行流水文件继续使用下方原有配置。
+
 ## Generate a response 模块
 
 在 **Advanced settings** 中选择 JSON Schema/Structured Output，并填写：

@@ -36,6 +36,37 @@ test('keeps an ordinary flat records array', () => {
   assert.equal(records[0].amount, 300);
 });
 
+test('normalizes bank-native transactions and maps displayed 番号 into sequenceNo', () => {
+  const records = extractOcrResultRecords({
+    documentType: 'japanese_bank_transaction_statement',
+    transactions: [{
+      sourceFileName: 'bank.pdf',
+      sourcePageNumber: 2,
+      transactionNumber: '004',
+      transactionDate: '2026-04-07',
+      category: '出金',
+      withdrawalAmount: 660,
+      depositAmount: null,
+      transactionType: '振替支払',
+      financialInstitutionName: null,
+      branchName: null,
+      description: 'フリコミテスウリヨウ',
+      remarks: '',
+    }],
+  });
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].sequenceNo, 4);
+  assert.equal(records[0].type, 'expense');
+  assert.equal(records[0].fileAmount, 660);
+  assert.equal(records[0].statisticalAmount, 660);
+  assert.equal(records[0].transactionCategory, '振替支払');
+  assert.equal(records[0].bankBranchName, null);
+  assert.equal(records[0].contentSummary, 'フリコミテスウリヨウ');
+  assert.equal(records[0].sourcePageStart, 2);
+  assert.equal(records[0].sourcePageEnd, 2);
+});
+
 test('expands concatenated Make result objects for multiple uploaded files', () => {
   const first = {
     result: {
@@ -137,6 +168,15 @@ test('finance OCR response schema is strict and complete for OpenAI Structured O
   const schemaPath = path.resolve(__dirname, '../../docs/make-openai-finance-ocr-schema.json');
   const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
   assert.equal(schema.type, 'object');
+  validateStrictObjectSchemas(schema, '$');
+});
+
+test('bank reconciliation OCR response schema is strict and maps 番号 to sequenceNo', () => {
+  const schemaPath = path.resolve(__dirname, '../../docs/make-openai-bank-reconciliation-schema.json');
+  const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+  assert.equal(schema.type, 'object');
+  assert.equal(schema.properties.schemaVersion.enum[0], 'finance-transaction-v1');
+  assert.match(schema.properties.records.items.properties.sequenceNo.description, /番号/);
   validateStrictObjectSchemas(schema, '$');
 });
 

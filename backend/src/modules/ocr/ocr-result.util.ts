@@ -2,7 +2,17 @@ type JsonRecord = Record<string, any>;
 
 export function extractOcrResultRecords(payload: unknown): JsonRecord[] {
   const source = payload as JsonRecord | null;
-  const candidates = [source?.records, source?.results, source?.data?.records, source?.data?.results, source?.data];
+  const candidates = [
+    source?.records,
+    source?.transactions,
+    source?.rows,
+    source?.results,
+    source?.data?.records,
+    source?.data?.transactions,
+    source?.data?.rows,
+    source?.data?.results,
+    source?.data,
+  ];
   const root = candidates.find(Array.isArray) ?? (source && typeof source === 'object' ? [source] : []);
   const flattened: JsonRecord[] = [];
 
@@ -57,10 +67,11 @@ function flattenValue(value: unknown, context: JsonRecord, output: JsonRecord[],
     flattenValue(wrappedResult, nextContext, output, depth + 1);
     return;
   }
-  const parsedRecords = parseJson(record.records);
+  const nestedValue = record.records ?? record.transactions ?? record.rows;
+  const parsedRecords = parseJson(nestedValue);
   const nestedRecords = parsedRecords !== undefined
     ? parsedRecords
-    : record.records && typeof record.records === 'object' ? record.records : undefined;
+    : nestedValue && typeof nestedValue === 'object' ? nestedValue : undefined;
   if (nestedRecords !== undefined) {
     flattenValue(nestedRecords, nextContext, output, depth + 1);
     return;
@@ -92,28 +103,36 @@ function stringValue(value: unknown) {
 }
 
 function normalizeFinanceRecord(record: JsonRecord): JsonRecord {
-  const direction = stringValue(record.type ?? record.money_direction).toLowerCase();
-  const type = direction === 'income' || ['入金', '收入', 'inflow', 'deposit'].includes(direction)
+  const depositAmount = record.depositAmount ?? record.deposit_amount;
+  const withdrawalAmount = record.withdrawalAmount ?? record.withdrawal_amount;
+  const direction = stringValue(record.type ?? record.money_direction ?? record.category).toLowerCase();
+  const explicitType = direction === 'income' || ['入金', '收入', 'inflow', 'deposit'].includes(direction)
     ? 'income'
     : direction === 'expense' || ['出金', '支出', 'outflow', 'withdrawal'].includes(direction)
       ? 'expense'
       : null;
+  const type = explicitType
+    ?? (hasValue(depositAmount) && !hasValue(withdrawalAmount)
+      ? 'income'
+      : hasValue(withdrawalAmount) && !hasValue(depositAmount) ? 'expense' : null);
+  const bankDescription = record.bankDescription ?? record.bank_description ?? record.description;
+  const bankAmount = type === 'income' ? depositAmount : type === 'expense' ? withdrawalAmount : null;
   const processingStatus = normalizeProcessingStatus(record.processingStatus ?? record.statistical_treatment);
   const confirmationStatus = normalizeConfirmationStatus(record.confirmationStatus ?? record.review_status);
   const canonical: JsonRecord = {
     schemaVersion: record.schemaVersion ?? 'finance-transaction-v1',
     sourceFileName: record.sourceFileName ?? record.original_file_name ?? record.source_file_name ?? null,
     sourceTotalPages: record.sourceTotalPages ?? record.source_total_pages ?? record.total_pages ?? null,
-    sequenceNo: record.sequenceNo ?? record.record_no ?? null,
-    fileType: record.fileType ?? record.document_type ?? null,
+    sequenceNo: normalizeSequenceNo(record.sequenceNo ?? record.sequenceNumber ?? record.transactionNumber ?? record.sourceRowNumber ?? record.sourceRow ?? record.record_no ?? record['番号']),
+    fileType: record.fileType ?? record.documentType ?? record.document_type ?? null,
     type,
     date: record.date ?? record.transactionDate ?? null,
     counterparty: record.counterparty ?? record.counterpartyRaw ?? record.outflow_party ?? record.inflow_party ?? null,
-    counterpartyRaw: record.counterpartyRaw ?? record.outflow_party ?? record.inflow_party ?? null,
-    contentSummary: record.contentSummary ?? record.summary ?? null,
-    transactionCategory: record.transactionCategory ?? record.transaction_type ?? null,
+    counterpartyRaw: record.counterpartyRaw ?? bankDescription ?? record.outflow_party ?? record.inflow_party ?? null,
+    contentSummary: record.contentSummary ?? record.summary ?? bankDescription ?? null,
+    transactionCategory: record.transactionCategory ?? record.transactionType ?? record.transaction_type ?? null,
     financialInstitutionName: record.financialInstitutionName ?? record.financial_institution_name ?? null,
-    bankBranchName: record.bankBranchName ?? record.bank_branch_name ?? record.branch_name ?? null,
+    bankBranchName: record.bankBranchName ?? record.branchName ?? record.bank_branch_name ?? record.branch_name ?? null,
     propertyName: record.propertyName ?? record.property_name ?? null,
     roomNumber: record.roomNumber ?? record.room_number ?? null,
     contractorName: record.contractorName ?? record.tenant_name ?? null,
@@ -121,18 +140,28 @@ function normalizeFinanceRecord(record: JsonRecord): JsonRecord {
     paymentMonth: record.paymentMonth ?? record.target_month ?? null,
     actualMonth: record.actualMonth ?? record.actual_month ?? null,
     feeItemName: record.feeItemName ?? record.fee_type ?? record.transaction_type ?? null,
-    fileAmount: record.fileAmount ?? record.document_amount ?? null,
+    fileAmount: record.fileAmount ?? record.document_amount ?? record.amount ?? bankAmount ?? null,
     transferFeeAmount: record.transferFeeAmount ?? record.additional_fee ?? 0,
-    statisticalAmount: record.statisticalAmount ?? record.net_amount ?? record.document_amount ?? null,
+    statisticalAmount: record.statisticalAmount ?? record.net_amount ?? record.document_amount ?? record.amount ?? bankAmount ?? null,
     evidenceDateType: record.evidenceDateType ?? record.date_basis ?? null,
-    sourcePageStart: record.sourcePageStart ?? record.start_page ?? null,
-    sourcePageEnd: record.sourcePageEnd ?? record.end_page ?? null,
+    sourcePageStart: record.sourcePageStart ?? record.sourcePageNumber ?? record.sourcePage ?? record.start_page ?? null,
+    sourcePageEnd: record.sourcePageEnd ?? record.sourcePageNumber ?? record.sourcePage ?? record.end_page ?? null,
     processingStatus,
     confirmationStatus,
-    note: record.note ?? record.notes ?? null,
+    note: record.note ?? record.notes ?? record.remarks ?? null,
     financeDetails: normalizeFinanceDetails(record.financeDetails ?? record.details),
   };
   return { ...record, ...canonical };
+}
+
+function hasValue(value: unknown) {
+  return value !== undefined && value !== null && stringValue(value) !== '';
+}
+
+function normalizeSequenceNo(value: unknown) {
+  if (typeof value === 'number') return Number.isInteger(value) && value >= 0 ? value : null;
+  const text = stringValue(value).replace(/[０-９]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0xfee0));
+  return /^\d+$/.test(text) ? Number(text) : null;
 }
 
 function normalizeFinanceDetails(value: unknown) {

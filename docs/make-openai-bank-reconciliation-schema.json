@@ -1,0 +1,173 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["finance-transaction-v1"],
+      "description": "系统财务交易字段版本，固定为 finance-transaction-v1"
+    },
+    "sourceFileName": {
+      "type": "string",
+      "description": "Make 提供的当前完整原始文件名，必须原样返回"
+    },
+    "totalPages": {
+      "type": "integer",
+      "description": "当前实际上传文件的总页数，不使用账票页脚打印的总页数"
+    },
+    "records": {
+      "type": "array",
+      "description": "按实际页面和页面内顺序排列的银行交易行",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sequenceNo": {
+            "type": ["integer", "null"],
+            "description": "银行表格「番号」列的整数值；直接使用显示番号，允许重复或重新开始，不得重新连续编号；无法辨认时为 null"
+          },
+          "fileType": {
+            "type": ["string", "null"],
+            "description": "页面正式标题，例如入出金明細照会"
+          },
+          "type": {
+            "type": ["string", "null"],
+            "enum": ["income", "expense", null],
+            "description": "入金列有金额为 income，出金列有金额为 expense；无法确认时为 null"
+          },
+          "date": {
+            "type": ["string", "null"],
+            "description": "勘定日，格式 YYYY-MM-DD；无法确认时为 null"
+          },
+          "counterparty": {
+            "type": ["string", "null"],
+            "description": "仅当摘要明确表示交易对方名称时返回摘要原文，否则为 null"
+          },
+          "counterpartyRaw": {
+            "type": ["string", "null"],
+            "description": "银行表格「摘要」列的清理后原文"
+          },
+          "contentSummary": {
+            "type": ["string", "null"],
+            "description": "银行表格「摘要」列的清理后原文，与 counterpartyRaw 相同"
+          },
+          "transactionCategory": {
+            "type": ["string", "null"],
+            "description": "银行表格「取引区分」列的日文原文"
+          },
+          "financialInstitutionName": {
+            "type": ["string", "null"],
+            "description": "银行表格「金融機関名・支店名」单元格中的金融机构名称"
+          },
+          "bankBranchName": {
+            "type": ["string", "null"],
+            "description": "银行表格「金融機関名・支店名」单元格中的支店名称"
+          },
+          "propertyName": {
+            "type": ["string", "null"],
+            "description": "文件明确独立记载的物件名称；不得从摘要猜测，通常为 null"
+          },
+          "roomNumber": {
+            "type": ["string", "null"],
+            "description": "文件明确独立记载的部屋番号；不得从摘要猜测，通常为 null"
+          },
+          "contractorName": {
+            "type": ["string", "null"],
+            "description": "文件明确独立记载的契约者名称；不得从摘要猜测，通常为 null"
+          },
+          "contractNumber": {
+            "type": ["string", "null"],
+            "description": "文件明确独立记载的合同编号；无法确认时为 null"
+          },
+          "paymentMonth": {
+            "type": ["string", "null"],
+            "description": "文件明确独立记载的归属月份 YYYY-MM；不得从勘定日推断"
+          },
+          "feeItemName": {
+            "type": ["string", "null"],
+            "description": "文件明确记载且可匹配系统费用项目的名称；银行流水通常为 null"
+          },
+          "fileAmount": {
+            "type": ["number", "null"],
+            "description": "当前交易行非空的出金或入金金额，不含逗号和货币符号"
+          },
+          "transferFeeAmount": {
+            "type": "number",
+            "enum": [0],
+            "description": "银行流水交易行不拆分附加转账手续费，固定为 0"
+          },
+          "statisticalAmount": {
+            "type": ["number", "null"],
+            "description": "系统统计金额，必须与 fileAmount 相等"
+          },
+          "evidenceDateType": {
+            "type": "string",
+            "enum": ["勘定日"],
+            "description": "日期依据固定为勘定日"
+          },
+          "sourcePageStart": {
+            "type": "integer",
+            "description": "交易行所在的实际上传文件页码，从 1 开始"
+          },
+          "sourcePageEnd": {
+            "type": "integer",
+            "description": "与 sourcePageStart 相同，不使用账票打印页码"
+          },
+          "processingStatus": {
+            "type": "string",
+            "enum": ["INCLUDED"],
+            "description": "可见银行交易行固定写入 INCLUDED"
+          },
+          "confirmationStatus": {
+            "type": "string",
+            "enum": ["PENDING", "CONFIRMED"],
+            "description": "关键字段清楚时为 CONFIRMED，存在 OCR 疑点时为 PENDING"
+          },
+          "note": {
+            "type": "string",
+            "description": "OCR 模糊、裁切、金额冲突或银行支店无法拆分等说明；没有问题时为空字符串"
+          },
+          "details": {
+            "type": "array",
+            "description": "银行流水不生成财务费用明细，必须为空数组",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "sequenceNo",
+          "fileType",
+          "type",
+          "date",
+          "counterparty",
+          "counterpartyRaw",
+          "contentSummary",
+          "transactionCategory",
+          "financialInstitutionName",
+          "bankBranchName",
+          "propertyName",
+          "roomNumber",
+          "contractorName",
+          "contractNumber",
+          "paymentMonth",
+          "feeItemName",
+          "fileAmount",
+          "transferFeeAmount",
+          "statisticalAmount",
+          "evidenceDateType",
+          "sourcePageStart",
+          "sourcePageEnd",
+          "processingStatus",
+          "confirmationStatus",
+          "note",
+          "details"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "sourceFileName", "totalPages", "records"],
+  "additionalProperties": false
+}
