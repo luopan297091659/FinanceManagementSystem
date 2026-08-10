@@ -22,6 +22,11 @@ const steps = [
     args: ['run', 'backend:prisma:deploy'],
   },
   {
+    label: 'Build frontend assets served by the backend',
+    command: npmCommand,
+    args: ['run', 'build'],
+  },
+  {
     label: 'Build backend',
     command: npmCommand,
     args: ['run', 'backend:build'],
