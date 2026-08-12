@@ -131,7 +131,7 @@ export class OcrController {
   reviewRecord(
     @Param('taskId') taskId: string,
     @Param('recordId') recordId: string,
-    @Body() body: { action?: string; contractId?: string; reason?: string },
+    @Body() body: { action?: string; contractId?: string; contractIds?: string[]; reason?: string },
     @Req() request: Request,
   ) {
     return this.ocrService.reviewRecord(taskId, recordId, body, this.actorUserId(request));

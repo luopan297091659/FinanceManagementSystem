@@ -494,47 +494,88 @@ export class OcrService {
       const amount = Number(String(amountText).replace(/,/g, ''));
       if (!date) throw new BadRequestException(`记录 ${record._recordId || ''} 缺少有效单据日期，暂不能同步`);
       if (!Number.isFinite(amount)) throw new BadRequestException(`记录 ${record._recordId || ''} 缺少有效金额，暂不能同步`);
-      if (!record.systemMatch.contractId || !record.systemMatch.roomId) {
+      const allocations = Array.isArray(record.systemMatch.allocations) && record.systemMatch.allocations.length
+        ? record.systemMatch.allocations
+        : [{
+            contractId: record.systemMatch.contractId,
+            roomId: record.systemMatch.roomId,
+            allocatedAmount: Math.abs(amount),
+          }];
+      if (allocations.some((allocation: Record<string, any>) => !allocation.contractId || !allocation.roomId)) {
         throw new BadRequestException(`记录 ${record._recordId || ''} 缺少合同或房间匹配信息，暂不能同步`);
       }
-      return { record, date, amount: new Prisma.Decimal(Math.abs(amount)) };
+      const allocationTotal = allocations.reduce((total: number, allocation: Record<string, any>) => total + Number(allocation.allocatedAmount || 0), 0);
+      if (allocations.length > 1 && Math.abs(allocationTotal - Math.abs(amount)) > 0.005) {
+        throw new BadRequestException(`记录 ${record._recordId || ''} 的分配金额合计与入金金额不一致`);
+      }
+      return { record, date, amount: new Prisma.Decimal(Math.abs(amount)), allocations };
     });
 
     const syncedAt = new Date();
     const transactionIds = await this.prisma.$transaction(async (tx) => {
       const ids: string[] = [];
-      for (const { record, date, amount } of prepared) {
+      for (const { record, date, amount, allocations } of prepared) {
         const match = record.systemMatch;
-        const transaction = await tx.transaction.create({
+        const recordTransactionIds: string[] = [];
+        const bankTransaction = await tx.bankTransaction.create({
           data: {
-            type: this.isExpenseRecord(record) ? 'EXPENSE' : 'INCOME',
-            roomId: match.roomId,
-            contractId: match.contractId,
-            date,
-            sequenceNo: this.optionalInteger(this.first(record, 'sequenceNo', 'record_no')),
-            fileType: this.first(record, 'fileType', 'document_type') || undefined,
-            counterparty: this.first(record, 'counterparty', 'inflow_party', 'outflow_party', 'contractorName', 'tenant_name') || match.tenantName || undefined,
-            counterpartyRaw: this.first(record, 'counterpartyRaw', 'counterparty', 'inflow_party', 'outflow_party') || undefined,
-            contentSummary: this.first(record, 'contentSummary', 'summary', 'description') || undefined,
+            bookedAt: date,
+            direction: this.isExpenseRecord(record) ? 'DEBIT' : 'CREDIT',
+            amount,
+            description: this.first(record, 'contentSummary', 'counterpartyRaw', 'counterparty', 'summary', 'description') || undefined,
             transactionCategory: this.first(record, 'transactionCategory', 'transaction_type', 'type') || undefined,
             financialInstitutionName: this.first(record, 'financialInstitutionName', 'financial_institution_name') || undefined,
-            bankBranchName: this.first(record, 'bankBranchName', 'bank_branch_name') || undefined,
-            fileAmount: amount,
-            statisticalAmount: amount,
-            totalAmount: amount,
-            sourcePageStart: this.optionalInteger(this.first(record, 'sourcePageStart', 'source_page_start')),
-            sourcePageEnd: this.optionalInteger(this.first(record, 'sourcePageEnd', 'source_page_end')),
-            note: `OCR任务 ${taskId}；源记录 ${record._recordId || '—'}`,
-            manuallyReconciled: match.matchMode === 'MANUAL',
-            reconciledByUserId: actorUserId,
-            reconciledByName: reconciler?.name || reconciler?.username,
-            reconciledAt: syncedAt,
-            processingStatus: 'INCLUDED',
-            confirmationStatus: 'CONFIRMED',
+            branchName: this.first(record, 'bankBranchName', 'bank_branch_name') || undefined,
+            rawPayload: record as Prisma.InputJsonValue,
+            reconciliationStatus: 'MATCHED',
           },
         });
-        ids.push(transaction.id);
-        match.syncedTransactionId = transaction.id;
+        for (const allocation of allocations) {
+          const allocatedAmount = new Prisma.Decimal(allocations.length === 1 ? amount : Number(allocation.allocatedAmount));
+          const transaction = await tx.transaction.create({
+            data: {
+              type: this.isExpenseRecord(record) ? 'EXPENSE' : 'INCOME',
+              roomId: allocation.roomId,
+              contractId: allocation.contractId,
+              date,
+              sequenceNo: this.optionalInteger(this.first(record, 'sequenceNo', 'record_no')),
+              fileType: this.first(record, 'fileType', 'document_type') || undefined,
+              counterparty: this.first(record, 'counterparty', 'inflow_party', 'outflow_party', 'contractorName', 'tenant_name') || allocation.tenantName || match.tenantName || undefined,
+              counterpartyRaw: this.first(record, 'counterpartyRaw', 'counterparty', 'inflow_party', 'outflow_party') || undefined,
+              contentSummary: this.first(record, 'contentSummary', 'summary', 'description') || undefined,
+              transactionCategory: this.first(record, 'transactionCategory', 'transaction_type', 'type') || undefined,
+              financialInstitutionName: this.first(record, 'financialInstitutionName', 'financial_institution_name') || undefined,
+              bankBranchName: this.first(record, 'bankBranchName', 'bank_branch_name') || undefined,
+              fileAmount: allocatedAmount,
+              statisticalAmount: allocatedAmount,
+              totalAmount: allocatedAmount,
+              sourcePageStart: this.optionalInteger(this.first(record, 'sourcePageStart', 'source_page_start')),
+              sourcePageEnd: this.optionalInteger(this.first(record, 'sourcePageEnd', 'source_page_end')),
+              note: `OCR任务 ${taskId}；源记录 ${record._recordId || '—'}${allocations.length > 1 ? `；原入金 ${amount.toString()}，分配至 ${allocations.length} 个物件` : ''}`,
+              manuallyReconciled: match.matchMode === 'MANUAL',
+              reconciledByUserId: actorUserId,
+              reconciledByName: reconciler?.name || reconciler?.username,
+              reconciledAt: syncedAt,
+              processingStatus: 'INCLUDED',
+              confirmationStatus: 'CONFIRMED',
+            },
+          });
+          ids.push(transaction.id);
+          recordTransactionIds.push(transaction.id);
+          await tx.reconciliationMatch.create({
+            data: {
+              bankTransactionId: bankTransaction.id,
+              transactionId: transaction.id,
+              confidence: new Prisma.Decimal(match.matchMode === 'MANUAL' ? '0.8' : '1'),
+              reason: match.reason,
+              confirmedBy: actorUserId,
+              confirmedAt: syncedAt,
+            },
+          });
+        }
+        match.syncedBankTransactionId = bankTransaction.id;
+        match.syncedTransactionId = recordTransactionIds[0];
+        match.syncedTransactionIds = recordTransactionIds;
         match.syncedAt = syncedAt.toISOString();
         match.syncedBy = actorUserId || null;
       }
@@ -558,7 +599,12 @@ export class OcrService {
       });
       return ids;
     });
-    return { task: await this.getTask(taskId), syncedCount: transactionIds.length, transactionIds };
+    return {
+      task: await this.getTask(taskId),
+      syncedCount: targets.length,
+      transactionCount: transactionIds.length,
+      transactionIds,
+    };
   }
 
   async listMatchCandidates(query = '') {
@@ -608,6 +654,13 @@ export class OcrService {
         contractorName: contract.contractorName,
         payerName: contract.payerName,
         bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+        expectedAmount: Number(this.contractSystemValue(contract, 'contract.monthlyPaymentTotal') || 0),
+        matchFieldValues: Object.fromEntries(Object.keys(OCR_SYSTEM_FIELDS).map((field) => [
+          field,
+          field === 'contract.validDate'
+            ? `${contract.startDate?.toISOString().slice(0, 10) || '不限'} ～ ${contract.endDate?.toISOString().slice(0, 10) || '长期'}`
+            : this.serializeMatchFieldValue(this.contractSystemValue(contract, field)),
+        ])),
         status: contract.status,
         ...score,
       }));
@@ -616,7 +669,7 @@ export class OcrService {
   async reviewRecord(
     taskId: string,
     recordId: string,
-    input: { action?: string; contractId?: string; reason?: string },
+    input: { action?: string; contractId?: string; contractIds?: string[]; reason?: string },
     actorUserId?: string,
   ) {
     const task = await this.getTask(taskId);
@@ -643,30 +696,60 @@ export class OcrService {
         },
       };
     } else {
-      if (!input.contractId) throw new BadRequestException('请选择需要匹配的系统合同');
-      const contract = await this.prisma.contract.findFirst({
-        where: { id: input.contractId, deletedAt: null },
+      const contractIds = [...new Set((Array.isArray(input.contractIds) ? input.contractIds : [input.contractId]).filter(Boolean) as string[])];
+      if (!contractIds.length) throw new BadRequestException('请至少选择一个需要匹配的系统合同');
+      const contracts = await this.prisma.contract.findMany({
+        where: { id: { in: contractIds }, deletedAt: null },
         include: { tenant: true, room: { include: { property: true } }, property: true },
       });
-      if (!contract) throw new BadRequestException('选择的系统合同不存在或已删除');
+      if (contracts.length !== contractIds.length) throw new BadRequestException('部分选择的系统合同不存在或已删除');
       const sourceSummary = this.first(before, 'contentSummary', 'counterpartyRaw', 'counterparty', 'summary', 'description');
-      const manualScore = this.candidateMatchScore(sourceSummary, contract).matchScore;
+      const allocations = contracts.map((contract) => ({
+        contractId: contract.id,
+        contractNumber: contract.contractNumber,
+        tenantId: contract.tenantId,
+        tenantName: contract.tenant?.name || contract.contractorName,
+        roomId: contract.roomId,
+        roomNumber: contract.room.roomNumber,
+        propertyId: contract.propertyId,
+        propertyName: contract.property.name,
+        expectedAmount: Number(this.contractSystemValue(contract, 'contract.monthlyPaymentTotal') || 0),
+        allocatedAmount: Number(this.contractSystemValue(contract, 'contract.monthlyPaymentTotal') || 0),
+        identityScore: this.candidateMatchScore(sourceSummary, contract).matchScore,
+      }));
+      const sourceAmount = Number(this.first(before, 'statisticalAmount', 'fileAmount', 'net_amount', 'document_amount', 'amount').replace(/[,￥¥\s]/g, ''));
+      const allocatedAmount = allocations.reduce((total, allocation) => total + allocation.allocatedAmount, 0);
+      if (allocations.length > 1 && (!Number.isFinite(sourceAmount) || Math.abs(allocatedAmount - Math.abs(sourceAmount)) > 0.005)) {
+        throw new BadRequestException(`多选合同每月应收合计 ${allocatedAmount.toLocaleString()} 必须与入金金额 ${Number.isFinite(sourceAmount) ? Math.abs(sourceAmount).toLocaleString() : '无效'} 一致`);
+      }
+      const primary = contracts[0];
+      const manualScore = Math.round(allocations.reduce((total, allocation) => total + allocation.identityScore, 0) / allocations.length);
       records[recordIndex] = {
         ...before,
         systemMatch: {
           status: 'MATCHED',
           matchMode: 'MANUAL',
-          contractId: contract.id,
-          contractNumber: contract.contractNumber,
-          tenantId: contract.tenantId,
-          tenantName: contract.tenant?.name || contract.contractorName,
-          roomId: contract.roomId,
-          roomNumber: contract.room.roomNumber,
-          propertyId: contract.propertyId,
-          propertyName: contract.property.name,
-          bankStatementSummary: contract.bankStatementSummary || contract.bankSummaryName,
+          matchType: allocations.length > 1 ? 'COMBINATION' : 'SINGLE',
+          contractIds,
+          tenantName: allocations[0]?.tenantName,
+          roomNumber: allocations.map((allocation) => allocation.roomNumber).filter(Boolean).join(' / '),
+          propertyName: allocations.length === 1 ? primary.property.name : `${allocations.length}套房产组合`,
+          bankStatementSummary: primary.bankStatementSummary || primary.bankSummaryName,
+          ...(allocations.length === 1 ? {
+            contractId: primary.id,
+            contractNumber: primary.contractNumber,
+            tenantId: primary.tenantId,
+            roomId: primary.roomId,
+            propertyId: primary.propertyId,
+          } : {}),
+          allocations,
+          bankAmount: Number.isFinite(sourceAmount) ? Math.abs(sourceAmount) : allocatedAmount,
+          allocatedAmount,
+          unallocatedAmount: Number.isFinite(sourceAmount) ? Math.max(0, Math.abs(sourceAmount) - allocatedAmount) : 0,
           matchScore: manualScore,
-          reason: input.reason?.trim() || '已由操作员选择系统合同并完成匹配',
+          reason: input.reason?.trim() || (allocations.length > 1
+            ? `已由操作员选择 ${allocations.length} 个物件，合同应收合计与该笔入金一致`
+            : '已由操作员选择系统合同并完成匹配'),
           reviewedAt: new Date().toISOString(),
           reviewedBy: actorUserId || null,
         },
@@ -698,8 +781,9 @@ export class OcrService {
         },
       }),
     ]);
-    if (action !== 'MANUAL_SYNC' && input.contractId) {
-      await this.confirmPaymentAlias(input.contractId, this.first(before, 'counterpartyRaw', 'counterparty', 'contentSummary'), actorUserId);
+    if (action !== 'MANUAL_SYNC') {
+      const confirmedIds = Array.isArray(input.contractIds) ? input.contractIds : input.contractId ? [input.contractId] : [];
+      await Promise.all(confirmedIds.map((contractId) => this.confirmPaymentAlias(contractId, this.first(before, 'counterpartyRaw', 'counterparty', 'contentSummary'), actorUserId)));
     }
     return this.toPublicTask(updated);
   }
@@ -1315,6 +1399,13 @@ export class OcrService {
         .reduce((total, field) => total + Number(contract?.[field] || 0), 0);
     }
     return OCR_SYSTEM_FIELDS[systemField]?.path.reduce<any>((current, key) => current?.[key], contract);
+  }
+
+  private serializeMatchFieldValue(value: unknown) {
+    if (value === undefined || value === null) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object' && 'toString' in value) return String(value);
+    return value;
   }
 
   private contractSystemTexts(contract: any, systemField: string) {
