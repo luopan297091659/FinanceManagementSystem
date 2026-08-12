@@ -45,6 +45,8 @@ type OcrSystemFieldDefinition = {
   label: string;
 };
 
+const OCR_RECONCILIATION_ALGORITHM_VERSION = '2.1.0';
+
 const OCR_SYSTEM_FIELDS: Record<string, OcrSystemFieldDefinition> = {
   'property.propertyCode': { path: ['property', 'propertyCode'], type: 'text', label: '物件编号' },
   'property.name': { path: ['property', 'name'], type: 'text', label: '物件名称' },
@@ -349,7 +351,7 @@ export class OcrService {
     return this.toPublicTask(updated);
   }
 
-  async executeMatching(taskId: string, configuration: unknown, recordIds: unknown, actorUserId?: string) {
+  async executeMatching(taskId: string, configuration: unknown, recordIds: unknown, actorUserId?: string, rematch = true) {
     const task = await this.getTask(taskId);
     const result = (task.resultJson || {}) as Record<string, any>;
     const normalizedConfiguration = this.validateMatchConfiguration(
@@ -362,24 +364,35 @@ export class OcrService {
     const targetIndexes = records
       .map((record: Record<string, any>, index: number) => ({ record, index }))
       .filter(({ record }) => (
-        !['MATCHED', 'MANUAL_SYNC'].includes(record.systemMatch?.status)
+        record.systemMatch?.status !== 'MANUAL_SYNC'
+        && record.systemMatch?.matchMode !== 'MANUAL'
+        && (rematch || record.systemMatch?.status !== 'MATCHED')
         && (!selectedRecordIds || selectedRecordIds.has(String(record._recordId)))
       ));
-    if (!targetIndexes.length) throw new BadRequestException('没有需要执行匹配的剩余数据');
+    if (!targetIndexes.length) throw new BadRequestException('没有可重新计算的系统自动匹配数据；手工匹配和手工同步不会被覆盖');
 
+    const previousMatches = targetIndexes.map(({ record }) => ({ recordId: record._recordId, systemMatch: record.systemMatch ?? null }));
     const matchedTargets = await Promise.all(
       targetIndexes.map(({ record }) => this.matchSystemData(record, normalizedConfiguration)),
     );
     targetIndexes.forEach(({ index }, targetIndex) => { records[index] = matchedTargets[targetIndex]; });
     const summary = summarizeOcrRecords(records);
     const runMatched = matchedTargets.filter((record) => record.systemMatch?.status === 'MATCHED').length;
+    const changed = matchedTargets.filter((record, index) => (
+      JSON.stringify(previousMatches[index].systemMatch) !== JSON.stringify(record.systemMatch ?? null)
+    )).length;
     const historyEntry = {
       executedAt: new Date().toISOString(),
       executedBy: actorUserId || null,
+      algorithmVersion: OCR_RECONCILIATION_ALGORITHM_VERSION,
+      scope: selectedRecordIds ? 'SELECTED_AUTOMATIC_RECORDS' : 'ALL_AUTOMATIC_RECORDS',
+      rematch,
       configuration: normalizedConfiguration,
       requestedRecordIds: selectedRecordIds ? [...selectedRecordIds] : null,
       processed: matchedTargets.length,
       matched: runMatched,
+      changed,
+      preservedManual: records.filter((record) => record.systemMatch?.matchMode === 'MANUAL' || record.systemMatch?.status === 'MANUAL_SYNC').length,
       remaining: summary.unmatched,
     };
     const normalizedResult = {
@@ -408,7 +421,8 @@ export class OcrService {
           action: 'reconciliation.ocr.auto-match',
           entityType: 'OcrTask',
           entityId: taskId,
-          after: historyEntry,
+          before: { matches: previousMatches },
+          after: { ...historyEntry, matches: matchedTargets.map((record) => ({ recordId: record._recordId, systemMatch: record.systemMatch ?? null })) },
         },
       }),
     ]);

@@ -533,10 +533,10 @@ export const api = {
     });
   },
 
-  async executeOcrMatching(taskId, configuration, recordIds) {
+  async executeOcrMatching(taskId, configuration, recordIds, options = {}) {
     return request(`/ocr/tasks/${encodeURIComponent(taskId)}/match`, {
       method: 'POST',
-      body: { configuration, ...(recordIds ? { recordIds } : {}) },
+      body: { configuration, ...(recordIds ? { recordIds } : {}), rematch: options.rematch !== false },
     });
   },
 

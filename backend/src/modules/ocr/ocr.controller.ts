@@ -82,10 +82,10 @@ export class OcrController {
   @RequirePermission('ocr:execute')
   executeMatching(
     @Param('taskId') taskId: string,
-    @Body() body: { configuration?: unknown; fields?: string[]; recordIds?: string[] },
+    @Body() body: { configuration?: unknown; fields?: string[]; recordIds?: string[]; rematch?: boolean },
     @Req() request: Request,
   ) {
-    return this.ocrService.executeMatching(taskId, body?.configuration ?? body?.fields, body?.recordIds, this.actorUserId(request));
+    return this.ocrService.executeMatching(taskId, body?.configuration ?? body?.fields, body?.recordIds, this.actorUserId(request), body?.rematch !== false);
   }
 
   @Patch('tasks/:taskId/records/:recordId')
