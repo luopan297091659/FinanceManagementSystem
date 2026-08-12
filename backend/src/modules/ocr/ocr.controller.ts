@@ -20,6 +20,27 @@ export class OcrController {
   @RequirePermission('reconciliation.ocr.view')
   listWorkflows() { return this.ocrService.listWorkflows(); }
 
+  @Get('match-rule-templates')
+  @RequirePermission('reconciliation.ocr.view')
+  listMatchRuleTemplates(@Req() request: Request) {
+    return this.ocrService.listMatchRuleTemplates(this.actorUserId(request));
+  }
+
+  @Post('match-rule-templates')
+  @RequirePermission('ocr:execute')
+  saveMatchRuleTemplate(
+    @Body() body: { name?: string; description?: string; configuration?: unknown },
+    @Req() request: Request,
+  ) {
+    return this.ocrService.saveMatchRuleTemplate(body, this.actorUserId(request));
+  }
+
+  @Delete('match-rule-templates/:templateId')
+  @RequirePermission('ocr:execute')
+  deleteMatchRuleTemplate(@Param('templateId') templateId: string, @Req() request: Request) {
+    return this.ocrService.deleteMatchRuleTemplate(templateId, this.actorUserId(request));
+  }
+
   @Post('workflows')
   @RequirePermission('ocr:execute')
   createWorkflow(@Body() dto: SaveOcrWorkflowDto, @Req() request: Request) {
@@ -86,6 +107,12 @@ export class OcrController {
     @Req() request: Request,
   ) {
     return this.ocrService.executeMatching(taskId, body?.configuration ?? body?.fields, body?.recordIds, this.actorUserId(request), body?.rematch !== false);
+  }
+
+  @Post('tasks/:taskId/sync-matched')
+  @RequirePermission('ocr:execute')
+  syncMatchedRecords(@Param('taskId') taskId: string, @Req() request: Request) {
+    return this.ocrService.syncMatchedRecords(taskId, this.actorUserId(request));
   }
 
   @Patch('tasks/:taskId/records/:recordId')

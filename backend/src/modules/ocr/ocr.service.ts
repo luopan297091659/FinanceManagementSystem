@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, NotFoundException
 import { readFile, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { isAbsolute, relative, resolve } from 'path';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
 import { preparePdfFilesForWebhook } from './image-to-pdf.util';
@@ -115,6 +116,49 @@ export class OcrService {
 
   listWorkflows() {
     return this.prisma.ocrWorkflow.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  listMatchRuleTemplates(actorUserId?: string) {
+    if (!actorUserId) throw new BadRequestException('无法识别当前用户，不能读取匹配规则');
+    return this.prisma.ocrMatchRuleTemplate.findMany({
+      where: { createdByUserId: actorUserId, isActive: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  async saveMatchRuleTemplate(
+    input: { name?: string; description?: string; configuration?: unknown },
+    actorUserId?: string,
+  ) {
+    if (!actorUserId) throw new BadRequestException('无法识别当前用户，不能保存匹配规则');
+    const name = String(input?.name || '').trim();
+    if (!name) throw new BadRequestException('请输入匹配规则名称');
+    if (name.length > 80) throw new BadRequestException('匹配规则名称不能超过 80 个字符');
+    const configuration = this.validateMatchConfiguration(input?.configuration);
+    return this.prisma.ocrMatchRuleTemplate.upsert({
+      where: { createdByUserId_name: { createdByUserId: actorUserId, name } },
+      create: {
+        name,
+        description: String(input?.description || '').trim() || null,
+        configurationJson: configuration as unknown as Prisma.InputJsonValue,
+        createdByUserId: actorUserId,
+      },
+      update: {
+        description: String(input?.description || '').trim() || null,
+        configurationJson: configuration as unknown as Prisma.InputJsonValue,
+        isActive: true,
+      },
+    });
+  }
+
+  async deleteMatchRuleTemplate(templateId: string, actorUserId?: string) {
+    if (!actorUserId) throw new BadRequestException('无法识别当前用户，不能删除匹配规则');
+    const result = await this.prisma.ocrMatchRuleTemplate.updateMany({
+      where: { id: templateId, createdByUserId: actorUserId, isActive: true },
+      data: { isActive: false },
+    });
+    if (!result.count) throw new NotFoundException('匹配规则不存在');
+    return { deleted: true, templateId };
   }
 
   saveWorkflow(input: WorkflowInput, actorUserId?: string, workflowId?: string) {
@@ -364,7 +408,8 @@ export class OcrService {
     const targetIndexes = records
       .map((record: Record<string, any>, index: number) => ({ record, index }))
       .filter(({ record }) => (
-        record.systemMatch?.status !== 'MANUAL_SYNC'
+        !record.systemMatch?.syncedTransactionId
+        && record.systemMatch?.status !== 'MANUAL_SYNC'
         && record.systemMatch?.matchMode !== 'MANUAL'
         && (rematch || record.systemMatch?.status !== 'MATCHED')
         && (!selectedRecordIds || selectedRecordIds.has(String(record._recordId)))
@@ -422,11 +467,98 @@ export class OcrService {
           entityType: 'OcrTask',
           entityId: taskId,
           before: { matches: previousMatches },
-          after: { ...historyEntry, matches: matchedTargets.map((record) => ({ recordId: record._recordId, systemMatch: record.systemMatch ?? null })) },
+          after: { ...historyEntry, matches: matchedTargets.map((record) => ({ recordId: (record as any)._recordId, systemMatch: record.systemMatch ?? null })) },
         },
       }),
     ]);
     return this.toPublicTask(updated);
+  }
+
+  async syncMatchedRecords(taskId: string, actorUserId?: string) {
+    const task = await this.getTask(taskId);
+    const result = (task.resultJson || {}) as Record<string, any>;
+    const records = Array.isArray(result.records)
+      ? result.records.map((record: Record<string, any>) => ({ ...record, systemMatch: { ...(record.systemMatch || {}) } }))
+      : [];
+    const targets = records.filter((record: Record<string, any>) => (
+      record.systemMatch?.status === 'MATCHED' && !record.systemMatch?.syncedTransactionId
+    ));
+    if (!targets.length) throw new BadRequestException('没有尚未同步的已匹配项');
+    const reconciler = actorUserId
+      ? await this.prisma.user.findUnique({ where: { id: actorUserId }, select: { name: true, username: true } })
+      : null;
+
+    const prepared = targets.map((record: Record<string, any>) => {
+      const date = this.recordDate(record);
+      const amountText = this.first(record, 'statisticalAmount', 'fileAmount', 'net_amount', 'document_amount', 'amount');
+      const amount = Number(String(amountText).replace(/,/g, ''));
+      if (!date) throw new BadRequestException(`记录 ${record._recordId || ''} 缺少有效单据日期，暂不能同步`);
+      if (!Number.isFinite(amount)) throw new BadRequestException(`记录 ${record._recordId || ''} 缺少有效金额，暂不能同步`);
+      if (!record.systemMatch.contractId || !record.systemMatch.roomId) {
+        throw new BadRequestException(`记录 ${record._recordId || ''} 缺少合同或房间匹配信息，暂不能同步`);
+      }
+      return { record, date, amount: new Prisma.Decimal(Math.abs(amount)) };
+    });
+
+    const syncedAt = new Date();
+    const transactionIds = await this.prisma.$transaction(async (tx) => {
+      const ids: string[] = [];
+      for (const { record, date, amount } of prepared) {
+        const match = record.systemMatch;
+        const transaction = await tx.transaction.create({
+          data: {
+            type: this.isExpenseRecord(record) ? 'EXPENSE' : 'INCOME',
+            roomId: match.roomId,
+            contractId: match.contractId,
+            date,
+            sequenceNo: this.optionalInteger(this.first(record, 'sequenceNo', 'record_no')),
+            fileType: this.first(record, 'fileType', 'document_type') || undefined,
+            counterparty: this.first(record, 'counterparty', 'inflow_party', 'outflow_party', 'contractorName', 'tenant_name') || match.tenantName || undefined,
+            counterpartyRaw: this.first(record, 'counterpartyRaw', 'counterparty', 'inflow_party', 'outflow_party') || undefined,
+            contentSummary: this.first(record, 'contentSummary', 'summary', 'description') || undefined,
+            transactionCategory: this.first(record, 'transactionCategory', 'transaction_type', 'type') || undefined,
+            financialInstitutionName: this.first(record, 'financialInstitutionName', 'financial_institution_name') || undefined,
+            bankBranchName: this.first(record, 'bankBranchName', 'bank_branch_name') || undefined,
+            fileAmount: amount,
+            statisticalAmount: amount,
+            totalAmount: amount,
+            sourcePageStart: this.optionalInteger(this.first(record, 'sourcePageStart', 'source_page_start')),
+            sourcePageEnd: this.optionalInteger(this.first(record, 'sourcePageEnd', 'source_page_end')),
+            note: `OCR任务 ${taskId}；源记录 ${record._recordId || '—'}`,
+            manuallyReconciled: match.matchMode === 'MANUAL',
+            reconciledByUserId: actorUserId,
+            reconciledByName: reconciler?.name || reconciler?.username,
+            reconciledAt: syncedAt,
+            processingStatus: 'INCLUDED',
+            confirmationStatus: 'CONFIRMED',
+          },
+        });
+        ids.push(transaction.id);
+        match.syncedTransactionId = transaction.id;
+        match.syncedAt = syncedAt.toISOString();
+        match.syncedBy = actorUserId || null;
+      }
+      const normalizedResult = { ...result, records, summary: summarizeOcrRecords(records) };
+      await tx.ocrTask.update({
+        where: { taskId },
+        data: {
+          resultJson: normalizedResult,
+          matchedResultJson: normalizedResult,
+          resultSummary: normalizedResult.summary,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          action: 'reconciliation.ocr.database-sync',
+          entityType: 'OcrTask',
+          entityId: taskId,
+          after: { syncedCount: ids.length, transactionIds: ids },
+        },
+      });
+      return ids;
+    });
+    return { task: await this.getTask(taskId), syncedCount: transactionIds.length, transactionIds };
   }
 
   async listMatchCandidates(query = '') {
@@ -494,6 +626,9 @@ export class OcrService {
     if (recordIndex < 0) throw new NotFoundException('OCR 明细记录不存在');
 
     const before = records[recordIndex];
+    if (before.systemMatch?.syncedTransactionId) {
+      throw new BadRequestException('该记录已同步到数据库，不能再修改匹配结果');
+    }
     const action = String(input.action || 'MATCH').toUpperCase();
     if (action === 'MANUAL_SYNC') {
       records[recordIndex] = {
@@ -587,6 +722,9 @@ export class OcrService {
       throw new BadRequestException('实际月份格式必须为 YYYY-MM');
     }
     const before = records[recordIndex];
+    if (before.systemMatch?.syncedTransactionId) {
+      throw new BadRequestException('该记录已同步到数据库，不能再修改实际月份');
+    }
     records[recordIndex] = { ...before, actualMonth, actual_month: actualMonth };
     const normalizedResult = { ...result, records };
     const [updated] = await this.prisma.$transaction([
@@ -1275,5 +1413,10 @@ export class OcrService {
   private first(record: Record<string, any>, ...keys: string[]) {
     const value = keys.map((key) => record[key]).find((item) => item !== undefined && item !== null && String(item).trim());
     return value === undefined ? '' : String(value).trim();
+  }
+
+  private optionalInteger(value: unknown) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) ? parsed : undefined;
   }
 }

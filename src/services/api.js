@@ -462,6 +462,18 @@ export const api = {
     return request('/ocr/workflows');
   },
 
+  async listOcrMatchRuleTemplates() {
+    return request('/ocr/match-rule-templates');
+  },
+
+  async saveOcrMatchRuleTemplate(payload) {
+    return request('/ocr/match-rule-templates', { method: 'POST', body: payload });
+  },
+
+  async deleteOcrMatchRuleTemplate(templateId) {
+    return request(`/ocr/match-rule-templates/${encodeURIComponent(templateId)}`, { method: 'DELETE' });
+  },
+
   async saveOcrWorkflow(payload, workflowId = '') {
     return request(`/ocr/workflows${workflowId ? `/${workflowId}` : ''}`, {
       method: workflowId ? 'PATCH' : 'POST',
@@ -538,6 +550,10 @@ export const api = {
       method: 'POST',
       body: { configuration, ...(recordIds ? { recordIds } : {}), rematch: options.rematch !== false },
     });
+  },
+
+  async syncOcrMatchedRecords(taskId) {
+    return request(`/ocr/tasks/${encodeURIComponent(taskId)}/sync-matched`, { method: 'POST' });
   },
 
   async updateOcrRecord(taskId, recordId, payload) {
