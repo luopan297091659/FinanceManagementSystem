@@ -20,6 +20,13 @@ Pass 2 — character-level verification:
 - Preserve full-width versus half-width characters, small versus standard Kana, internal spaces, punctuation, parentheses, letters, and digits exactly as visibly printed.
 - Never silently remove an uncertain character. If a character cannot be confirmed, keep the best complete transcription, set confirmationStatus to "PENDING", and describe the uncertainty in note in English, including alternatives when useful.
 
+Pass 3 — payer-name integrity check:
+- For every income row, enlarge and re-read the complete 「摘要」 cell once more from left to right in visible glyph groups; do not rely on the text produced in either earlier pass.
+- Count the visible Kana base characters and separately verify every dakuten or handakuten mark. Explicitly check whether ガ/カ, ギ/キ, グ/ク, ゲ/ケ, ゴ/コ, ザ/サ, ジ/シ, ズ/ス, ゼ/セ, ゾ/ソ, ダ/タ, ヂ/チ, ヅ/ツ, デ/テ, ド/ト, バ/ハ, パ/ハ, and ヴ/ウ are visually distinguishable.
+- Compare the character count from this pass with Pass 2. If a character appears in either reading, inspect that exact position again before returning the row; never choose the shorter reading merely because it looks like a plausible Japanese name.
+- Do not use a system-side tenant or contract name to repair the OCR text. The application performs tolerant identity matching after callback while keeping counterpartyRaw unchanged.
+- When the glyph remains ambiguous, preserve the most complete visible transcription and describe both alternatives and the position in note. Never return multiple alternatives inside counterpartyRaw.
+
 Known accuracy check:
 - If the source visibly reads `ｲｻﾞﾜ ﾁｴｺ`, counterpartyRaw and contentSummary must both be exactly `ｲｻﾞﾜ ﾁｴｺ`.
 - Do not output `ｲｻﾞﾜ ｴｺ` because that drops `ﾁ`.
@@ -115,6 +122,7 @@ Before returning the result, verify all of the following:
 - Every date is YYYY-MM-DD or null, and every monetary value is a JSON number or null.
 - counterpartyRaw and contentSummary are identical for every record.
 - Each nonblank summary has been checked twice against the source image, with no silently omitted character.
+- Each income-row summary has also passed the independent payer-name integrity check, including character-count and dakuten/handakuten verification.
 - Any uncertain summary character results in confirmationStatus = "PENDING" and a specific English note.
 
 Return JSON only.

@@ -6,9 +6,11 @@ import { PrismaService } from '../../database/prisma.service';
 import { detectMimeType } from './mime-type.util';
 import { preparePdfFilesForWebhook } from './image-to-pdf.util';
 import { extractOcrResultRecords, summarizeOcrRecords } from './ocr-result.util';
+import { findExactOcrContractAllocation } from './ocr-allocation.util';
 import {
   normalizedOcrTextContains,
   normalizedOcrTextEquals,
+  normalizeOcrPartyName,
   normalizedOcrPartyNameSimilarity,
   normalizedOcrTextSimilarity,
   ocrMatchSearchVariants,
@@ -547,6 +549,9 @@ export class OcrService {
         },
       }),
     ]);
+    if (action !== 'MANUAL_SYNC' && input.contractId) {
+      await this.confirmPaymentAlias(input.contractId, this.first(before, 'counterpartyRaw', 'counterparty', 'contentSummary'), actorUserId);
+    }
     return this.toPublicTask(updated);
   }
 
@@ -771,14 +776,55 @@ export class OcrService {
   ) {
     const candidates = await this.prisma.contract.findMany({
       where: { deletedAt: null },
-      include: { tenant: true, room: { include: { property: true } }, property: true },
+      include: { tenant: true, room: { include: { property: true } }, property: true, paymentAliases: { where: { isActive: true } } },
       take: 5000,
     });
+    const transactionDate = this.recordDate(record);
+    const combination = this.findCombinationMatch(candidates, record, activeRules, transactionDate);
+    if (combination) {
+      if (combination.ambiguous) {
+        return {
+          ...record,
+          systemMatch: {
+            status: 'AMBIGUOUS', matchMode: null, matchType: 'COMBINATION',
+            matchScore: combination.identityScore, identityScore: combination.identityScore, allocationScore: 100,
+            allocatedAmount: combination.allocatedAmount, unallocatedAmount: 0,
+            reason: '同一付款人存在多组金额合计一致的契约组合，请人工确认分配范围',
+            matchingConfiguration: configuration,
+          },
+        };
+      }
+      const allocations = combination.candidates.map(({ value: contract, amount, identityScore }) => ({
+        contractId: contract.id,
+        contractNumber: contract.contractNumber,
+        propertyId: contract.propertyId,
+        propertyName: contract.property?.name,
+        roomId: contract.roomId,
+        roomNumber: contract.room?.roomNumber,
+        tenantId: contract.tenantId,
+        tenantName: contract.tenant?.name || contract.contractorName,
+        expectedAmount: amount,
+        allocatedAmount: amount,
+        identityScore,
+      }));
+      return {
+        ...record,
+        systemMatch: {
+          status: 'MATCHED', matchMode: 'AUTO', matchType: 'COMBINATION', matchingConfiguration: configuration,
+          matchScore: combination.identityScore, identityScore: combination.identityScore, allocationScore: 100,
+          bankAmount: combination.allocatedAmount, allocatedAmount: combination.allocatedAmount, unallocatedAmount: 0, difference: 0,
+          contractIds: allocations.map((allocation) => allocation.contractId), allocations,
+          propertyName: `${allocations.length}套房产组合`,
+          roomNumber: allocations.map((allocation) => allocation.roomNumber).filter(Boolean).join(' / '),
+          tenantName: allocations[0]?.tenantName,
+          reason: `付款人假名容错匹配成功，${allocations.length}份有效契约的每月应收合计与银行入金完全一致`,
+        },
+      };
+    }
     let ranked = candidates
       .map((contract) => ({ contract, ...this.contractConfigurationResult(contract, record, activeRules) }))
       .filter((candidate) => candidate.matches)
       .sort((left, right) => right.score - left.score);
-    const transactionDate = this.recordDate(record);
     if (transactionDate && ranked.length > 1) {
       const activeOnDate = ranked.filter(({ contract }) => this.contractActiveOnDate(contract, transactionDate));
       if (activeOnDate.length) ranked = activeOnDate;
@@ -1058,11 +1104,11 @@ export class OcrService {
 
   private contractRuleScore(contract: any, systemField: string, rawValue: any, operator: string) {
     if (this.isTextSystemField(systemField)) {
-      const systemValue = this.contractSystemText(contract, systemField);
-      if (operator === 'similar') return normalizedOcrPartyNameSimilarity(systemValue, rawValue);
+      const systemValues = this.contractSystemTexts(contract, systemField);
+      if (operator === 'similar') return Math.max(0, ...systemValues.map((value) => normalizedOcrPartyNameSimilarity(value, rawValue)));
       return this.contractMatchesRule(contract, systemField, rawValue, operator)
         ? 100
-        : normalizedOcrTextSimilarity(systemValue, rawValue);
+        : Math.max(0, ...systemValues.map((value) => normalizedOcrTextSimilarity(value, rawValue)));
     }
     return this.contractMatchesRule(contract, systemField, rawValue, operator) ? 100 : 0;
   }
@@ -1119,8 +1165,56 @@ export class OcrService {
     return OCR_SYSTEM_FIELDS[systemField]?.path.reduce<any>((current, key) => current?.[key], contract);
   }
 
-  private contractSystemText(contract: any, systemField: string) {
-    return this.contractSystemValue(contract, systemField);
+  private contractSystemTexts(contract: any, systemField: string) {
+    const values = [this.contractSystemValue(contract, systemField)];
+    if (['contract.bankStatementSummary', 'contract.bankSummaryName', 'contract.payerName', 'contract.payerNameKana', 'contract.contractorNameKana'].includes(systemField)) {
+      for (const alias of contract.paymentAliases ?? []) values.push(alias.originalBankSummary, alias.payerName);
+    }
+    return values.filter((value) => value !== undefined && value !== null && String(value).trim());
+  }
+
+  private async confirmPaymentAlias(contractId: string, rawName: unknown, actorUserId?: string) {
+    const originalBankSummary = String(rawName ?? '').trim();
+    const normalizedBankSummary = normalizeOcrPartyName(originalBankSummary);
+    if (!normalizedBankSummary) return null;
+    const existing = await this.prisma.contractPaymentAlias.findFirst({ where: { contractId, normalizedBankSummary, isActive: true } });
+    if (existing) {
+      await this.prisma.contractPaymentAlias.update({
+        where: { id: existing.id },
+        data: { originalBankSummary, confirmedCount: { increment: 1 }, lastConfirmedAt: new Date() },
+      });
+      return;
+    }
+    await this.prisma.contractPaymentAlias.create({
+      data: { contractId, originalBankSummary, normalizedBankSummary, confirmedCount: 1, lastConfirmedAt: new Date(), createdBy: actorUserId },
+    });
+  }
+
+  private findCombinationMatch(contracts: any[], record: Record<string, any>, rules: OcrMatchRule[], transactionDate: Date | null) {
+    const amountRule = rules.find((rule) => rule.systemFields.includes('contract.monthlyPaymentTotal'));
+    const identityRules = rules.filter((rule) => rule.operator === 'similar' && rule.systemFields.some((field) => this.isTextSystemField(field)));
+    if (!amountRule || !identityRules.length) return null;
+    const sourceAmountValue = this.ruleSourceValues(record, amountRule)[0]?.value;
+    const bankAmount = Number(String(sourceAmountValue ?? '').replace(/[,￥¥\s]/g, ''));
+    if (!Number.isFinite(bankAmount) || bankAmount <= 0) return null;
+    if (contracts.some((contract) => this.contractConfigurationResult(contract, record, rules).matches)) return null;
+
+    const allocationCandidates = contracts
+      .filter((contract) => !transactionDate || this.contractActiveOnDate(contract, transactionDate))
+      .map((contract) => {
+        const ruleScores = identityRules.map((rule) => Math.max(0, ...this.ruleSourceValues(record, rule).flatMap(({ value }) => (
+          rule.systemFields.map((systemField) => this.contractRuleScore(contract, systemField, value, 'similar'))
+        ))));
+        const matchesIdentity = ruleScores.every((score, index) => score >= identityRules[index].minScore);
+        return {
+          id: contract.id,
+          amount: Number(this.contractSystemValue(contract, 'contract.monthlyPaymentTotal') || 0),
+          identityScore: matchesIdentity ? Math.round(ruleScores.reduce((sum, score) => sum + score, 0) / ruleScores.length) : 0,
+          value: contract,
+        };
+      })
+      .filter((candidate) => candidate.identityScore > 0);
+    return findExactOcrContractAllocation(allocationCandidates, bankAmount, { maxItems: 5, maxCandidates: 30, maxVisited: 20_000 });
   }
 
   private isExpenseRecord(record: Record<string, any>) {

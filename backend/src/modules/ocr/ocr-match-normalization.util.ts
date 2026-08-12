@@ -23,7 +23,7 @@ export function normalizedOcrTextSimilarity(left: unknown, right: unknown) {
 }
 
 export function normalizeOcrPartyName(value: unknown) {
-  return normalizeOcrMatchText(value)
+  return toKatakana(normalizeOcrMatchText(value))
     .replace(/[ァィゥェォャュョッヮ]/gu, (character) => ({
       'ァ': 'ア', 'ィ': 'イ', 'ゥ': 'ウ', 'ェ': 'エ', 'ォ': 'オ',
       'ャ': 'ヤ', 'ュ': 'ユ', 'ョ': 'ヨ', 'ッ': 'ツ', 'ヮ': 'ワ',
@@ -35,17 +35,42 @@ export function normalizeOcrPartyName(value: unknown) {
     .replace(/[()（）［\]【】「」『』・･.,，。:：;；'"`]/gu, '');
 }
 
+export function normalizeOcrPartyNameVoicingInsensitive(value: unknown) {
+  return normalizeOcrPartyName(value)
+    .normalize('NFD')
+    .replace(/[\u3099\u309A]/gu, '')
+    .normalize('NFC')
+    .replace(/ヴ/gu, 'ウ');
+}
+
 export function normalizedOcrPartyNameSimilarity(left: unknown, right: unknown) {
   const ordinaryScore = normalizedOcrTextSimilarity(left, right);
   const normalizedLeft = normalizeOcrPartyName(left);
   const normalizedRight = normalizeOcrPartyName(right);
   const partyScore = normalizedTextSimilarity(normalizedLeft, normalizedRight);
+  const voicingScore = normalizedTextSimilarity(
+    normalizeOcrPartyNameVoicingInsensitive(left),
+    normalizeOcrPartyNameVoicingInsensitive(right),
+  );
   const shorterLength = Math.min(Array.from(normalizedLeft).length, Array.from(normalizedRight).length);
   const containmentScore = shorterLength >= 4
     && (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft))
     ? 96
     : 0;
-  return Math.max(ordinaryScore, partyScore, containmentScore);
+  const voicingAdjustedScore = voicingScore === 100 ? 94 : Math.max(0, voicingScore - 4);
+  const editToleranceScore = singleOcrCharacterDifference(normalizedLeft, normalizedRight) ? 88 : 0;
+  return Math.max(ordinaryScore, partyScore, containmentScore, voicingAdjustedScore, editToleranceScore);
+}
+
+function toKatakana(value: string) {
+  return value.replace(/[ぁ-ゖ]/gu, (character) => String.fromCodePoint(character.codePointAt(0)! + 0x60));
+}
+
+function singleOcrCharacterDifference(left: string, right: string) {
+  const leftLength = Array.from(left).length;
+  const rightLength = Array.from(right).length;
+  if (Math.min(leftLength, rightLength) < 4 || Math.abs(leftLength - rightLength) > 1) return false;
+  return levenshteinDistance(left, right) === 1;
 }
 
 function normalizedTextSimilarity(left: string, right: string) {
@@ -68,6 +93,24 @@ function normalizedTextSimilarity(left: string, right: string) {
   }
   const distance = previous[normalizedRight.length];
   return Math.max(0, Math.round((1 - distance / Math.max(normalizedLeft.length, normalizedRight.length)) * 100));
+}
+
+function levenshteinDistance(left: string, right: string) {
+  const normalizedLeft = Array.from(left);
+  const normalizedRight = Array.from(right);
+  const previous = Array.from({ length: normalizedRight.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= normalizedLeft.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= normalizedRight.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + (normalizedLeft[leftIndex - 1] === normalizedRight[rightIndex - 1] ? 0 : 1),
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[normalizedRight.length];
 }
 
 export function ocrMatchSearchVariants(value: unknown) {

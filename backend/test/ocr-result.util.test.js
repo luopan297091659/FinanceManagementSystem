@@ -2,9 +2,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
-const { extractOcrResultRecords, summarizeOcrRecords } = require('../dist/modules/ocr/ocr-result.util.js');
-const { normalizeOcrMatchText, normalizeOcrPartyName, normalizedOcrTextEquals, normalizedOcrTextSimilarity, normalizedOcrPartyNameSimilarity, ocrMatchSearchVariants } = require('../dist/modules/ocr/ocr-match-normalization.util.js');
-const { OcrService } = require('../dist/modules/ocr/ocr.service.js');
+const ocrDistRoot = process.env.OCR_TEST_DIST_ROOT || path.resolve(__dirname, '../dist');
+const { extractOcrResultRecords, summarizeOcrRecords } = require(path.join(ocrDistRoot, 'modules/ocr/ocr-result.util.js'));
+const { normalizeOcrMatchText, normalizeOcrPartyName, normalizeOcrPartyNameVoicingInsensitive, normalizedOcrTextEquals, normalizedOcrTextSimilarity, normalizedOcrPartyNameSimilarity, ocrMatchSearchVariants } = require(path.join(ocrDistRoot, 'modules/ocr/ocr-match-normalization.util.js'));
+const { OcrService } = require(path.join(ocrDistRoot, 'modules/ocr/ocr.service.js'));
 
 test('expands Make records stored as a nested JSON string', () => {
   const payload = {
@@ -87,6 +88,42 @@ test('normalizes Japanese corporate bank abbreviations for party-name matching',
   assert.ok(normalizedOcrPartyNameSimilarity('ﾄﾞ) ｺﾔﾏﾐｶ', 'ヨシオカ コズミ') < 85);
   assert.equal(normalizedOcrPartyNameSimilarity('イザワ チェコ', 'ｲｻﾞﾜ ﾁｴｺ'), 100);
   assert.ok(normalizedOcrPartyNameSimilarity('イザワ チェコ', 'ｲｻﾞﾜ ｴｺ') >= 80);
+});
+
+test('tolerates OCR dakuten loss and one missing Kana without treating it as exact OCR', () => {
+  assert.equal(normalizeOcrPartyNameVoicingInsensitive('キタノ シゲキ'), normalizeOcrPartyNameVoicingInsensitive('ｷﾀﾉ ｼｹｷ'));
+  assert.equal(normalizedOcrPartyNameSimilarity('キタノ シゲキ', 'ｷﾀﾉ ｼｹｷ'), 94);
+  assert.ok(normalizedOcrPartyNameSimilarity('イザワ チエコ', 'ｲｻﾞﾜ ｴｺ') >= 88);
+  assert.ok(normalizedOcrPartyNameSimilarity('イザワ チエコ', 'タナカ ハナコ') < 80);
+});
+
+test('matches one bank payment to the exact total of multiple contracts for the same OCR payer', async () => {
+  const makeContract = (id, amount, roomNumber) => ({
+    id, contractNumber: `CTR-${id}`, tenantId: 'tenant-k', contractorName: '北野茂樹', contractorNameKana: 'キタノ シゲキ',
+    payerName: '北野茂樹', payerNameKana: 'キタノ シゲキ', bankSummaryName: null, bankStatementSummary: null,
+    startDate: new Date('2026-01-01'), endDate: null, monthlyRent: amount, managementFee: null,
+    otherMonthlyFee1: null, otherMonthlyFee2: null, otherMonthlyFee3: null, paymentAliases: [],
+    tenant: { id: 'tenant-k', name: '北野茂樹' }, propertyId: `property-${id}`, roomId: `room-${id}`,
+    room: { id: `room-${id}`, roomNumber, property: { id: `property-${id}`, name: `北野物件${roomNumber}` } },
+    property: { id: `property-${id}`, name: `北野物件${roomNumber}` },
+  });
+  const contracts = [makeContract('a', 85000, '101'), makeContract('b', 130000, '502')];
+  const service = new OcrService({ contract: { findMany: async () => contracts } });
+  const result = await service.matchSystemData(
+    { type: 'income', statisticalAmount: 215000, counterpartyRaw: 'ｷﾀﾉ ｼｹｷ', date: '2026-08-05' },
+    { version: 2, rules: [
+      { id: 'amount', systemFields: ['contract.monthlyPaymentTotal'], sourceFields: ['statisticalAmount'], operator: 'equals', minScore: 100, required: true, logicalOperator: 'AND' },
+      { id: 'kana', systemFields: ['contract.contractorNameKana'], sourceFields: ['counterpartyRaw'], operator: 'similar', minScore: 85, required: true, logicalOperator: 'AND' },
+    ] },
+  );
+
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.matchType, 'COMBINATION');
+  assert.equal(result.systemMatch.identityScore, 94);
+  assert.equal(result.systemMatch.allocationScore, 100);
+  assert.equal(result.systemMatch.allocations.length, 2);
+  assert.equal(result.systemMatch.allocatedAmount, 215000);
+  assert.equal(result.systemMatch.unallocatedAmount, 0);
 });
 
 test('rent matching requires exact amount and tolerant contractor Kana', async () => {
