@@ -46,7 +46,7 @@ type OcrSystemFieldDefinition = {
   label: string;
 };
 
-const OCR_RECONCILIATION_ALGORITHM_VERSION = '2.1.0';
+const OCR_RECONCILIATION_ALGORITHM_VERSION = '2.2.0';
 
 const OCR_SYSTEM_FIELDS: Record<string, OcrSystemFieldDefinition> = {
   'property.propertyCode': { path: ['property', 'propertyCode'], type: 'text', label: '物件编号' },
@@ -704,7 +704,7 @@ export class OcrService {
       });
       if (contracts.length !== contractIds.length) throw new BadRequestException('部分选择的系统合同不存在或已删除');
       const sourceSummary = this.first(before, 'contentSummary', 'counterpartyRaw', 'counterparty', 'summary', 'description');
-      const allocations = contracts.map((contract) => ({
+      const baseAllocations = contracts.map((contract) => ({
         contractId: contract.id,
         contractNumber: contract.contractNumber,
         tenantId: contract.tenantId,
@@ -714,14 +714,21 @@ export class OcrService {
         propertyId: contract.propertyId,
         propertyName: contract.property.name,
         expectedAmount: Number(this.contractSystemValue(contract, 'contract.monthlyPaymentTotal') || 0),
-        allocatedAmount: Number(this.contractSystemValue(contract, 'contract.monthlyPaymentTotal') || 0),
         identityScore: this.candidateMatchScore(sourceSummary, contract).matchScore,
       }));
       const sourceAmount = Number(this.first(before, 'statisticalAmount', 'fileAmount', 'net_amount', 'document_amount', 'amount').replace(/[,￥¥\s]/g, ''));
+      const expectedTotal = baseAllocations.reduce((total, allocation) => total + allocation.expectedAmount, 0);
+      const bankAmount = Number.isFinite(sourceAmount) ? Math.abs(sourceAmount) : expectedTotal;
+      let remainingAmount = bankAmount;
+      const allocations = baseAllocations.map((allocation, index) => {
+        const allocatedAmount = index === baseAllocations.length - 1
+          ? Math.round(remainingAmount * 100) / 100
+          : Math.round((expectedTotal > 0 ? bankAmount * allocation.expectedAmount / expectedTotal : bankAmount / baseAllocations.length) * 100) / 100;
+        remainingAmount -= allocatedAmount;
+        return { ...allocation, allocatedAmount };
+      });
       const allocatedAmount = allocations.reduce((total, allocation) => total + allocation.allocatedAmount, 0);
-      if (allocations.length > 1 && (!Number.isFinite(sourceAmount) || Math.abs(allocatedAmount - Math.abs(sourceAmount)) > 0.005)) {
-        throw new BadRequestException(`多选合同每月应收合计 ${allocatedAmount.toLocaleString()} 必须与入金金额 ${Number.isFinite(sourceAmount) ? Math.abs(sourceAmount).toLocaleString() : '无效'} 一致`);
-      }
+      const allocationDifference = Math.round((bankAmount - expectedTotal) * 100) / 100;
       const primary = contracts[0];
       const manualScore = Math.round(allocations.reduce((total, allocation) => total + allocation.identityScore, 0) / allocations.length);
       records[recordIndex] = {
@@ -743,12 +750,15 @@ export class OcrService {
             propertyId: primary.propertyId,
           } : {}),
           allocations,
-          bankAmount: Number.isFinite(sourceAmount) ? Math.abs(sourceAmount) : allocatedAmount,
+          bankAmount,
           allocatedAmount,
-          unallocatedAmount: Number.isFinite(sourceAmount) ? Math.max(0, Math.abs(sourceAmount) - allocatedAmount) : 0,
+          unallocatedAmount: Math.max(0, Math.round((bankAmount - allocatedAmount) * 100) / 100),
+          difference: allocationDifference,
           matchScore: manualScore,
           reason: input.reason?.trim() || (allocations.length > 1
-            ? `已由操作员选择 ${allocations.length} 个物件，合同应收合计与该笔入金一致`
+            ? Math.abs(allocationDifference) < 0.005
+              ? `已由操作员选择 ${allocations.length} 个物件，合同应收合计与该笔入金一致`
+              : `已由操作员确认匹配 ${allocations.length} 个物件，合同应收与入金差额为 ${allocationDifference.toLocaleString()}`
             : '已由操作员选择系统合同并完成匹配'),
           reviewedAt: new Date().toISOString(),
           reviewedBy: actorUserId || null,
@@ -1064,6 +1074,20 @@ export class OcrService {
     if (transactionDate && ranked.length > 1) {
       const activeOnDate = ranked.filter(({ contract }) => this.contractActiveOnDate(contract, transactionDate));
       if (activeOnDate.length) ranked = activeOnDate;
+    }
+    if (ranked.length > 1) {
+      // OR rules are useful for finding candidates, but can make every contract
+      // belonging to the same payer look equally strong. Prefer the unique
+      // candidate that also satisfies every populated rule (notably amount +
+      // payer name) before asking the user to choose manually.
+      const exactCandidates = ranked.filter(({ contract }) => activeRules.every((rule) => {
+        const scores = this.ruleSourceValues(record, rule).flatMap(({ value }) => rule.systemFields.map((systemField) => (
+          this.contractRuleScore(contract, systemField, value, rule.operator)
+        )));
+        if (!scores.length) return true;
+        return Math.max(...scores) >= (rule.operator === 'similar' ? rule.minScore : 100);
+      }));
+      if (exactCandidates.length) ranked = exactCandidates;
     }
     const bestCandidate = ranked[0];
     const secondCandidate = ranked[1];

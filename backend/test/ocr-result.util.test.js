@@ -166,7 +166,7 @@ test('re-executes previous automatic matches with the latest algorithm while pre
 
   assert.equal(savedResult.records[0].systemMatch.contractId, 'contract-latest');
   assert.deepEqual(savedResult.records[1].systemMatch, manualRecord.systemMatch);
-  assert.equal(updated.resultJson.matchHistory[0].algorithmVersion, '2.1.0');
+  assert.equal(updated.resultJson.matchHistory[0].algorithmVersion, '2.2.0');
   assert.equal(updated.resultJson.matchHistory[0].processed, 1);
   assert.equal(updated.resultJson.matchHistory[0].preservedManual, 1);
 });
@@ -197,6 +197,70 @@ test('rent matching requires exact amount and tolerant contractor Kana', async (
   assert.equal(result.systemMatch.status, 'MATCHED');
   assert.equal(result.systemMatch.contractId, 'contract-rent-match');
   assert.equal(result.systemMatch.matchScore, 100);
+});
+
+test('uses exact amount to auto-match one property when OR rules find multiple contracts for the same payer', async () => {
+  const makeContract = (id, amount, roomNumber) => ({
+    id, contractNumber: `CTR-${id}`, tenantId: 'tenant-k', contractorName: '北野茂樹', contractorNameKana: 'キタノ シゲキ',
+    payerName: '北野茂樹', payerNameKana: 'キタノ シゲキ', bankSummaryName: null, bankStatementSummary: null,
+    startDate: new Date('2026-01-01'), endDate: null, monthlyRent: amount, managementFee: null,
+    otherMonthlyFee1: null, otherMonthlyFee2: null, otherMonthlyFee3: null, paymentAliases: [],
+    tenant: { id: 'tenant-k', name: '北野茂樹' }, propertyId: `property-${id}`, roomId: `room-${id}`,
+    room: { id: `room-${id}`, roomNumber, property: { id: `property-${id}`, name: `北野物件${roomNumber}` } },
+    property: { id: `property-${id}`, name: `北野物件${roomNumber}` },
+  });
+  const contracts = [makeContract('exact', 90000, '602'), makeContract('other', 156800, '1')];
+  const service = new OcrService({ contract: { findMany: async () => contracts } });
+  const result = await service.matchSystemData(
+    { type: 'income', statisticalAmount: 90000, counterpartyRaw: 'ｷﾀﾉ ｼｹｷ', date: '2026-04-10' },
+    { version: 2, rules: [
+      { id: 'amount', systemFields: ['contract.monthlyPaymentTotal'], sourceFields: ['statisticalAmount'], operator: 'equals', minScore: 100, required: true, logicalOperator: 'AND' },
+      { id: 'kana', systemFields: ['contract.contractorNameKana'], sourceFields: ['counterpartyRaw'], operator: 'similar', minScore: 85, required: true, logicalOperator: 'OR' },
+    ] },
+  );
+
+  assert.equal(result.systemMatch.status, 'MATCHED');
+  assert.equal(result.systemMatch.matchMode, 'AUTO');
+  assert.equal(result.systemMatch.contractId, 'exact');
+});
+
+test('allows a manual multi-property match with a difference and allocates the full bank amount', async () => {
+  const makeContract = (id, amount) => ({
+    id, contractNumber: `CTR-${id}`, tenantId: 'tenant-k', contractorName: '小山雅次',
+    payerName: '小山雅次', bankSummaryName: null, bankStatementSummary: 'コヤママサツグ',
+    monthlyRent: amount, managementFee: null, otherMonthlyFee1: null, otherMonthlyFee2: null, otherMonthlyFee3: null,
+    tenant: { id: 'tenant-k', name: '小山雅次' }, propertyId: `property-${id}`, roomId: `room-${id}`,
+    room: { id: `room-${id}`, roomNumber: id, property: { id: `property-${id}`, name: `明日香ビル${id}` } },
+    property: { id: `property-${id}`, name: `明日香ビル${id}` },
+  });
+  const contracts = [makeContract('37', 100000), makeContract('39', 200000)];
+  const task = {
+    taskId: 'OCR-MANUAL-DIFFERENCE', state: 'REVIEW_REQUIRED', workflow: {},
+    resultJson: { records: [{ _recordId: 'record-1', type: 'income', statisticalAmount: 330000, contentSummary: 'コヤママサツグ', systemMatch: { status: 'UNMATCHED' } }] },
+  };
+  const prisma = {
+    ocrTask: {
+      findUnique: async () => task,
+      update: async ({ data }) => ({ ...task, ...data, workflow: {} }),
+    },
+    contract: { findMany: async () => contracts },
+    contractPaymentAlias: {
+      findFirst: async () => null,
+      create: async ({ data }) => data,
+      update: async ({ data }) => data,
+    },
+    auditLog: { create: async ({ data }) => data },
+    $transaction: async (operations) => Promise.all(operations),
+  };
+  const service = new OcrService(prisma);
+  const updated = await service.reviewRecord('OCR-MANUAL-DIFFERENCE', 'record-1', { action: 'MATCH', contractIds: ['37', '39'] }, 'admin-user');
+  const match = updated.resultJson.records[0].systemMatch;
+
+  assert.equal(match.status, 'MATCHED');
+  assert.equal(match.matchType, 'COMBINATION');
+  assert.equal(match.difference, 30000);
+  assert.equal(match.allocations.reduce((sum, allocation) => sum + allocation.expectedAmount, 0), 300000);
+  assert.equal(match.allocations.reduce((sum, allocation) => sum + allocation.allocatedAmount, 0), 330000);
 });
 
 test('expense records are excluded from rent matching statistics', async () => {
