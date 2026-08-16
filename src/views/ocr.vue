@@ -1,5 +1,5 @@
 <template>
-  <section class="ocr-page">
+  <section class="ocr-page" :class="`ocr-page--${pageMode}`">
     <!-- 工作流配置列表 -->
     <template v-if="pageMode === 'list'">
       <div class="toolbar-card">
@@ -56,7 +56,7 @@
       <div class="metrics-grid history-metrics"><div><small>执行总数</small><strong>{{ workflowHistoryTasks.length }}</strong></div><div><small>已完成</small><strong>{{ workflowHistoryTasks.filter((task) => task.state === 'COMPLETED').length }}</strong></div><div><small>待人工确认</small><strong>{{ workflowHistoryTasks.filter((task) => task.state === 'REVIEW_REQUIRED').length }}</strong></div><div><small>失败</small><strong>{{ workflowHistoryTasks.filter((task) => task.state === 'FAILED').length }}</strong></div></div>
       <div class="panel-card">
         <div class="section-head"><div><p class="eyebrow">历史任务</p><h3>执行记录</h3></div><span>{{ workflowHistoryTasks.length }} 条</span></div>
-        <div class="table-scroll"><table class="workflow-table history-table"><thead><tr><th>任务名称</th><th>任务编号</th><th>文件</th><th>状态</th><th>解析 / 匹配结果</th><th>开始时间</th><th>完成时间</th><th class="operation-col">操作</th></tr></thead><tbody>
+        <div class="table-scroll history-table-scroll"><table class="workflow-table history-table"><thead><tr><th>任务名称</th><th>任务编号</th><th>文件</th><th>状态</th><th>解析 / 匹配结果</th><th>开始时间</th><th>完成时间</th><th class="operation-col">操作</th></tr></thead><tbody>
           <tr v-for="task in workflowHistoryTasks" :key="task.taskId"><td><button class="table-link strong-link" type="button" @click="openTaskDetail(task)">{{ task.taskName || '未命名任务' }}</button></td><td><code>{{ task.taskId }}</code></td><td><strong>{{ task.fileNames?.length || 0 }} 个文件</strong><small class="block-muted file-summary" :title="task.fileNames?.join('、')">{{ task.fileNames?.join('、') || '—' }}</small></td><td><span class="status-tag" :class="statusTone(task.state)">{{ statusText(task.state) }}</span><small v-if="task.errorMessage" class="block-error" :title="task.errorMessage">{{ task.errorMessage }}</small></td><td>{{ historyResultText(task) }}</td><td>{{ formatDate(task.startedAt || task.createdAt) }}</td><td>{{ formatDate(task.completedAt) }}</td><td class="operation-col"><div class="row-actions"><button class="execute-link" type="button" @click="openTaskDetail(task)">查看详情</button><button class="danger-link" type="button" :disabled="task.state === 'PROCESSING'" @click="taskPendingDelete = task">删除</button></div></td></tr>
           <tr v-if="!workflowHistoryTasks.length"><td colspan="8" class="empty-cell">该工作流暂无历史执行记录。</td></tr>
         </tbody></table></div>
@@ -136,7 +136,19 @@
       </div>
       <div class="panel-card reconciliation-control">
         <div class="control-status-row"><div><p class="control-label">任务进度</p><div class="process-main"><span :class="{ done: detailTask }">1 上传文件</span><i>→</i><span :class="{ done: detailTask?.startedAt }">2 执行工作流</span><i>→</i><span :class="{ done: ['COMPLETED','REVIEW_REQUIRED'].includes(detailTask?.state) }">3 回调解析</span><i>→</i><span :class="{ done: detailSummary.total > 0 }">4 系统匹配</span></div></div><span class="status-tag large" :class="statusTone(detailTask?.state)">{{ statusText(detailTask?.state) }}</span></div>
-        <div class="control-action-row"><div class="control-copy"><p class="control-label">匹配操作</p><span>已解析 {{ detailSummary.total }} 条 · 规则 {{ validMatchRuleCount }} 条 · 待处理 {{ rematchableCount }} 条</span></div><div class="control-buttons"><button class="secondary-button" type="button" @click="openMatchConfig">配置规则</button><button class="primary-button" type="button" :disabled="matchingRunning || !validMatchRuleCount || !rematchableCount" @click="runOcrMatching()">{{ matchingRunning ? '匹配中…' : `执行匹配（${rematchableCount}）` }}</button><button class="primary-button sync-button" type="button" :disabled="syncingMatched || !syncableMatchedCount" @click="syncMatchedToDatabase">{{ syncingMatched ? '同步中…' : `同步数据库（${syncableMatchedCount}）` }}</button><button class="secondary-button" type="button" :disabled="!unresolvedCount" @click="downloadRemainingJson">导出待确认</button></div><span class="history-count">历史 {{ matchHistory.length }} 次</span></div>
+        <div class="control-action-row" aria-label="匹配操作">
+          <div class="control-copy">
+            <p class="control-label">匹配操作</p>
+            <span>已解析 {{ detailSummary.total }} 条 · 规则 {{ validMatchRuleCount }} 条 · 待处理 {{ rematchableCount }} 条</span>
+          </div>
+          <div class="control-buttons">
+            <button class="secondary-button" type="button" @click="openMatchConfig">配置规则</button>
+            <button class="primary-button" type="button" :disabled="matchingRunning || !validMatchRuleCount || !rematchableCount" @click="runOcrMatching()">{{ matchingRunning ? '匹配中…' : `执行匹配（${rematchableCount}）` }}</button>
+            <button class="primary-button sync-button" type="button" :disabled="syncingMatched || !syncableMatchedCount" @click="syncMatchedToDatabase">{{ syncingMatched ? '同步中…' : `同步数据库（${syncableMatchedCount}）` }}</button>
+            <button class="secondary-button" type="button" :disabled="!unresolvedCount" @click="downloadRemainingJson">导出待确认</button>
+          </div>
+          <span class="history-count">历史 {{ matchHistory.length }} 次</span>
+        </div>
       </div>
       <div class="metrics-grid detail-metrics"><div><small>合计</small><strong>{{ detailSummary.total }}</strong></div><div><small>自动匹配</small><strong>{{ detailSummary.autoMatched || 0 }}</strong></div><div><small>手工匹配</small><strong>{{ detailSummary.manualMatched || 0 }}</strong></div><div><small>已同步数据库</small><strong>{{ syncedMatchedCount }}</strong></div><div><small>手工同步</small><strong>{{ detailSummary.manualSync || 0 }}</strong></div><div><small>不适用（支出）</small><strong>{{ detailSummary.notApplicable || 0 }}</strong></div><div><small>待人工确认</small><strong>{{ detailSummary.unmatched }}</strong></div><div><small>文件数量</small><strong>{{ detailTask?.fileNames?.length || 0 }}</strong></div></div>
       <div class="detail-layout">
@@ -471,4 +483,29 @@ onBeforeUnmount(() => { clearTimers(); clearMessage(); });
 @media(max-width:1400px){.detail-metrics{grid-template-columns:repeat(4,minmax(100px,1fr))}}@media(max-width:700px){.detail-metrics{grid-template-columns:repeat(2,minmax(100px,1fr))}.source-file-chip{max-width:100%}}
 .result-panel{min-width:0;overflow:hidden}.result-panel :deep(.dual-scroll-table){margin-top:12px}.result-panel :deep(.detail-table-scroll){max-height:calc(100vh - 250px);overflow:auto;overscroll-behavior-x:contain}.detail-result-table{min-width:1720px}.detail-result-table .operation-col{box-sizing:border-box;width:210px;min-width:210px;max-width:210px;z-index:2;border-left:1px solid #e1e8ee}.detail-result-table thead .operation-col{z-index:3}.detail-result-table .operation-col .row-actions{display:grid;grid-template-columns:repeat(2,max-content);align-items:center;justify-content:start;gap:4px 10px;white-space:normal}.detail-result-table .operation-col .row-actions button{white-space:nowrap}.detail-result-table tbody tr:hover .operation-col{background:#f9fbfc}@media(max-width:900px){.detail-result-table .operation-col{width:190px;min-width:190px;max-width:190px}.detail-result-table .operation-col .row-actions{gap:3px 6px}}
 .ocr-page{width:100%;min-width:0;max-width:100%;overflow:hidden}.ocr-page>*{min-width:0;max-width:100%}.detail-layout,.result-panel{width:100%;min-width:0;max-width:100%}.result-panel{overflow:hidden}.result-panel :deep(.dual-scroll-table){width:100%;min-width:0;max-width:100%;overflow:hidden}.result-panel :deep(.table-top-scroll){display:block;width:100%;min-width:0}.result-panel :deep(.detail-table-scroll){width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto}.detail-result-table{width:1720px;min-width:1720px}
+/* The workspace owns vertical page scrolling. Keeping this flex child from
+   shrinking prevents long OCR views from being clipped at the viewport edge. */
+.ocr-page{
+  flex:0 0 auto;
+  overflow:visible;
+}
+
+.history-table-scroll{
+  max-height:max(260px,calc(100dvh - 410px));
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.history-table thead{
+  position:sticky;
+  top:0;
+  z-index:3;
+}
+
+.reconciliation-control{
+  display:block;
+}
+.control-action-row{
+  position:relative;
+  background:#fff;
+}
 </style>
