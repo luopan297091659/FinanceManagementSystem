@@ -54,8 +54,8 @@
         <button class="secondary-button" type="button" @click="loadPage">刷新</button>
       </div>
       <div class="metrics-grid history-metrics"><div><small>执行总数</small><strong>{{ workflowHistoryTasks.length }}</strong></div><div><small>已完成</small><strong>{{ workflowHistoryTasks.filter((task) => task.state === 'COMPLETED').length }}</strong></div><div><small>待人工确认</small><strong>{{ workflowHistoryTasks.filter((task) => task.state === 'REVIEW_REQUIRED').length }}</strong></div><div><small>失败</small><strong>{{ workflowHistoryTasks.filter((task) => task.state === 'FAILED').length }}</strong></div></div>
-      <div class="panel-card">
-        <div class="section-head"><div><p class="eyebrow">历史任务</p><h3>执行记录</h3></div><span>{{ workflowHistoryTasks.length }} 条</span></div>
+      <div class="panel-card history-list-panel">
+        <div class="section-head"><div><p class="eyebrow">历史任务</p></div><span>{{ workflowHistoryTasks.length }} 条</span></div>
         <div class="table-scroll history-table-scroll"><table class="workflow-table history-table"><thead><tr><th>任务名称</th><th>任务编号</th><th>文件</th><th>状态</th><th>解析 / 匹配结果</th><th>开始时间</th><th>完成时间</th><th class="operation-col">操作</th></tr></thead><tbody>
           <tr v-for="task in workflowHistoryTasks" :key="task.taskId"><td><button class="table-link strong-link" type="button" @click="openTaskDetail(task)">{{ task.taskName || '未命名任务' }}</button></td><td><code>{{ task.taskId }}</code></td><td><strong>{{ task.fileNames?.length || 0 }} 个文件</strong><small class="block-muted file-summary" :title="task.fileNames?.join('、')">{{ task.fileNames?.join('、') || '—' }}</small></td><td><span class="status-tag" :class="statusTone(task.state)">{{ statusText(task.state) }}</span><small v-if="task.errorMessage" class="block-error" :title="task.errorMessage">{{ task.errorMessage }}</small></td><td>{{ historyResultText(task) }}</td><td>{{ formatDate(task.startedAt || task.createdAt) }}</td><td>{{ formatDate(task.completedAt) }}</td><td class="operation-col"><div class="row-actions"><button class="execute-link" type="button" @click="openTaskDetail(task)">查看详情</button><button class="danger-link" type="button" :disabled="task.state === 'PROCESSING'" @click="taskPendingDelete = task">删除</button></div></td></tr>
           <tr v-if="!workflowHistoryTasks.length"><td colspan="8" class="empty-cell">该工作流暂无历史执行记录。</td></tr>
@@ -168,7 +168,7 @@
     <div v-if="matchConfigOpen" class="modal-backdrop" @click.self="matchConfigOpen = false">
       <div class="modal-card match-config-dialog" role="dialog" aria-modal="true" aria-labelledby="match-config-title">
         <div class="section-head"><div><p class="eyebrow">AI 对账规则</p><h3 id="match-config-title">选择匹配字段</h3><p class="muted">每条规则的左右字段均可多选，任意一组字段匹配即视为该规则命中；第二条规则起可单独选择与上一条规则的 AND / OR 关系。</p></div><button class="icon-button" type="button" @click="matchConfigOpen = false">×</button></div>
-        <div class="rule-template-bar"><div class="template-picker"><label>选择已保存规则</label><select v-model="selectedMatchTemplateId"><option value="">请选择规则</option><option v-for="template in matchRuleTemplates" :key="template.id" :value="template.id">{{ template.name }}</option></select><button class="secondary-button" type="button" :disabled="!selectedMatchTemplateId" @click="loadSelectedMatchTemplate">加载</button><button class="ghost-button danger-text" type="button" :disabled="!selectedMatchTemplateId" @click="deleteSelectedMatchTemplate">删除</button></div><div class="template-save"><label>保存当前规则</label><input v-model="matchTemplateName" maxlength="80" placeholder="例如：月度租金匹配" /><button class="secondary-button" type="button" :disabled="savingMatchTemplate || !hasValidDraftMatchRule || !matchTemplateName.trim()" @click="saveCurrentMatchTemplate">{{ savingMatchTemplate ? '保存中…' : '保存规则' }}</button></div></div>
+        <div class="rule-template-bar"><div class="template-picker"><label>选择已保存规则</label><select v-model="selectedMatchTemplateId"><option value="">请选择规则</option><option v-for="template in matchRuleTemplates" :key="template.id" :value="template.id">{{ template.name }}</option></select><button class="secondary-button" type="button" :disabled="!selectedMatchTemplateId" @click="loadSelectedMatchTemplate">加载</button><button class="ghost-button danger-text" type="button" :disabled="!selectedMatchTemplateId" @click="deleteSelectedMatchTemplate">删除</button></div><div class="template-save"><label>保存当前规则</label><input v-model="matchTemplateName" maxlength="80" placeholder="例如：月度租金匹配" /><button class="secondary-button" type="button" :disabled="savingMatchTemplate || !hasValidDraftMatchRule || !matchTemplateName.trim()" @click="saveCurrentMatchTemplate">{{ savingMatchTemplate ? '保存中…' : '保存并应用' }}</button></div></div>
         <div class="mapping-layout">
           <aside class="mapping-fields"><h4>内部系统字段 <small>{{ systemMatchFields.length }} 项</small></h4><input v-model="systemFieldSearch" class="mapping-search" type="search" placeholder="搜索物件、房间、契约字段" /><div v-for="field in filteredSystemMatchFields" :key="field.key" class="mapping-field-card"><small>{{ field.group }}</small><strong>{{ field.label }}</strong><code>{{ field.key }}</code></div></aside>
           <main class="mapping-workspace"><div class="mapping-toolbar"><div><h4>匹配规则工作区</h4><small>规则内多选字段按“任一命中”；规则之间按各自 AND / OR 连接。</small></div><button class="ghost-button" type="button" @click="applyRecommendedRentRules">应用收租推荐规则</button><button class="secondary-button" type="button" @click="addMatchRule">＋ 添加规则</button></div>
@@ -428,7 +428,7 @@ function selectedSystemFieldSummary(fields) { const selected=systemMatchFields.f
 function selectedSourceFieldSummary(fields) { if (!fields?.length) return '选择 JSON 字段（可多选）'; return fields.length === 1 ? fields[0] : `已选 ${fields.length} 个 JSON 字段`; }
 function currentDraftConfiguration() { return {version:2,rules:draftMatchConfiguration.value.rules.filter(isValidMatchRule).map((rule,index)=>({...rule,logicalOperator:index === 0 ? 'AND' : rule.logicalOperator}))}; }
 function loadSelectedMatchTemplate() { const template=matchRuleTemplates.value.find((item)=>item.id===selectedMatchTemplateId.value); if (!template) return; draftMatchConfiguration.value=normalizeMatchConfiguration(template.configurationJson); matchTemplateName.value=template.name; showMessage(`已加载规则“${template.name}”，可直接保存并执行匹配。`); }
-async function saveCurrentMatchTemplate() { const name=matchTemplateName.value.trim(); const configuration=currentDraftConfiguration(); if (!name || !configuration.rules.length) return; savingMatchTemplate.value=true; try { const saved=await api.saveOcrMatchRuleTemplate({name,configuration}); matchRuleTemplates.value=await api.listOcrMatchRuleTemplates(); selectedMatchTemplateId.value=saved.id; showMessage(`规则“${saved.name}”已保存，可在后续任务中选择使用。`); } catch(error) { showMessage(error.message,true); } finally { savingMatchTemplate.value=false; } }
+async function saveCurrentMatchTemplate() { const name=matchTemplateName.value.trim(); const configuration=currentDraftConfiguration(); if (!name || !configuration.rules.length) return; savingMatchTemplate.value=true; try { detailTask.value=await api.saveOcrMatchConfig(detailTaskId,configuration); matchConfiguration.value=normalizeMatchConfiguration(configuration); const saved=await api.saveOcrMatchRuleTemplate({name,configuration}); matchRuleTemplates.value=await api.listOcrMatchRuleTemplates(); selectedMatchTemplateId.value=saved.id; showMessage(`规则“${saved.name}”已保存并应用到当前任务，可关闭窗口后执行匹配。`); } catch(error) { showMessage(error.message,true); } finally { savingMatchTemplate.value=false; } }
 async function deleteSelectedMatchTemplate() { const template=matchRuleTemplates.value.find((item)=>item.id===selectedMatchTemplateId.value); if (!template || !await requestConfirm(`删除后将无法再次加载规则“${template.name}”。`, { title:'确认删除匹配规则？', confirmText:'确认删除', danger:true })) return; try { await api.deleteOcrMatchRuleTemplate(template.id); matchRuleTemplates.value=matchRuleTemplates.value.filter((item)=>item.id!==template.id); selectedMatchTemplateId.value=''; matchTemplateName.value=''; showMessage('已删除保存的匹配规则。'); } catch(error) { showMessage(error.message,true); } }
 async function saveMatchConfiguration(executeAfterSave=false) { const configuration=currentDraftConfiguration(); if (!configuration.rules.length) return; savingMatchConfig.value = true; try { detailTask.value = await api.saveOcrMatchConfig(detailTaskId, configuration); matchConfiguration.value = normalizeMatchConfiguration(configuration); matchConfigOpen.value = false; if (executeAfterSave) await runOcrMatching(); else showMessage('字段映射规则已保存到当前任务。'); } catch (error) { showMessage(error.message, true); } finally { savingMatchConfig.value = false; } }
 async function runOcrMatching(recordIds) { if (!validMatchRuleCount.value || matchingRunning.value) return; matchingRunning.value = true; try { detailTask.value = await api.executeOcrMatching(detailTaskId, matchConfiguration.value, recordIds, { rematch:true }); matchConfiguration.value = normalizeMatchConfiguration(detailTask.value?.resultJson?.matchConfig); const summary=detailTask.value?.resultJson?.summary; const latest=detailTask.value?.resultJson?.matchHistory?.at(-1); showMessage(`已使用最新算法 ${latest?.algorithmVersion || ''} 重新计算 ${latest?.processed || 0} 条，更新 ${latest?.changed || 0} 条；当前已匹配 ${summary?.matched || 0} 条，待确认 ${summary?.unmatched || 0} 条。`); } catch (error) { showMessage(error.message, true); } finally { matchingRunning.value = false; } }
@@ -491,9 +491,27 @@ onBeforeUnmount(() => { clearTimers(); clearMessage(); });
 }
 
 .history-table-scroll{
-  max-height:max(260px,calc(100dvh - 410px));
+  height:max(420px,calc(100dvh - 300px));
+  max-height:none;
   overflow:auto;
   overscroll-behavior:contain;
+}
+.history-list-panel{
+  padding:14px 20px 10px;
+}
+.history-list-panel .section-head{
+  min-height:28px;
+}
+.history-list-panel .history-table-scroll{
+  margin-top:8px;
+}
+.history-table th,
+.history-table td{
+  padding:10px 9px;
+}
+.history-table .block-muted,
+.history-table .block-error{
+  margin-top:3px;
 }
 .history-table thead{
   position:sticky;
