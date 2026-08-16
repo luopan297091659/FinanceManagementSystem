@@ -1,7 +1,9 @@
 <template>
   <section class="page-shell data-page owners-page">
+    <div class="content-grid data-content-grid">
     <div class="panel-card full-panel">
       <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
+      <p v-if="loading && !owners.length" class="form-hint">{{ common.loading }}</p>
       <div class="table-controls data-toolbar">
         <div class="toolbar-actions">
           <input v-model="search" class="search-input" type="search" :placeholder="labels.searchPlaceholder" />
@@ -9,22 +11,36 @@
           <button class="secondary-button" type="button" :disabled="importing" @click="fileInput?.click()">{{ labels.importOwners }}</button>
           <input ref="fileInput" class="hidden-file-input" type="file" accept=".xlsx,.xls,.xlsm,.csv,.tsv" @change="importFile" />
         </div>
+        <div class="column-panel-container">
+          <button class="secondary-button" type="button" @click="showColumnPanel = !showColumnPanel">{{ common.showColumns }} ▾</button>
+          <div v-if="showColumnPanel" class="column-panel" role="dialog" :aria-label="common.showColumns">
+            <div class="column-panel-header"><strong>{{ common.showColumns }}</strong><button class="column-reset-button" type="button" @click="resetOwnerColumns">{{ common.resetColumns }}</button></div>
+            <div class="panel-body"><label v-for="column in ownerColumns" :key="column.key" class="panel-item"><input v-model="column.visible" type="checkbox" />{{ labels[column.labelKey] }}</label></div>
+          </div>
+        </div>
       </div>
-      <p v-if="loading" class="form-hint">{{ common.loading }}</p>
-      <div class="owner-table-wrap">
+      <div class="table-card data-table-card" :aria-busy="loading">
+        <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ total }} {{ common.records }}</span></div>
+        <DualScrollTable>
         <table class="data-table owner-table">
-          <thead><tr><th>{{ labels.name }}</th><th>{{ labels.nameKana }}</th><th>{{ labels.phone }}</th><th>{{ labels.email }}</th><th>{{ labels.roomCount }}</th><th>{{ common.actions }}</th></tr></thead>
+          <thead><tr><th class="index-cell">{{ common.index }}</th><th v-for="column in visibleOwnerColumns" :key="column.key">{{ labels[column.labelKey] }}</th><th class="actions-cell">{{ common.actions }}</th></tr></thead>
           <tbody>
-            <tr v-for="owner in owners" :key="owner.id">
-              <td><button class="owner-name-button" type="button" @click="openDetail(owner.id)">{{ owner.name }}</button></td>
-              <td>{{ owner.nameKana || '-' }}</td><td>{{ owner.phone || '-' }}</td><td>{{ owner.email || '-' }}</td><td>{{ owner.roomCount }}</td>
-              <td><button class="secondary-button mini" type="button" @click="openDetail(owner.id)">{{ labels.details }}</button></td>
+            <tr v-for="(owner, index) in owners" :key="owner.id">
+              <td class="index-cell">{{ (page - 1) * pageSize + index + 1 }}</td>
+              <td v-for="column in visibleOwnerColumns" :key="column.key">
+                <button v-if="column.key === 'name'" class="owner-name-button" type="button" @click="openDetail(owner.id)">{{ owner.name }}</button>
+                <span v-else-if="column.key === 'ownerStatus'" class="status-chip" :class="owner.ownerStatus === 'ACTIVE' ? 'contract-status-active' : 'contract-status-uncontracted'">{{ owner.ownerStatus === 'ACTIVE' ? labels.active : labels.inactive }}</span>
+                <template v-else>{{ ownerColumnValue(owner, column.key) }}</template>
+              </td>
+              <td class="actions-cell"><div class="row-actions"><button class="ghost-button mini" type="button" @click="openDetail(owner.id)">{{ labels.details }}</button></div></td>
             </tr>
-            <tr v-if="!loading && !owners.length"><td colspan="6" class="empty-cell">{{ common.noData }}</td></tr>
+            <tr v-if="!loading && !owners.length"><td :colspan="visibleOwnerColumns.length + 2" class="empty-cell">{{ common.noData }}</td></tr>
           </tbody>
         </table>
+        </DualScrollTable>
       </div>
       <DataPagination v-model:page="page" v-model:page-size="pageSize" :total="total" :labels="common" />
+    </div>
     </div>
 
     <div v-if="detailOpen" class="modal-overlay" @click.self="closeDetail">
@@ -73,6 +89,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import DataPagination from '../components/DataPagination.vue';
+import DualScrollTable from '../components/DualScrollTable.vue';
 import { useI18n } from '../i18n';
 import { api } from '../services/api';
 import { requestConfirm } from '../services/confirm';
@@ -86,6 +103,19 @@ const owners = ref([]); const total = ref(0); const page = ref(1); const pageSiz
 const loading = ref(false); const saving = ref(false); const importing = ref(false); const errorMessage = ref('');
 const detailOpen = ref(false); const detail = ref(null); const form = ref(blankForm()); const fileInput = ref(null); const importResult = ref(null);
 const roomSearch = ref(''); const roomOptions = ref([]); const selectedRoomIds = ref([]);
+const showColumnPanel = ref(false);
+const ownerColumns = ref([
+  { key: 'name', labelKey: 'name', visible: true },
+  { key: 'nameKana', labelKey: 'nameKana', visible: true },
+  { key: 'phone', labelKey: 'phone', visible: true },
+  { key: 'email', labelKey: 'email', visible: true },
+  { key: 'roomCount', labelKey: 'roomCount', visible: true },
+  { key: 'ownerStatus', labelKey: 'status', visible: false },
+  { key: 'address', labelKey: 'address', visible: false },
+]);
+const visibleOwnerColumns = computed(() => ownerColumns.value.filter((column) => column.visible));
+const resetOwnerColumns = () => { const defaults = new Set(['name', 'nameKana', 'phone', 'email', 'roomCount']); ownerColumns.value.forEach((column) => { column.visible = defaults.has(column.key); }); };
+const ownerColumnValue = (owner, key) => owner[key] ?? '-';
 
 let requestId = 0;
 const loadOwners = async () => {
@@ -124,5 +154,5 @@ onMounted(async () => { await loadOwners(); const ownerId = new URLSearchParams(
 </script>
 
 <style scoped>
-.owners-page{min-width:0}.owner-table-wrap{overflow:auto}.owner-table{min-width:850px}.owner-name-button{border:0;background:transparent;color:var(--primary);font-weight:800;text-decoration:underline;text-underline-offset:2px}.owner-detail-modal{width:min(900px,100%)}.owner-form{display:grid;gap:18px}.field-grid textarea{resize:vertical}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.owner-rooms-section{margin-top:26px;padding-top:22px;border-top:1px solid var(--line)}.section-title{display:flex;align-items:start;justify-content:space-between;gap:12px}.section-title h4{margin:0}.section-title p{margin:5px 0 0;color:var(--muted);font-size:12px}.room-add-row{display:flex;gap:8px;margin-top:16px}.room-add-row input{flex:1}.room-options{display:grid;gap:8px;max-height:220px;overflow:auto;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px}.room-options label{display:flex;gap:8px}.room-options button{justify-self:end}.linked-room-list{display:grid;margin-top:14px}.linked-room-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--line)}.linked-room-row div{display:grid;gap:3px}.linked-room-row span{color:var(--muted);font-size:12px}.import-result-modal{width:min(1050px,100%)}.import-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}.import-metrics span{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--surface-2);font-size:12px}.import-metrics strong{font-size:20px}.empty-cell{text-align:center;color:var(--muted);padding:32px!important}@media(max-width:720px){.field-grid{grid-template-columns:1fr}.field-grid .span-2{grid-column:auto}.room-add-row{align-items:stretch;flex-direction:column}.import-metrics{grid-template-columns:repeat(2,1fr)}}
+.owners-page{min-width:0}.owner-table-wrap{overflow:auto}.owner-table{min-width:1120px}.owner-name-button{border:0;background:transparent;color:var(--primary);font-weight:800;text-decoration:underline;text-underline-offset:2px}.owner-detail-modal{width:min(900px,100%)}.owner-form{display:grid;gap:18px}.field-grid textarea{resize:vertical}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.owner-rooms-section{margin-top:26px;padding-top:22px;border-top:1px solid var(--line)}.section-title{display:flex;align-items:start;justify-content:space-between;gap:12px}.section-title h4{margin:0}.section-title p{margin:5px 0 0;color:var(--muted);font-size:12px}.room-add-row{display:flex;gap:8px;margin-top:16px}.room-add-row input{flex:1}.room-options{display:grid;gap:8px;max-height:220px;overflow:auto;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px}.room-options label{display:flex;gap:8px}.room-options button{justify-self:end}.linked-room-list{display:grid;margin-top:14px}.linked-room-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--line)}.linked-room-row div{display:grid;gap:3px}.linked-room-row span{color:var(--muted);font-size:12px}.import-result-modal{width:min(1050px,100%)}.import-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:16px}.import-metrics span{display:grid;gap:4px;padding:12px;border-radius:10px;background:var(--surface-2);font-size:12px}.import-metrics strong{font-size:20px}.empty-cell{text-align:center;color:var(--muted);padding:32px!important}@media(max-width:720px){.field-grid{grid-template-columns:1fr}.field-grid .span-2{grid-column:auto}.room-add-row{align-items:stretch;flex-direction:column}.import-metrics{grid-template-columns:repeat(2,1fr)}}
 </style>

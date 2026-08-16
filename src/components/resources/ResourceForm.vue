@@ -20,6 +20,13 @@
           <option value="INACTIVE">{{ labels.inactive }}</option>
         </select>
       </label>
+      <div v-if="editing" class="owner-info-field span-2">
+        <span>{{ labels.ownerName }}</span>
+        <div class="owner-links">
+          <a v-for="owner in form.owners || []" :key="owner.id" :href="ownerHref(owner.id)" target="_blank" rel="noopener noreferrer">{{ owner.name }}</a>
+          <span v-if="!form.owners?.length" class="owner-empty">{{ labels.noOwner }}</span>
+        </div>
+      </div>
       <label class="span-2">{{ labels.propertyRemark }}<textarea v-model="form.propertyRemark" rows="2"></textarea></label>
 
       <h4 class="form-section-title">{{ labels.roomInformation }}</h4>
@@ -62,6 +69,7 @@
 
 <script setup>
 import { computed, ref } from "vue";
+import { appPath } from "../../utils/appPath";
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
@@ -84,4 +92,13 @@ const filteredContractOptions = computed(() => {
   return current && !options.some((option) => option.id === current.id) ? [current, ...options] : options;
 });
 const unitTypes = ["ROOM", "HOUSE", "SHOP", "OFFICE", "PARKING", "SIGNBOARD", "BASE_STATION", "VENDING", "MINPAKU", "OTHER"];
+const ownerHref = (ownerId) => `${appPath("/owners")}?ownerId=${encodeURIComponent(ownerId)}`;
 </script>
+
+<style scoped>
+.owner-info-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.owner-links { min-height: 40px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.owner-links a { color: var(--primary); font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.owner-links a + a::before { content: "/"; margin-right: 8px; color: var(--muted); text-decoration: none; }
+.owner-empty { color: var(--muted); }
+</style>

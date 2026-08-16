@@ -157,6 +157,9 @@ const blankForm = () => ({
   propertyUsageType: "",
   managementStatus: "ACTIVE",
   propertyRemark: "",
+  owners: [],
+  ownerId: "",
+  ownerName: "",
   roomCode: "",
   currentContractId: "",
   houseNumber: "",
@@ -313,7 +316,7 @@ const saveResource = async () => {
 
   try {
     const payload = Object.fromEntries(
-      Object.entries(form.value).filter(([key]) => key !== "id" && key !== "currentContractId"),
+      Object.entries(form.value).filter(([key]) => !["id", "currentContractId", "owners", "ownerId", "ownerName"].includes(key)),
     );
     payload.area = form.value.area === "" || form.value.area == null ? "" : String(form.value.area);
     payload.floor = form.value.floor === "" || form.value.floor == null ? "" : String(form.value.floor);

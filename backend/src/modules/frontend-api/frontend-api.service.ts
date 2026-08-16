@@ -330,7 +330,14 @@ export class FrontendApiService {
   async getRoom(id: string) {
     const room = await this.prisma.room.findUnique({
       where: { id },
-      include: { property: { include: { project: true } } },
+      include: {
+        property: { include: { project: true } },
+        ownerLinks: {
+          where: { deletedAt: null, status: 'ACTIVE' },
+          include: { owner: { select: { id: true, name: true, nameKana: true } } },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        },
+      },
     });
     if (!room) throw new NotFoundException('Room not found');
     return this.toRoomEditor(room);
@@ -868,6 +875,12 @@ export class FrontendApiService {
 
   private toRoomEditor(room: any) {
     const property = room.property;
+    const owners = (room.ownerLinks ?? []).map((link: any) => ({
+      id: link.owner.id,
+      name: link.owner.name,
+      nameKana: link.owner.nameKana ?? '',
+      isPrimary: Boolean(link.isPrimary),
+    }));
     return {
       id: room.id,
       buildingId: property.id,
@@ -888,6 +901,9 @@ export class FrontendApiService {
       propertyUsageType: property.usageType ?? '',
       managementStatus: property.managementStatus ?? 'ACTIVE',
       propertyRemark: property.remark ?? '',
+      owners,
+      ownerId: owners[0]?.id ?? '',
+      ownerName: owners.map((owner: { name: string }) => owner.name).join(' / '),
       roomCode: room.roomCode ?? '',
       currentContractId: room.currentContractId ?? '',
       houseNumber: room.houseNumber ?? '',

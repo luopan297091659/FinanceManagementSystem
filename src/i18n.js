@@ -138,6 +138,7 @@ export const messages = reactive({
       contractPresence: "契約有無",
       currentContract: "現在の契約",
       ownerName: "家主名",
+      noOwner: "家主情報なし",
       hasContract: "契約あり",
       noContract: "未契約",
       unitTypes: { ROOM: "部屋", HOUSE: "戸建て", SHOP: "店舗", OFFICE: "事務所", PARKING: "駐車場", SIGNBOARD: "看板", BASE_STATION: "基地局", VENDING: "自販機", MINPAKU: "民泊", OTHER: "その他" },
@@ -154,7 +155,7 @@ export const messages = reactive({
       inactive: "停止",
     },
     ownersLabels: {
-      searchPlaceholder: "家主名、カナ、電話、メール、物件・部屋を検索...", newOwner: "家主を追加", importOwners: "家主情報を取込",
+      searchPlaceholder: "家主名、カナ、電話、メール、物件・部屋を検索...", newOwner: "家主を追加", importOwners: "家主情報を取込", list: "家主一覧",
       name: "家主名", nameKana: "家主名カナ", phone: "電話", email: "メール", roomCount: "所有物件・部屋", details: "詳細",
       ownerDetails: "家主詳細", ownerType: "家主種別", person: "個人", company: "法人", status: "状態", active: "有効", inactive: "停止",
       address: "住所", remark: "備考", linkedRooms: "所有物件・部屋", linkedRoomsHelp: "この家主に紐づく物件・部屋を追加または解除できます。",
@@ -541,6 +542,7 @@ export const messages = reactive({
       contractPresence: "是否签约",
       currentContract: "当前合同",
       ownerName: "家主姓名",
+      noOwner: "暂无家主信息",
       hasContract: "已签约",
       noContract: "未签约",
       unitTypes: { ROOM: "房间", HOUSE: "独栋", SHOP: "商铺", OFFICE: "办公室", PARKING: "停车位", SIGNBOARD: "广告牌", BASE_STATION: "基站", VENDING: "自动售货机", MINPAKU: "民宿", OTHER: "其他" },
@@ -557,7 +559,7 @@ export const messages = reactive({
       inactive: "停用",
     },
     ownersLabels: {
-      searchPlaceholder: "搜索家主姓名、假名、电话、邮箱、物件或房间...", newOwner: "新增家主", importOwners: "导入家主信息",
+      searchPlaceholder: "搜索家主姓名、假名、电话、邮箱、物件或房间...", newOwner: "新增家主", importOwners: "导入家主信息", list: "家主清单",
       name: "家主姓名", nameKana: "家主姓名假名", phone: "电话", email: "邮箱", roomCount: "名下物件 / 房间", details: "详情",
       ownerDetails: "家主详情", ownerType: "家主类型", person: "个人", company: "法人", status: "状态", active: "有效", inactive: "停用",
       address: "地址", remark: "备注", linkedRooms: "名下物件 / 房间", linkedRoomsHelp: "可在此增加或解除该家主与物件、房间的关联。",
