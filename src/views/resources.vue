@@ -494,8 +494,7 @@ const exportImportErrors = async () => {
 onMounted(async () => {
   await loadResources();
   const roomId = new URLSearchParams(window.location.search).get("roomId");
-  const room = resources.value.find((item) => item.id === roomId);
-  if (room) await editResource(room);
+  if (roomId) await editResource({ id: roomId });
 });
 </script>
 

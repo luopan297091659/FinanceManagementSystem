@@ -311,7 +311,7 @@ function renderDashboard() {
 
 function renderRooms() {
   document.getElementById("rooms-table").innerHTML = `
-    <div class="table-row header rooms"><span>物件</span><span>房屋编号 / 房号</span><span>面积 / 楼层</span><span>状态</span><span>操作</span></div>
+    <div class="table-row header rooms"><span>物件</span><span>房号</span><span>面积 / 楼层</span><span>状态</span><span>操作</span></div>
     ${state.rooms
       .map((room) => `
         <div class="table-row rooms">

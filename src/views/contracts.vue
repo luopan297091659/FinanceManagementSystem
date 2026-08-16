@@ -51,7 +51,17 @@
         <div class="modal-header"><h3>{{ labels.details }}</h3><button class="modal-close-button" type="button" @click="detail = null">×</button></div>
         <div class="contract-detail-grid">
           <div><span>{{ labels.contractNo }}</span><strong>{{ detail.contractNumber || "" }}</strong></div>
-          <div><span>{{ labels.propertyRoom }}</span><button class="table-link-button" type="button" @click="openRoom(detail.roomId)">{{ compact(detail.propertyName, detail.roomNumber) }}</button></div>
+          <div>
+            <span>{{ labels.propertyRoom }}</span>
+            <a
+              v-if="detail.roomId"
+              class="table-link-button"
+              :href="roomHref(detail.roomId)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >{{ compact(detail.propertyName, detail.roomNumber) }}</a>
+            <strong v-else>{{ compact(detail.propertyName, detail.roomNumber) }}</strong>
+          </div>
           <div><span>{{ labels.contractor }}</span><strong>{{ detail.contractorName || "" }}</strong></div>
           <div><span>{{ labels.contractorType }}</span><strong>{{ detail.contractorType || "" }}</strong></div>
           <div><span>{{ labels.payerKana }}</span><strong>{{ detail.payerNameKana || "" }}</strong></div>
@@ -401,7 +411,7 @@ async function openImportBatch(batchId) {
 async function updateImportRow(row) { try { await api.updateIntegratedImportRow(importResult.value.batch.id, row.id, { contractAction: row.contractAction }); await loadImportPage(importResult.value.pagination?.page || 1); } catch (error) { errorMessage.value = error.message || labels.value.importFailed; } }
 async function commitImport() { importBusy.value = true; try { importResult.value = await api.commitIntegratedImport(importResult.value.batch.id); await loadContracts(); } catch (error) { errorMessage.value = error.message || labels.value.importFailed; } finally { importBusy.value = false; } }
 function closeImport() { showImportModal.value = false; importResult.value = null; }
-function openRoom(roomId) { window.history.pushState({}, "", `${appPath("/resources")}?roomId=${encodeURIComponent(roomId)}`); window.dispatchEvent(new PopStateEvent("popstate")); }
+const roomHref = (roomId) => `${appPath("/resources")}?roomId=${encodeURIComponent(roomId)}`;
 const money = (value) => value === null || value === undefined || value === "" ? "" : `¥${Number(value).toLocaleString()}`;
 const compact = (first, second, separator = " / ") => [first, second].filter((value) => value !== null && value !== undefined && value !== "").join(separator);
 const statusLabel = (status) => labels.value.statuses?.[status] || status || "";
