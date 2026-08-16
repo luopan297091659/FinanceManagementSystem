@@ -25,19 +25,25 @@
       <div class="table-card data-table-card" :aria-busy="loading">
         <div class="table-head"><strong>{{ labels.list }}</strong><span>{{ contractTotal }} {{ common.records }}</span></div>
         <DualScrollTable>
-          <table class="data-table contract-table">
-            <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th>{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">
+          <table class="data-table contract-table" :style="{ width: `${contractTableWidth}px` }">
+            <colgroup>
+              <col style="width: 52px" />
+              <col style="width: 64px" />
+              <col v-for="column in visibleContractColumns" :key="column.key" :style="{ width: `${contractColumnWidth(column.key)}px` }" />
+              <col style="width: 230px" />
+            </colgroup>
+            <thead><tr><th class="select-cell"><input type="checkbox" :checked="allPageSelected" @change="togglePageSelection" /></th><th class="index-cell">{{ common.index }}</th><th v-for="column in visibleContractColumns" :key="column.key">
                 <button v-if="sortableContractKeys.has(column.key)" type="button" class="table-sort-button" @click="toggleSort(column.key)">
                   {{ labels[column.labelKey] }} <span class="sort-icon" :class="{ active: sortBy === column.key }">{{ sortIcon(column.key) }}</span>
                 </button>
                 <span v-else>{{ labels[column.labelKey] }}</span>
-              </th><th>{{ common.actions }}</th></tr></thead>
+              </th><th class="actions-cell">{{ common.actions }}</th></tr></thead>
             <tbody>
               <tr v-for="(contract, index) in paginatedContracts" :key="contract.id">
                 <td class="select-cell"><input type="checkbox" :checked="selectedIds.includes(contract.id)" @change="toggleContractSelection(contract.id)" /></td>
-                <td>{{ (page - 1) * pageSize + index + 1 }}</td>
+                <td class="index-cell">{{ (page - 1) * pageSize + index + 1 }}</td>
                 <td v-for="column in visibleContractColumns" :key="column.key"><span v-if="column.key === 'status'" class="status-chip" :class="`contract-status-${String(contract.status).toLowerCase()}`">{{ statusLabel(contract.status) }}</span><TextDetailDialog v-else-if="column.key === 'remark'" :text="contract.remark" :title="labels.remark" :common="common" /><template v-else>{{ getContractColumnValue(contract, column.key) }}</template></td>
-                <td><div class="row-actions"><button class="ghost-button mini" type="button" @click="openDetail(contract.id)">{{ labels.details }}</button><button class="ghost-button mini" type="button" @click="openEdit(contract)">{{ common.edit }}</button><button class="danger-button mini" type="button" @click="deleteContract(contract.id)">{{ common.delete }}</button></div></td>
+                <td class="actions-cell"><div class="row-actions"><button class="ghost-button mini" type="button" @click="openDetail(contract.id)">{{ labels.details }}</button><button class="ghost-button mini" type="button" @click="openEdit(contract)">{{ common.edit }}</button><button class="danger-button mini" type="button" @click="deleteContract(contract.id)">{{ common.delete }}</button></div></td>
               </tr>
             </tbody>
           </table>
@@ -242,6 +248,26 @@ const contractColumns = ref([
   { key: "remark", labelKey: "remark", visible: false },
 ]);
 const visibleContractColumns = computed(() => contractColumns.value.filter((column) => column.visible));
+const contractColumnWidths = {
+  propertyRoom: 230,
+  contractNumber: 200,
+  externalContractId: 210,
+  contractorName: 180,
+  contractorNameKana: 190,
+  contractorType: 140,
+  payerName: 180,
+  payerNameKana: 190,
+  bankSummaryName: 200,
+  bankStatementSummary: 220,
+  startDate: 150,
+  endDate: 150,
+  paymentMethod: 170,
+  paymentMonthType: 160,
+  status: 130,
+  remark: 260,
+};
+const contractColumnWidth = (key) => contractColumnWidths[key] || 150;
+const contractTableWidth = computed(() => 52 + 64 + 230 + visibleContractColumns.value.reduce((total, column) => total + contractColumnWidth(column.key), 0));
 const isCreating = computed(() => Boolean(editForm.value && !editForm.value.id));
 const filteredRoomOptions = computed(() => {
   const query = roomSearch.value.trim().toLowerCase();
@@ -432,6 +458,10 @@ onMounted(async () => {
 
 <style scoped>
 .contract-edit-modal { width: min(94vw, 920px); max-height: 92vh; overflow: auto; }
+.contract-table { table-layout: fixed; min-width: 100%; max-width: none; }
+.contract-table th, .contract-table td { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.contract-table .actions-cell { overflow: visible; }
+.contract-table .row-actions { flex-wrap: nowrap; }
 .contract-edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
 .contract-edit-grid label { display: grid; gap: 6px; }
 .contract-edit-grid label > span { color: #526579; font-size: 12px; font-weight: 700; }

@@ -35,6 +35,11 @@ export class PropertiesService {
             orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
             take: 1,
           },
+          ownerLinks: {
+            where: { deletedAt: null, status: 'ACTIVE' },
+            include: { owner: { select: { id: true, name: true, nameKana: true } } },
+            orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+          },
         },
         orderBy: [{ property: { name: 'asc' } }, { roomNumber: 'asc' }, { createdAt: 'asc' }],
         skip: (page - 1) * pageSize,
@@ -93,6 +98,11 @@ export class PropertiesService {
           select: { id: true, contractNumber: true, contractorName: true, bankSummaryName: true, bankStatementSummary: true, status: true, startDate: true },
           orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
         },
+        ownerLinks: {
+          where: { deletedAt: null, status: 'ACTIVE' },
+          include: { owner: { select: { id: true, name: true, nameKana: true } } },
+          orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+        },
       },
       orderBy: [{ property: { name: 'asc' } }, { roomNumber: 'asc' }, { createdAt: 'asc' }],
     });
@@ -147,6 +157,12 @@ export class PropertiesService {
       ?? contracts[0]
       ?? null;
     const property = room.property;
+    const owners = (room.ownerLinks ?? []).map((link: any) => ({
+      id: link.owner.id,
+      name: link.owner.name,
+      nameKana: link.owner.nameKana ?? '',
+      isPrimary: Boolean(link.isPrimary),
+    }));
     return {
       id: room.id,
       buildingId: property.id,
@@ -185,6 +201,9 @@ export class PropertiesService {
       currentContractId: currentContract?.id ?? '',
       currentContract: currentContract ? [currentContract.contractNumber, currentContract.contractorName].filter(Boolean).join(' / ') : '',
       currentContractStatus: currentContract?.status ?? 'UNCONTRACTED',
+      owners,
+      ownerId: owners[0]?.id ?? '',
+      ownerName: owners.map((owner: { name: string }) => owner.name).join(' / '),
     };
   }
 }

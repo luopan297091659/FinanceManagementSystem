@@ -487,11 +487,15 @@ const permissionGroups = computed(() => [
   {
     key: 'resources', label: uiText.value.resources,
     actions: {
-      view: ['property:view', 'property.view', 'property.owner.view', 'room.view'],
+      view: ['property:view', 'property.view', 'room.view'],
       create: ['property:create', 'property.create', 'property.import', 'property.import.commit', 'room.create'],
-      update: ['property:update', 'property.edit', 'property.owner.edit', 'room.edit'],
+      update: ['property:update', 'property.edit', 'room.edit'],
       delete: ['property:delete'],
     },
+  },
+  {
+    key: 'owners', label: uiText.value.owners,
+    actions: { view: ['property.owner.view'], create: [], update: ['property.owner.edit'], delete: [] },
   },
   {
     key: 'contracts', label: uiText.value.contracts,

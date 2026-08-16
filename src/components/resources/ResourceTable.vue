@@ -55,6 +55,11 @@
               <template v-else-if="column.key === 'currentContract'">
                 <button v-if="item.currentContractId" class="table-link-button" type="button" @click="openContract(item.currentContractId)">{{ item.currentContract }}</button>
               </template>
+              <template v-else-if="column.key === 'ownerName'">
+                <span v-for="(owner, ownerIndex) in item.owners || []" :key="owner.id">
+                  <a class="table-owner-link" :href="ownerHref(owner.id)" target="_blank" rel="noopener noreferrer">{{ owner.name }}</a><span v-if="ownerIndex < item.owners.length - 1"> / </span>
+                </span>
+              </template>
               <template v-else-if="column.key === 'note'">
                 <TextDetailDialog :text="item.note" :title="labels.note" :common="common" />
               </template>
@@ -142,4 +147,9 @@ const coordinate = (latitude, longitude) => [latitude, longitude].filter(hasValu
 const openContract = (contractId) => {
   window.open(`${appPath("/contracts")}?contractId=${encodeURIComponent(contractId)}`, "_blank", "noopener,noreferrer");
 };
+const ownerHref = (ownerId) => `${appPath("/owners")}?ownerId=${encodeURIComponent(ownerId)}`;
 </script>
+
+<style scoped>
+.table-owner-link { color: var(--primary); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+</style>

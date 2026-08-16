@@ -165,6 +165,35 @@ export const api = {
     return request(`/rooms/${id}`);
   },
 
+  async listOwners(params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')).toString();
+    return request(`/owners${query ? `?${query}` : ''}`);
+  },
+
+  async getOwner(id) {
+    return request(`/owners/${id}`);
+  },
+
+  async createOwner(payload) {
+    return request('/owners', { method: 'POST', body: payload });
+  },
+
+  async updateOwner(id, payload) {
+    return request(`/owners/${id}`, { method: 'PATCH', body: payload });
+  },
+
+  async importOwners(payload) {
+    return request('/owners/import', { method: 'POST', body: payload });
+  },
+
+  async attachOwnerRooms(ownerId, roomIds) {
+    return request(`/owners/${ownerId}/rooms`, { method: 'POST', body: { roomIds } });
+  },
+
+  async detachOwnerRoom(ownerId, roomId) {
+    return request(`/owners/${ownerId}/rooms/${roomId}`, { method: 'DELETE' });
+  },
+
   async updateRoom(id, payload) {
     return request(`/rooms/${id}`, { method: 'PUT', body: payload });
   },

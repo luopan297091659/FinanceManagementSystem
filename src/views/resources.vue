@@ -204,6 +204,7 @@ const resourceModalTitle = ref("");
 const resourceColumns = ref([
   { key: "project", labelKey: "projectBuilding", visible: true },
   { key: "house", labelKey: "houseRoom", visible: true },
+  { key: "ownerName", labelKey: "ownerName", visible: true },
   { key: "status", labelKey: "status", visible: true },
   { key: "address", labelKey: "address", visible: true },
   { key: "contractPresence", labelKey: "contractPresence", visible: true },
@@ -277,6 +278,7 @@ const getExportValue = (item, key) =>
   ({
     project: joinValues(item.projectName, item.buildingName),
     house: joinValues(item.houseNumber, item.roomNumber),
+    ownerName: item.ownerName || "",
     address: item.address || "",
     contractPresence: item.contractPresence ? labels.value.hasContract : labels.value.noContract,
     currentContract: item.currentContract || "",
@@ -291,7 +293,7 @@ const getExportValue = (item, key) =>
 const joinValues = (first, second, separator = " / ") => [first, second].filter((value) => value !== null && value !== undefined && value !== "").join(separator);
 
 const resetResourceColumns = () => {
-  const defaults = new Set(["project", "house", "status", "address", "contractPresence", "currentContract"]);
+  const defaults = new Set(["project", "house", "ownerName", "status", "address", "contractPresence", "currentContract"]);
   resourceColumns.value.forEach((column) => {
     column.visible = defaults.has(column.key);
   });

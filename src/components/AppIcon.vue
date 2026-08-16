@@ -30,6 +30,7 @@ const paths = {
   dashboard: "M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z",
   map: "M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15 M15 6v15",
   building: "M4 21V3h12v18 M16 9h4v12 M8 7h4 M8 11h4 M8 15h4 M7 21h6 M19 13h1 M19 17h1",
+  "house-user": "M3 11 12 3l9 8 M5 10v11h14V10 M9 21v-6h6v6 M8 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4 M5.5 16a2.5 2.5 0 0 1 5 0",
   users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
   finance: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
   landmark: "M3 10h18 M5 10v8 M9 10v8 M15 10v8 M19 10v8 M2 21h20 M12 3 2 8h20z",

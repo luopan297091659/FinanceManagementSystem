@@ -21,6 +21,7 @@ import { FrontendApiModule } from './modules/frontend-api/frontend-api.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { I18nModule } from './modules/i18n/i18n.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { OwnersModule } from './modules/owners/owners.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     RbacModule,
     I18nModule,
     DashboardModule,
+    OwnersModule,
   ],
 })
 export class AppModule {}

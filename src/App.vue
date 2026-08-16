@@ -125,6 +125,7 @@
 
       <GisView v-else-if="activeView === 'gis'" />
       <ResourcesView v-else-if="activeView === 'resources'" />
+      <OwnersView v-else-if="activeView === 'owners'" />
       <ContractsView v-else-if="activeView === 'contracts'" />
       <FinanceView v-else-if="activeView === 'finance'" />
       <OcrView v-else-if="activeView === 'ocr'" />
@@ -141,6 +142,7 @@ import LoginView from "./views/login.vue";
 import OverviewView from "./views/overview.vue";
 import GisView from "./views/gis/index.vue";
 import ResourcesView from "./views/resources.vue";
+import OwnersView from "./views/owners.vue";
 import ContractsView from "./views/contracts.vue";
 import FinanceView from "./views/finance.vue";
 import OcrView from "./views/ocr.vue";
@@ -176,6 +178,7 @@ const navItems = computed(() => [
   { key: "overview", label: dictionary.value.overview, icon: "dashboard", permissions: ["overview:view"] },
   { key: "gis", label: dictionary.value.gis, icon: "map", permissions: ["gis:view"] },
   { key: "resources", label: dictionary.value.resources, icon: "building", permissions: ["property.view", "property:view"] },
+  { key: "owners", label: dictionary.value.owners, icon: "house-user", permissions: ["property.owner.view"] },
   { key: "contracts", label: dictionary.value.contracts, icon: "users", permissions: ["contract.view"] },
   { key: "finance", label: dictionary.value.finance, icon: "finance", permissions: ["payment:view"] },
   { key: "bank-reconciliation", label: reconciliationMenuLabels.value.bank, icon: "landmark", permissions: ["reconciliation.bank.view"] },
@@ -240,6 +243,8 @@ const setActiveNavItem = (item) => {
     window.history.pushState({}, "", appPath("/contracts"));
   } else if (item.key === "resources") {
     window.history.pushState({}, "", appPath("/resources"));
+  } else if (item.key === "owners") {
+    window.history.pushState({}, "", appPath("/owners"));
   } else if (item.key === "overview") {
     window.history.pushState({}, "", appPath("/"));
   } else if (item.key === "gis") {
@@ -258,6 +263,8 @@ const handleDashboardNavigate = (route) => {
         ? navItems.value.find((entry) => entry.key === "contracts")
         : route.startsWith("/resources")
           ? navItems.value.find((entry) => entry.key === "resources")
+          : route.startsWith("/owners")
+            ? navItems.value.find((entry) => entry.key === "owners")
           : route.startsWith("/finance")
             ? navItems.value.find((entry) => entry.key === "finance")
             : route.startsWith("/gis")
@@ -296,6 +303,9 @@ const applyRouteFromLocation = () => {
   } else if (path.startsWith("/resources")) {
     activeNavKey.value = "resources";
     activeView.value = "resources";
+  } else if (path.startsWith("/owners")) {
+    activeNavKey.value = "owners";
+    activeView.value = "owners";
   } else if (path.startsWith("/finance")) {
     activeNavKey.value = "finance";
     activeView.value = "finance";
