@@ -82,7 +82,7 @@
           <div><small>JSON 回调地址</small><code>{{ executionWorkflow?.callbackUrl || '—' }}</code></div>
         </div>
         <label class="task-name-field">
-          <span>本次任务名称 <small>已按当前时间自动生成，可直接修改</small></span>
+          <span>本次任务名称 <small>已按当前时间自动生成,可直接修改</small></span>
           <span class="task-name-control"><input v-model="taskName" :disabled="isExecuting" placeholder="例如：202608121658" /><button class="secondary-button" type="button" :disabled="isExecuting" @click.prevent="taskName = createTimestampTaskName()">重新生成</button></span>
         </label>
         <div
